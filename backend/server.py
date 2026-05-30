@@ -28,6 +28,7 @@ from services.alloggiati_web import (
     test_schedine,
     send_schedine,
     get_ricevuta_pdf,
+    authentication_test,
     TIPO_OSPITE_SINGOLO,
     TIPO_CAPO_FAMIGLIA,
     TIPO_FAMILIARE,
@@ -276,6 +277,43 @@ async def delete_property(property_id: str, user=Depends(get_current_user)):
         {"property_id": property_id, "user_id": user["user_id"]}
     )
     return {"success": result.deleted_count > 0}
+
+
+@api_router.post("/properties/{property_id}/alloggiati/test")
+async def test_alloggiati_credentials(
+    property_id: str, user=Depends(get_current_user)
+):
+    """Quick credentials test: just GenerateToken + Authentication_Test.
+    Returns detailed response for debugging.
+    """
+    p = await db.properties.find_one(
+        {"property_id": property_id, "user_id": user["user_id"]}, {"_id": 0}
+    )
+    if not p:
+        raise HTTPException(404, "Proprietà non trovata")
+    cfg = p.get("alloggiati", {})
+    if not cfg.get("utente") or not cfg.get("password") or not cfg.get("ws_key"):
+        raise HTTPException(400, "Credenziali Alloggiati Web mancanti")
+
+    tok = generate_token(cfg["utente"], cfg["password"], cfg["ws_key"])
+    logger.info(f"[AW-TEST] GenerateToken raw response: {tok.get('raw')}")
+    if not tok["success"]:
+        return {
+            "success": False,
+            "step": "GenerateToken",
+            "message": tok.get("message"),
+            "raw": tok.get("raw"),
+        }
+
+    auth = authentication_test(cfg["utente"], tok["token"])
+    logger.info(f"[AW-TEST] Authentication_Test raw response: {auth.get('raw')}")
+    return {
+        "success": auth["success"],
+        "step": "Authentication_Test",
+        "token_expires": tok.get("expires"),
+        "message": "Credenziali valide" if auth["success"] else (auth.get("message") or "Auth test fallito"),
+        "auth_raw": auth.get("raw"),
+    }
 
 
 # ====================================================================

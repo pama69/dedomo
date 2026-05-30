@@ -253,6 +253,9 @@ function PropertyEditor({ p, setP, save, cancel, saving, error }) {
         <Field label="Utente" value={p.alloggiati.utente} onChange={(v) => upd("alloggiati.utente", v)} testid="aw-utente" />
         <Field label="Password" type="password" value={p.alloggiati.password} onChange={(v) => upd("alloggiati.password", v)} testid="aw-password" />
         <Field label="WS Key" type="password" value={p.alloggiati.ws_key} onChange={(v) => upd("alloggiati.ws_key", v)} testid="aw-wskey" />
+        {p.property_id && (
+          <TestCredentialsButton propertyId={p.property_id} />
+        )}
       </Section>
 
       <Section title="Ross 1000 (Regione)">
@@ -308,5 +311,64 @@ function PropertyEditor({ p, setP, save, cancel, saving, error }) {
         </button>
       </div>
     </Layout>
+  );
+}
+
+
+function TestCredentialsButton({ propertyId }) {
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState(null);
+
+  const run = async () => {
+    setLoading(true);
+    setResult(null);
+    try {
+      const r = await api.post(`/properties/${propertyId}/alloggiati/test`);
+      setResult(r.data);
+    } catch (e) {
+      setResult({
+        success: false,
+        message: e.response?.data?.detail || "Errore richiesta",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-2 mt-2">
+      <button
+        type="button"
+        onClick={run}
+        disabled={loading}
+        data-testid="test-alloggiati-btn"
+        className="border border-[#1E1E28] hover:border-zinc-500 text-zinc-300 px-4 py-3 uppercase tracking-widest text-[10px] transition-colors cursor-pointer disabled:opacity-50"
+      >
+        {loading ? "Test in corso..." : "Test credenziali Alloggiati Web"}
+      </button>
+      {result && (
+        <div
+          className={`border p-3 font-mono text-[10px] ${
+            result.success
+              ? "border-emerald-500/40 text-emerald-400"
+              : "border-red-500/40 text-red-400"
+          }`}
+        >
+          <div className="font-bold tracking-widest">
+            [{result.success ? "OK" : "ERR"}] {result.step || ""}
+          </div>
+          {result.message && (
+            <div className="text-zinc-400 mt-1 break-words">
+              {result.message}
+            </div>
+          )}
+          {result.token_expires && (
+            <div className="text-zinc-500 mt-1">
+              Token valido fino al {result.token_expires}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }

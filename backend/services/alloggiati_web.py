@@ -111,50 +111,131 @@ def generate_token(utente: str, password: str, ws_key: str) -> Dict[str, Any]:
         resp = client.service.GenerateToken(
             Utente=utente, Password=password, WsKey=ws_key
         )
-        # Response has issued, expires, token, esito (result)
+        # Zeep returns a multi-field response:
+        #   GenerateTokenResult: TokenInfo (issued, expires, token)
+        #   result: EsitoOperazioneServizio (esito, ErroreCod, ErroreDes, ErroreDettaglio)
         result = zeep.helpers.serialize_object(resp)
-        if result and result.get("result", {}).get("esito"):
+        outcome = result.get("result") or {}
+        token_info = result.get("GenerateTokenResult") or {}
+
+        if outcome.get("esito"):
             return {
                 "success": True,
-                "token": result.get("token"),
-                "issued": str(result.get("issued")),
-                "expires": str(result.get("expires")),
+                "token": token_info.get("token"),
+                "issued": str(token_info.get("issued")),
+                "expires": str(token_info.get("expires")),
+                "raw": result,
             }
-        msg = "Autenticazione fallita"
-        if result and result.get("result"):
-            msg = result["result"].get("ErroreDettaglio") or msg
-        return {"success": False, "message": msg}
+
+        # Build a useful error message
+        err_des = outcome.get("ErroreDes") or ""
+        err_det = outcome.get("ErroreDettaglio") or ""
+        err_cod = outcome.get("ErroreCod")
+        msg_parts = []
+        if err_cod is not None:
+            msg_parts.append(f"Cod.{err_cod}")
+        if err_des:
+            msg_parts.append(err_des)
+        if err_det and err_det != err_des:
+            msg_parts.append(err_det)
+        message = " · ".join(msg_parts) or "Autenticazione fallita (esito false)"
+        return {"success": False, "message": message, "raw": result}
     except Exception as e:
         return {"success": False, "message": f"Errore connessione: {str(e)}"}
 
 
 def test_schedine(utente: str, token: str, schedine: List[str]) -> Dict[str, Any]:
-    """Validate schedine without submitting. Returns esito + per-row errors."""
+    """Validate schedine without submitting. Returns esito + per-row errors.
+
+    Response shape:
+      TestResult: EsitoOperazioneServizio (overall esito)
+      result: ElencoSchedineEsito (per-row errors)
+    """
     try:
         client = _get_client()
         resp = client.service.Test(
             Utente=utente, token=token, ElencoSchedine={"string": schedine}
         )
         result = zeep.helpers.serialize_object(resp)
+        outcome = result.get("TestResult") or {}
+        details = result.get("result") or {}
+
+        success = bool(outcome.get("esito"))
+        err_des = outcome.get("ErroreDes") or ""
+        err_det = outcome.get("ErroreDettaglio") or ""
+        err_cod = outcome.get("ErroreCod")
+        msg_parts = []
+        if err_cod is not None and err_cod != 0:
+            msg_parts.append(f"Cod.{err_cod}")
+        if err_des:
+            msg_parts.append(err_des)
+        if err_det and err_det != err_des:
+            msg_parts.append(err_det)
+        message = " · ".join(msg_parts) if not success else "Validazione OK"
+
         return {
-            "success": bool(result.get("esito")),
-            "details": result,
+            "success": success,
+            "message": message,
+            "details": details,
+            "raw": result,
         }
     except Exception as e:
-        return {"success": False, "message": str(e)}
+        return {"success": False, "message": f"Errore Test: {str(e)}"}
 
 
 def send_schedine(utente: str, token: str, schedine: List[str]) -> Dict[str, Any]:
-    """Send schedine for real."""
+    """Send schedine for real.
+
+    Response shape:
+      SendResult: EsitoOperazioneServizio
+      result: ElencoSchedineEsito
+    """
     try:
         client = _get_client()
         resp = client.service.Send(
             Utente=utente, token=token, ElencoSchedine={"string": schedine}
         )
         result = zeep.helpers.serialize_object(resp)
+        outcome = result.get("SendResult") or {}
+        details = result.get("result") or {}
+
+        success = bool(outcome.get("esito"))
+        err_des = outcome.get("ErroreDes") or ""
+        err_det = outcome.get("ErroreDettaglio") or ""
+        err_cod = outcome.get("ErroreCod")
+        msg_parts = []
+        if err_cod is not None and err_cod != 0:
+            msg_parts.append(f"Cod.{err_cod}")
+        if err_des:
+            msg_parts.append(err_des)
+        if err_det and err_det != err_des:
+            msg_parts.append(err_det)
+        message = " · ".join(msg_parts) if not success else "Invio OK"
+
         return {
-            "success": bool(result.get("esito")),
-            "details": result,
+            "success": success,
+            "message": message,
+            "details": details,
+            "raw": result,
+        }
+    except Exception as e:
+        return {"success": False, "message": f"Errore Send: {str(e)}"}
+
+
+def authentication_test(utente: str, token: str) -> Dict[str, Any]:
+    """Quick credentials validation via Authentication_Test."""
+    try:
+        client = _get_client()
+        resp = client.service.Authentication_Test(Utente=utente, token=token)
+        result = zeep.helpers.serialize_object(resp)
+        # Returns EsitoOperazioneServizio
+        if isinstance(result, dict):
+            outcome = result.get("Authentication_TestResult") or result
+        else:
+            outcome = {}
+        return {
+            "success": bool(outcome.get("esito")),
+            "raw": result,
         }
     except Exception as e:
         return {"success": False, "message": str(e)}
@@ -162,18 +243,23 @@ def send_schedine(utente: str, token: str, schedine: List[str]) -> Dict[str, Any
 
 def get_ricevuta_pdf(utente: str, token: str, data: str) -> Dict[str, Any]:
     """Get PDF receipt for a given date (YYYY-MM-DD).
-    Returns {success, pdf_base64, message}"""
+
+    Response shape:
+      RicevutaResult: EsitoOperazioneServizio
+      PDF: base64 string
+    """
     try:
         client = _get_client()
-        # data should be DD/MM/YYYY format
         dt = datetime.fromisoformat(data)
         data_str = dt.strftime("%d/%m/%Y")
         resp = client.service.Ricevuta(Utente=utente, token=token, Data=data_str)
         result = zeep.helpers.serialize_object(resp)
+        outcome = result.get("RicevutaResult") or {}
+        pdf_b64 = result.get("PDF")
         return {
-            "success": bool(result.get("esito") if isinstance(result, dict) else False),
-            "pdf_base64": result.get("PDF") if isinstance(result, dict) else None,
-            "details": result,
+            "success": bool(outcome.get("esito")) and bool(pdf_b64),
+            "pdf_base64": pdf_b64,
+            "raw": result,
         }
     except Exception as e:
         return {"success": False, "message": str(e)}
