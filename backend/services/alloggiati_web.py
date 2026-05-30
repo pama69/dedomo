@@ -339,20 +339,25 @@ def aggiungi_appartamento(
         resp = client.service.GestioneAppartamenti_AggiungiAppartamento(
             Utente=utente,
             token=token,
-            Descrizione={"string": [descrizione]},
-            ComuneCodice=comune_codice,
-            Indirizzo=indirizzo,
-            Proprietario=proprietario,
+            Descrizione=str(descrizione),
+            ComuneCodice=str(comune_codice),
+            Indirizzo=str(indirizzo),
+            Proprietario=str(proprietario),
         )
         result = zeep.helpers.serialize_object(resp)
-        outcome = result.get("GestioneAppartamenti_AggiungiAppartamentoResult") or {}
-        success = bool(outcome.get("esito"))
-        err_cod = outcome.get("ErroreCod")
-        err_des = outcome.get("ErroreDes") or ""
-        err_det = outcome.get("ErroreDettaglio") or ""
+        # The response could be either a dict with the named result, OR just the
+        # EsitoOperazioneServizio directly. Handle both.
+        if isinstance(result, dict):
+            outcome = result.get("GestioneAppartamenti_AggiungiAppartamentoResult") or result
+        else:
+            outcome = {}
+        success = bool(outcome.get("esito")) if isinstance(outcome, dict) else False
+        err_cod = outcome.get("ErroreCod") if isinstance(outcome, dict) else None
+        err_des = (outcome.get("ErroreDes") if isinstance(outcome, dict) else "") or ""
+        err_det = (outcome.get("ErroreDettaglio") if isinstance(outcome, dict) else "") or ""
         if not success:
             msg = " · ".join([p for p in [f"Cod.{err_cod}" if err_cod else "", err_des, err_det] if p])
-            return {"success": False, "message": msg or "Errore", "raw": result}
+            return {"success": False, "message": msg or "Errore aggiunta", "raw": result}
         return {"success": True, "message": "Appartamento aggiunto", "raw": result}
     except Exception as e:
         return {"success": False, "message": f"Errore: {str(e)}"}

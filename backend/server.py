@@ -478,7 +478,7 @@ async def test_alloggiati_credentials(
     # If user is "appartamenti" type with an IdAppartamento configured, validate it
     tipo_account = cfg.get("tipo_account", "standard")
     id_app = int(cfg.get("id_appartamento", 0))
-    if tipo_account == "appartamenti" and id_app > 0:
+    if tipo_account in ("appartamenti", "appartamenti_file_unico") and id_app > 0:
         # Send a dummy schedina to validate the IdAppartamento
         dummy = build_schedina(
             tipo_alloggiato="16",
@@ -493,20 +493,22 @@ async def test_alloggiati_credentials(
             tipo_documento="IDENTITA",
             numero_documento="X00000000",
             codice_stato_rilascio_doc="100000100",
+            id_appartamento_file_unico=str(id_app) if tipo_account == "appartamenti_file_unico" else "",
         )
         ts = test_schedine(
             cfg["utente"], tok["token"], [dummy],
-            tipo_account="appartamenti",
+            tipo_account=tipo_account,
             id_appartamento=id_app,
         )
         response["id_appartamento_check"] = {
             "id": id_app,
+            "tipo": tipo_account,
             "valid": ts.get("success"),
             "message": ts.get("message"),
         }
         if not ts.get("success"):
             response["success"] = False
-            response["message"] = f"Credenziali OK, ma IdAppartamento={id_app} non valido: {ts.get('message')}"
+            response["message"] = f"Credenziali OK, ma IdAppartamento={id_app} ({tipo_account}) non valido: {ts.get('message')}"
 
     return response
 
