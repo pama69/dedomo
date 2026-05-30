@@ -475,40 +475,46 @@ async def test_alloggiati_credentials(
         "message": "Credenziali valide",
     }
 
-    # If user is "appartamenti" type with an IdAppartamento configured, validate it
+    # Run a dummy Test call to validate that the schedina format is accepted.
+    # This is the BEST way to confirm the account category + tracciato.
     tipo_account = cfg.get("tipo_account", "standard")
     id_app = int(cfg.get("id_appartamento", 0))
-    if tipo_account in ("appartamenti", "appartamenti_file_unico") and id_app > 0:
-        # Send a dummy schedina to validate the IdAppartamento
-        dummy = build_schedina(
-            tipo_alloggiato="16",
-            data_arrivo="2099-12-31",
-            giorni_permanenza=1,
-            cognome="TEST",
-            nome="TEST",
-            sesso="M",
-            data_nascita="2000-01-01",
-            codice_stato_nascita="100000100",
-            codice_stato_cittadinanza="100000100",
-            tipo_documento="IDENTITA",
-            numero_documento="X00000000",
-            codice_stato_rilascio_doc="100000100",
-            id_appartamento_file_unico=str(id_app) if tipo_account == "appartamenti_file_unico" else "",
-        )
-        ts = test_schedine(
-            cfg["utente"], tok["token"], [dummy],
-            tipo_account=tipo_account,
-            id_appartamento=id_app,
-        )
-        response["id_appartamento_check"] = {
-            "id": id_app,
-            "tipo": tipo_account,
-            "valid": ts.get("success"),
-            "message": ts.get("message"),
-        }
-        if not ts.get("success"):
-            response["success"] = False
-            response["message"] = f"Credenziali OK, ma IdAppartamento={id_app} ({tipo_account}) non valido: {ts.get('message')}"
+
+    # Build a dummy schedina with realistic Italian values
+    dummy = build_schedina(
+        tipo_alloggiato="16",
+        data_arrivo="2099-12-31",
+        giorni_permanenza=1,
+        cognome="ROSSI",
+        nome="MARIO",
+        sesso="1",  # M
+        data_nascita="1980-01-15",
+        codice_comune_nascita="H501",  # Roma ISTAT code (placeholder)
+        sigla_provincia_nascita="RM",
+        codice_stato_nascita="100000100",  # ITA
+        codice_stato_cittadinanza="100000100",
+        tipo_documento="IDENT",
+        numero_documento="AA0000000",
+        codice_stato_rilascio_doc="100000100",
+        id_appartamento_file_unico=str(id_app) if tipo_account == "appartamenti_file_unico" else "",
+    )
+    ts = test_schedine(
+        cfg["utente"], tok["token"], [dummy],
+        tipo_account=tipo_account,
+        id_appartamento=id_app,
+    )
+    logger.info(f"[AW-TEST] Test schedina raw: {ts.get('raw')}")
+    response["test_schedina"] = {
+        "tipo_account_used": tipo_account,
+        "id_appartamento_used": id_app,
+        "schedina_length": len(dummy),
+        "valid": ts.get("success"),
+        "message": ts.get("message"),
+        "details": ts.get("details"),
+    }
+    if not ts.get("success"):
+        response["success"] = False
+        response["message"] = f"Schedina rifiutata: {ts.get('message')}"
 
     return response
 
@@ -538,15 +544,16 @@ async def ocr_document(req: OcrRequest, user=Depends(get_current_user)):
 class GuestData(BaseModel):
     cognome: str
     nome: str
-    sesso: str  # M | F
+    sesso: str  # M | F (mapped to 1/2 internally)
     data_nascita: str  # YYYY-MM-DD
     luogo_nascita: str = ""
-    stato_nascita: str = "ITA"
-    cittadinanza: str = "ITA"
-    tipo_documento: str = "CARTA_IDENTITA"
+    stato_nascita: str = "100000100"  # ITA codice
+    cittadinanza: str = "100000100"
+    tipo_documento: str = "IDENT"  # codice 5 char
     numero_documento: str = ""
-    stato_rilascio_documento: str = "ITA"
-    codice_comune_nascita: str = ""  # only for italians
+    stato_rilascio_documento: str = "100000100"
+    codice_comune_nascita: str = ""  # 9 chars ISTAT code (only italians)
+    sigla_provincia_nascita: str = ""  # 2 chars (only italians)
 
 
 class CheckinSubmit(BaseModel):
@@ -580,6 +587,7 @@ def _guest_to_schedina(
         sesso=g.sesso,
         data_nascita=g.data_nascita,
         codice_comune_nascita=g.codice_comune_nascita,
+        sigla_provincia_nascita=g.sigla_provincia_nascita,
         codice_stato_nascita=g.stato_nascita,
         codice_stato_cittadinanza=g.cittadinanza,
         tipo_documento=tipo_doc_field,

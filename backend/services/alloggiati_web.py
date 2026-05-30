@@ -28,13 +28,18 @@ TIPO_FAMILIARE = "18"
 TIPO_CAPO_GRUPPO = "19"
 TIPO_MEMBRO_GRUPPO = "20"
 
-# Tipo Documento codes (most common)
+# Tipo Documento codes per official tabella Tipi_Documento
 TIPO_DOC_MAP = {
-    "CI": "IDENTITA",
-    "CARTA_IDENTITA": "IDENTITA",
+    "CARTA_IDENTITA": "IDENT",
+    "CARTA_IDENTITA_ELETT": "IDELE",
     "PASSAPORTO": "PASOR",
     "PATENTE": "PATEN",
     "PATENTE_GUIDA": "PATEN",
+    # Allow passing codes directly
+    "IDENT": "IDENT",
+    "IDELE": "IDELE",
+    "PASOR": "PASOR",
+    "PATEN": "PATEN",
 }
 
 
@@ -59,23 +64,38 @@ def build_schedina(
     giorni_permanenza: int,
     cognome: str,
     nome: str,
-    sesso: str,
+    sesso: str,  # accepts "M"/"F" or "1"/"2"
     data_nascita: str,  # YYYY-MM-DD
     codice_comune_nascita: str = "",  # 9 chars (only for Italy)
+    sigla_provincia_nascita: str = "",  # 2 chars (only for Italy)
     codice_stato_nascita: str = "",  # 9 chars
     codice_stato_cittadinanza: str = "",  # 9 chars
-    tipo_documento: str = "",  # 5 chars - only for singolo/capofam/capogruppo
+    tipo_documento: str = "",  # 5 chars - only for capofamiglia/singolo/capogruppo
     numero_documento: str = "",  # 20 chars
-    codice_stato_rilascio_doc: str = "",  # 9 chars
+    codice_stato_rilascio_doc: str = "",  # 9 chars (or 9-char comune code)
     id_appartamento_file_unico: str = "",  # 6 chars - ONLY for FileUnico (TABELLA 2)
 ) -> str:
     """Build a single fixed-width schedina line.
 
     Standard tracciato (TABELLA 1): 168 chars.
+      pos  1-2:   Tipo Alloggiato (numerico, es. 16/17/18/19/20)
+      pos  3-12:  Data Arrivo (gg/mm/aaaa)
+      pos 13-14:  Giorni Permanenza (max 30)
+      pos 15-64:  Cognome (50)
+      pos 65-94:  Nome (30)
+      pos    95:  Sesso (1=M, 2=F) -- NOT M/F
+      pos 96-105: Data Nascita (gg/mm/aaaa)
+      pos 106-114: Comune Nascita (9, codice ISTAT, solo IT)
+      pos 115-116: Sigla Provincia Nascita (2, solo IT)
+      pos 117-125: Stato Nascita (9, codice tabella stati)
+      pos 126-134: Cittadinanza (9)
+      pos 135-139: Tipo Documento (5, codice)
+      pos 140-159: Numero Documento (20)
+      pos 160-168: Luogo Rilascio Documento (9, codice stato OR comune)
+
     FileUnico tracciato (TABELLA 2): 168 + 6 chars (IdAppartamento appended).
     """
 
-    # Format dates DD/MM/YYYY -> 10 chars
     def _fmt_date(d):
         if not d:
             return " " * 10
@@ -85,20 +105,28 @@ def build_schedina(
         except Exception:
             return " " * 10
 
+    # Map sesso M/F -> 1/2 if user passed letters
+    sesso_code = str(sesso).strip().upper()
+    if sesso_code == "M":
+        sesso_code = "1"
+    elif sesso_code == "F":
+        sesso_code = "2"
+
     line = ""
-    line += _pad(tipo_alloggiato, 2)  # 1-2
-    line += _fmt_date(data_arrivo)  # 3-12 (10 chars)
-    line += _pad_num(str(giorni_permanenza), 2)  # 13-14
-    line += _pad(cognome, 50)  # 15-64
-    line += _pad(nome, 30)  # 65-94
-    line += _pad(sesso, 1)  # 95
-    line += _fmt_date(data_nascita)  # 96-105 (10 chars)
-    line += _pad(codice_comune_nascita or " ", 9)  # 106-114
-    line += _pad(codice_stato_nascita, 9)  # 115-123
-    line += _pad(codice_stato_cittadinanza, 9)  # 124-132
-    line += _pad(tipo_documento, 5)  # 133-137
-    line += _pad(numero_documento, 20)  # 138-157
-    line += _pad(codice_stato_rilascio_doc, 9)  # 158-166
+    line += _pad(tipo_alloggiato, 2)              # 1-2
+    line += _fmt_date(data_arrivo)                # 3-12
+    line += _pad_num(str(giorni_permanenza), 2)   # 13-14
+    line += _pad(cognome, 50)                     # 15-64
+    line += _pad(nome, 30)                        # 65-94
+    line += _pad(sesso_code, 1)                   # 95
+    line += _fmt_date(data_nascita)               # 96-105
+    line += _pad(codice_comune_nascita or " ", 9) # 106-114
+    line += _pad(sigla_provincia_nascita or " ", 2)  # 115-116
+    line += _pad(codice_stato_nascita, 9)         # 117-125
+    line += _pad(codice_stato_cittadinanza, 9)    # 126-134
+    line += _pad(tipo_documento, 5)               # 135-139
+    line += _pad(numero_documento, 20)            # 140-159
+    line += _pad(codice_stato_rilascio_doc, 9)    # 160-168
 
     line = line.ljust(168, " ")[:168]
 

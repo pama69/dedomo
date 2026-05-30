@@ -9,12 +9,13 @@ const emptyGuest = () => ({
   sesso: "M",
   data_nascita: "",
   luogo_nascita: "",
-  stato_nascita: "ITA",
-  cittadinanza: "ITA",
-  tipo_documento: "CARTA_IDENTITA",
+  stato_nascita: "100000100",
+  cittadinanza: "100000100",
+  tipo_documento: "IDENT",
   numero_documento: "",
-  stato_rilascio_documento: "ITA",
+  stato_rilascio_documento: "100000100",
   codice_comune_nascita: "",
+  sigla_provincia_nascita: "",
 });
 
 export default function Checkin() {
@@ -206,24 +207,27 @@ export default function Checkin() {
           <DateField label="Data Nascita" value={g.data_nascita} onChange={(v) => updateGuest(activeGuestIdx, "data_nascita", v)} testid="guest-nascita" />
         </div>
         <TextField label="Luogo Nascita" value={g.luogo_nascita} onChange={(v) => updateGuest(activeGuestIdx, "luogo_nascita", v)} testid="guest-luogo" />
-        <div className="grid grid-cols-2 gap-3">
-          <TextField label="Stato Nascita (ISO3)" value={g.stato_nascita} onChange={(v) => updateGuest(activeGuestIdx, "stato_nascita", v.toUpperCase())} testid="guest-statonasc" />
-          <TextField label="Cittadinanza (ISO3)" value={g.cittadinanza} onChange={(v) => updateGuest(activeGuestIdx, "cittadinanza", v.toUpperCase())} testid="guest-citt" />
+        <div className="grid grid-cols-3 gap-3">
+          <TextField label="Cod. Comune (ISTAT 9 cifre)" value={g.codice_comune_nascita} onChange={(v) => updateGuest(activeGuestIdx, "codice_comune_nascita", v)} testid="guest-codcomune" />
+          <TextField label="Prov." value={g.sigla_provincia_nascita} onChange={(v) => updateGuest(activeGuestIdx, "sigla_provincia_nascita", v.toUpperCase())} testid="guest-prov" />
+          <TextField label="Stato Nasc. (9 cifre)" value={g.stato_nascita} onChange={(v) => updateGuest(activeGuestIdx, "stato_nascita", v)} testid="guest-statonasc" />
         </div>
+        <TextField label="Cittadinanza (codice 9 cifre)" value={g.cittadinanza} onChange={(v) => updateGuest(activeGuestIdx, "cittadinanza", v)} testid="guest-citt" />
         <SelectField
           label="Tipo Documento"
           value={g.tipo_documento}
           onChange={(v) => updateGuest(activeGuestIdx, "tipo_documento", v)}
           testid="guest-tipodoc"
           options={[
-            ["CARTA_IDENTITA", "Carta d'Identità"],
-            ["PASSAPORTO", "Passaporto"],
-            ["PATENTE", "Patente"],
+            ["IDENT", "Carta d'Identità"],
+            ["IDELE", "Carta d'Identità Elettronica"],
+            ["PASOR", "Passaporto"],
+            ["PATEN", "Patente"],
           ]}
         />
         <div className="grid grid-cols-2 gap-3">
           <TextField label="Numero Documento" value={g.numero_documento} onChange={(v) => updateGuest(activeGuestIdx, "numero_documento", v.toUpperCase())} testid="guest-numdoc" />
-          <TextField label="Stato Rilascio (ISO3)" value={g.stato_rilascio_documento} onChange={(v) => updateGuest(activeGuestIdx, "stato_rilascio_documento", v.toUpperCase())} testid="guest-statorilascio" />
+          <TextField label="Luogo Rilascio (codice 9 cifre)" value={g.stato_rilascio_documento} onChange={(v) => updateGuest(activeGuestIdx, "stato_rilascio_documento", v)} testid="guest-statorilascio" />
         </div>
 
         {guests.length > 1 && (
