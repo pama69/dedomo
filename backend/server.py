@@ -361,7 +361,7 @@ async def add_alloggiati_apartment(
 async def search_alloggiati_comuni(
     property_id: str, q: str = "", user=Depends(get_current_user)
 ):
-    """Search ISTAT municipalities by name (uses Alloggiati Web Tabella)."""
+    """Search ISTAT municipalities by name (uses Alloggiati Web tabella Luoghi)."""
     p = await db.properties.find_one(
         {"property_id": property_id, "user_id": user["user_id"]}, {"_id": 0}
     )
@@ -375,6 +375,58 @@ async def search_alloggiati_comuni(
     if not tok["success"]:
         return {"success": False, "message": tok.get("message")}
     return cerca_comuni(cfg["utente"], tok["token"], q)
+
+
+class GuessLocationRequest(BaseModel):
+    luogo_nascita: str = ""
+    cittadinanza: str = ""
+    stato_nascita: str = ""
+
+
+@api_router.post("/properties/{property_id}/alloggiati/guess-codici")
+async def guess_codici(
+    property_id: str,
+    body: GuessLocationRequest,
+    user=Depends(get_current_user),
+):
+    """Resolve textual place names to ISTAT codes for a check-in form."""
+    p = await db.properties.find_one(
+        {"property_id": property_id, "user_id": user["user_id"]}, {"_id": 0}
+    )
+    if not p:
+        raise HTTPException(404, "Proprietà non trovata")
+    cfg = p.get("alloggiati", {})
+    if not cfg.get("utente") or not cfg.get("password") or not cfg.get("ws_key"):
+        raise HTTPException(400, "Credenziali Alloggiati Web mancanti")
+
+    tok = generate_token(cfg["utente"], cfg["password"], cfg["ws_key"])
+    if not tok["success"]:
+        return {"success": False, "message": tok.get("message")}
+
+    out = {"success": True}
+    # Resolve luogo_nascita -> comune code + provincia
+    if body.luogo_nascita:
+        r = cerca_comuni(cfg["utente"], tok["token"], body.luogo_nascita)
+        if r.get("success") and r.get("results"):
+            # Find best exact match
+            q = body.luogo_nascita.strip().upper()
+            exact = [x for x in r["results"] if x["nome"].upper() == q]
+            best = exact[0] if exact else r["results"][0]
+            out["comune_match"] = best
+
+    # Quick map for ITA citizenship
+    iso_to_code = {
+        "ITA": "100000100", "ITALIA": "100000100", "IT": "100000100",
+    }
+    if body.cittadinanza:
+        out["cittadinanza_code"] = iso_to_code.get(
+            body.cittadinanza.upper(), body.cittadinanza
+        )
+    if body.stato_nascita:
+        out["stato_nascita_code"] = iso_to_code.get(
+            body.stato_nascita.upper(), body.stato_nascita
+        )
+    return out
 
 
 @api_router.post("/properties/{property_id}/turismo5/test")

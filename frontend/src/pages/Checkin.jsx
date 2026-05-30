@@ -97,6 +97,19 @@ export default function Checkin() {
   );
 
   // ============ STEP 3: OCR / guests ============
+  const lookupComune = async (luogoNascita) => {
+    if (!luogoNascita || !propertyId) return null;
+    try {
+      const r = await api.post(
+        `/properties/${propertyId}/alloggiati/guess-codici`,
+        { luogo_nascita: luogoNascita }
+      );
+      return r.data;
+    } catch {
+      return null;
+    }
+  };
+
   const handleOcr = async (file) => {
     setOcrError("");
     setOcrLoading(true);
@@ -107,6 +120,37 @@ export default function Checkin() {
         mime_type: file.type || "image/jpeg",
       });
       const data = r.data;
+
+      // Try to auto-resolve comune code + provincia from luogo_nascita
+      let comuneCode = "";
+      let provSigla = "";
+      if (data.luogo_nascita) {
+        const guess = await lookupComune(data.luogo_nascita);
+        if (guess?.comune_match) {
+          comuneCode = guess.comune_match.codice || "";
+          provSigla = guess.comune_match.provincia || "";
+        }
+      }
+
+      // Map ITA to ISTAT code
+      const mapStato = (v) => {
+        if (!v) return "100000100";
+        const u = v.toUpperCase();
+        if (u === "ITA" || u === "ITALIA" || u === "IT") return "100000100";
+        return v;
+      };
+
+      // Map tipo documento OCR output to Alloggiati codes
+      const mapDoc = (v) => {
+        const m = {
+          CARTA_IDENTITA: "IDENT",
+          CARTA_IDENTITA_ELETTRONICA: "IDELE",
+          PASSAPORTO: "PASOR",
+          PATENTE: "PATEN",
+        };
+        return m[v] || v || "IDENT";
+      };
+
       setGuests((prev) => {
         const copy = [...prev];
         const g = copy[activeGuestIdx] || emptyGuest();
@@ -117,11 +161,13 @@ export default function Checkin() {
           sesso: data.sesso || g.sesso,
           data_nascita: data.data_nascita || g.data_nascita,
           luogo_nascita: data.luogo_nascita || g.luogo_nascita,
-          stato_nascita: data.stato_nascita || g.stato_nascita,
-          cittadinanza: data.cittadinanza || g.cittadinanza,
-          tipo_documento: data.tipo_documento || g.tipo_documento,
+          stato_nascita: mapStato(data.stato_nascita) || g.stato_nascita,
+          cittadinanza: mapStato(data.cittadinanza) || g.cittadinanza,
+          tipo_documento: mapDoc(data.tipo_documento),
           numero_documento: data.numero_documento || g.numero_documento,
-          stato_rilascio_documento: data.stato_rilascio_documento || g.stato_rilascio_documento,
+          stato_rilascio_documento: mapStato(data.stato_rilascio_documento) || g.stato_rilascio_documento,
+          codice_comune_nascita: comuneCode || g.codice_comune_nascita,
+          sigla_provincia_nascita: provSigla || g.sigla_provincia_nascita,
         };
         return copy;
       });
@@ -129,6 +175,18 @@ export default function Checkin() {
       setOcrError(e.response?.data?.detail || "Errore OCR");
     } finally {
       setOcrLoading(false);
+    }
+  };
+
+  // Resolve comune ISTAT code manually (when user edits luogo_nascita)
+  const handleLuogoBlur = async (luogoNascita) => {
+    if (!luogoNascita || !propertyId) return;
+    const g = guests[activeGuestIdx];
+    if (g?.codice_comune_nascita && g?.sigla_provincia_nascita) return;
+    const guess = await lookupComune(luogoNascita);
+    if (guess?.comune_match) {
+      updateGuest(activeGuestIdx, "codice_comune_nascita", guess.comune_match.codice);
+      updateGuest(activeGuestIdx, "sigla_provincia_nascita", guess.comune_match.provincia);
     }
   };
 
@@ -173,25 +231,48 @@ export default function Checkin() {
           </button>
         </div>
 
-        <label className="border-2 border-dashed border-[#1E1E28] bg-[#0E0E14] p-10 flex flex-col items-center justify-center hover:border-zinc-500 transition-colors cursor-pointer text-zinc-400 uppercase tracking-widest text-xs text-center">
-          <input
-            type="file"
-            accept="image/jpeg,image/png,image/webp"
-            data-testid="upload-id-box"
-            className="hidden"
-            onChange={(e) => e.target.files?.[0] && handleOcr(e.target.files[0])}
-          />
-          {ocrLoading ? (
-            <span className="font-mono">SCANSIONE IN CORSO...</span>
-          ) : (
-            <>
-              <span className="text-zinc-300">Carica foto documento</span>
-              <span className="text-[10px] text-zinc-600 mt-2 tracking-widest">
-                CIE · Passaporto · Patente (JPG/PNG)
-              </span>
-            </>
-          )}
-        </label>
+        <div className="grid grid-cols-2 gap-2">
+          <label className="border-2 border-dashed border-[#1E1E28] bg-[#0E0E14] py-6 flex flex-col items-center justify-center hover:border-zinc-500 transition-colors cursor-pointer text-zinc-400 uppercase tracking-widest text-[10px] text-center">
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              capture="environment"
+              data-testid="capture-id-box"
+              className="hidden"
+              onChange={(e) => e.target.files?.[0] && handleOcr(e.target.files[0])}
+            />
+            {ocrLoading ? (
+              <span className="font-mono">…</span>
+            ) : (
+              <>
+                <span className="text-zinc-300">Scatta foto</span>
+                <span className="text-[9px] text-zinc-600 mt-1">CAMERA</span>
+              </>
+            )}
+          </label>
+          <label className="border-2 border-dashed border-[#1E1E28] bg-[#0E0E14] py-6 flex flex-col items-center justify-center hover:border-zinc-500 transition-colors cursor-pointer text-zinc-400 uppercase tracking-widest text-[10px] text-center">
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              data-testid="upload-id-box"
+              className="hidden"
+              onChange={(e) => e.target.files?.[0] && handleOcr(e.target.files[0])}
+            />
+            {ocrLoading ? (
+              <span className="font-mono">SCANSIONE…</span>
+            ) : (
+              <>
+                <span className="text-zinc-300">Carica file</span>
+                <span className="text-[9px] text-zinc-600 mt-1">JPG · PNG</span>
+              </>
+            )}
+          </label>
+        </div>
+        {ocrLoading && (
+          <p className="text-zinc-500 text-[10px] font-mono uppercase tracking-widest text-center">
+            ANALISI DOCUMENTO IN CORSO...
+          </p>
+        )}
         {ocrError && (
           <p className="text-red-500 text-xs font-mono uppercase tracking-wider">
             [ ERR ] {ocrError}
@@ -206,7 +287,18 @@ export default function Checkin() {
           <SelectField label="Sesso" value={g.sesso} onChange={(v) => updateGuest(activeGuestIdx, "sesso", v)} testid="guest-sesso" options={[["M", "M"], ["F", "F"]]} />
           <DateField label="Data Nascita" value={g.data_nascita} onChange={(v) => updateGuest(activeGuestIdx, "data_nascita", v)} testid="guest-nascita" />
         </div>
-        <TextField label="Luogo Nascita" value={g.luogo_nascita} onChange={(v) => updateGuest(activeGuestIdx, "luogo_nascita", v)} testid="guest-luogo" />
+        <label className="flex flex-col gap-1">
+          <span className="text-[10px] tracking-[0.25em] uppercase text-zinc-500">Luogo Nascita</span>
+          <input
+            type="text"
+            data-testid="guest-luogo"
+            value={g.luogo_nascita ?? ""}
+            onChange={(e) => updateGuest(activeGuestIdx, "luogo_nascita", e.target.value)}
+            onBlur={(e) => handleLuogoBlur(e.target.value)}
+            placeholder="Es. Pescara"
+            className="bg-transparent border border-[#1E1E28] px-4 py-3 text-zinc-100 placeholder:text-zinc-600 focus:border-zinc-300 focus:ring-1 focus:ring-zinc-300 outline-none transition-all w-full font-mono text-sm"
+          />
+        </label>
         <div className="grid grid-cols-3 gap-3">
           <TextField label="Cod. Comune (ISTAT 9 cifre)" value={g.codice_comune_nascita} onChange={(v) => updateGuest(activeGuestIdx, "codice_comune_nascita", v)} testid="guest-codcomune" />
           <TextField label="Prov." value={g.sigla_provincia_nascita} onChange={(v) => updateGuest(activeGuestIdx, "sigla_provincia_nascita", v.toUpperCase())} testid="guest-prov" />
