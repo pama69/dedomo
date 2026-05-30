@@ -158,17 +158,32 @@ def send_movimentazione(
             auth=(username, password),
             timeout=30,
         )
-        ok = r.status_code == 200 and "Fault" not in r.text and "fault" not in r.text
+        body_lower = r.text.lower()
+        # Detect auth failures explicitly
+        auth_failure = (
+            r.status_code in (401, 403)
+            or "unauthorized" in body_lower
+            or "non autorizzato" in body_lower
+            or "authentication failed" in body_lower
+            or "autenticazione" in body_lower and "fall" in body_lower
+            or "credenziali" in body_lower and ("error" in body_lower or "errat" in body_lower)
+            or "<faultcode>" in body_lower
+            or "soap:fault" in body_lower
+            or "soap-env:fault" in body_lower
+        )
+        ok = r.status_code == 200 and not auth_failure
+        # Try to extract a useful message
+        msg = "Invio completato"
+        if auth_failure:
+            msg = f"Autenticazione fallita o errore SOAP (HTTP {r.status_code})"
+        elif not ok:
+            msg = f"HTTP {r.status_code} - {r.text[:300]}"
         return {
             "success": ok,
             "status_code": r.status_code,
             "response_text": r.text[:4000],
             "xml_preview": xml,
-            "message": (
-                "Invio completato"
-                if ok
-                else f"HTTP {r.status_code} - {r.text[:300]}"
-            ),
+            "message": msg,
         }
     except requests.exceptions.RequestException as e:
         return {

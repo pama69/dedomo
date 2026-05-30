@@ -474,13 +474,25 @@ async def test_turismo5_credentials(
     if not endpoint_url:
         raise HTTPException(400, f"Endpoint per regione '{regione}' non configurato")
 
-    # Send a minimal payload (no movimenti) just to test auth + endpoint
+    # Send a movimentazione with realistic but harmless test data.
+    # An empty movimenti=[] would let the server return 200 without validating auth/code.
+    # A real-looking past-date movement with 0 occupancy forces the server to actually
+    # validate credentials + struttura code without polluting historical data.
+    test_movimento = [{
+        "data": "1999-01-01",  # well in the past, won't be accepted as a real movement
+        "struttura": {
+            "apertura": "NO",
+            "camereoccupate": 0,
+            "cameredisponibili": int(cfg.get("n_camere", 1)),
+            "lettidisponibili": int(cfg.get("n_letti", 1)),
+        },
+    }]
     resp = send_movimentazione(
         endpoint_url=endpoint_url,
         username=cfg["utente"],
         password=cfg["password"],
         codice_struttura=cfg["codice_struttura"],
-        movimenti=[],
+        movimenti=test_movimento,
         prodotto=cfg.get("nome_prodotto", "Ospitalo"),
         test_mode=False,
     )
