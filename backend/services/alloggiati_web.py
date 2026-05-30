@@ -67,8 +67,13 @@ def build_schedina(
     tipo_documento: str = "",  # 5 chars - only for singolo/capofam/capogruppo
     numero_documento: str = "",  # 20 chars
     codice_stato_rilascio_doc: str = "",  # 9 chars
+    id_appartamento_file_unico: str = "",  # 6 chars - ONLY for FileUnico (TABELLA 2)
 ) -> str:
-    """Build a single 168-char fixed-width schedina line."""
+    """Build a single fixed-width schedina line.
+
+    Standard tracciato (TABELLA 1): 168 chars.
+    FileUnico tracciato (TABELLA 2): 168 + 6 chars (IdAppartamento appended).
+    """
 
     # Format dates DD/MM/YYYY -> 10 chars
     def _fmt_date(d):
@@ -95,8 +100,14 @@ def build_schedina(
     line += _pad(numero_documento, 20)  # 138-157
     line += _pad(codice_stato_rilascio_doc, 9)  # 158-166
 
-    # Ensure exactly 168 chars (some specs include trailing 2 for CR/LF)
-    return line.ljust(168, " ")[:168]
+    line = line.ljust(168, " ")[:168]
+
+    # Append IdAppartamento for FileUnico format
+    if id_appartamento_file_unico:
+        id_str = str(id_appartamento_file_unico).strip().zfill(6)[:6]
+        line += id_str
+
+    return line
 
 
 def _get_client() -> Client:

@@ -555,7 +555,8 @@ class CheckinSubmit(BaseModel):
 
 
 def _guest_to_schedina(
-    g: GuestData, tipo_alloggiato: str, data_arrivo: str, giorni: int
+    g: GuestData, tipo_alloggiato: str, data_arrivo: str, giorni: int,
+    id_appartamento_file_unico: str = "",
 ) -> str:
     tipo_doc = TIPO_DOC_MAP.get(g.tipo_documento, "IDENTITA")
     # Only capo/singolo have document fields; familiare/gruppo skip
@@ -582,6 +583,7 @@ def _guest_to_schedina(
         tipo_documento=tipo_doc_field,
         numero_documento=num_doc_field,
         codice_stato_rilascio_doc=stato_ril_field,
+        id_appartamento_file_unico=id_appartamento_file_unico,
     )
 
 
@@ -607,6 +609,9 @@ async def checkin_submit(body: CheckinSubmit, user=Depends(get_current_user)):
     # -------- ALLOGGIATI WEB --------
     alloggiati_cfg = prop.get("alloggiati", {})
     if alloggiati_cfg.get("enabled") and alloggiati_cfg.get("utente"):
+        tipo_account = alloggiati_cfg.get("tipo_account", "standard")
+        id_app = int(alloggiati_cfg.get("id_appartamento", 0))
+
         # Determine tipo_alloggiato
         n = len(body.guests)
         if n == 1:
@@ -615,8 +620,11 @@ async def checkin_submit(body: CheckinSubmit, user=Depends(get_current_user)):
             # Capo famiglia + familiari (simpler default)
             tipos = [TIPO_CAPO_FAMIGLIA] + [TIPO_FAMILIARE] * (n - 1)
 
+        # For FileUnico mode, append IdAppartamento to each schedina
+        id_for_schedina = str(id_app) if tipo_account == "appartamenti_file_unico" and id_app else ""
+
         schedine = [
-            _guest_to_schedina(g, tipos[i], body.data_arrivo, giorni)
+            _guest_to_schedina(g, tipos[i], body.data_arrivo, giorni, id_for_schedina)
             for i, g in enumerate(body.guests)
         ]
 
