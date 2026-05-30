@@ -16,6 +16,7 @@ const emptyGuest = () => ({
   stato_rilascio_documento: "100000100",
   codice_comune_nascita: "",
   sigla_provincia_nascita: "",
+  _doc_preview: null,
 });
 
 export default function Checkin() {
@@ -113,6 +114,15 @@ export default function Checkin() {
   const handleOcr = async (file) => {
     setOcrError("");
     setOcrLoading(true);
+    // Save preview for the user to verify against OCR data
+    try {
+      const previewUrl = URL.createObjectURL(file);
+      setGuests((prev) => {
+        const copy = [...prev];
+        copy[activeGuestIdx] = { ...(copy[activeGuestIdx] || emptyGuest()), _doc_preview: previewUrl };
+        return copy;
+      });
+    } catch {}
     try {
       const b64 = await fileToBase64(file);
       const r = await api.post("/ocr/document", {
@@ -279,6 +289,23 @@ export default function Checkin() {
           </p>
         )}
 
+        {g._doc_preview && (
+          <div className="border border-[#1E1E28] p-3 flex flex-col gap-2">
+            <span className="text-[10px] tracking-[0.25em] uppercase text-zinc-500">
+              Foto Documento — Confronta con i dati estratti
+            </span>
+            <img
+              src={g._doc_preview}
+              alt="Documento"
+              className="w-full max-h-64 object-contain bg-black"
+            />
+          </div>
+        )}
+
+        <div className="border border-amber-500/30 bg-amber-500/5 p-3 text-[10px] tracking-[0.25em] uppercase text-amber-400 font-mono">
+          Verifica e correggi i dati estratti prima di proseguire
+        </div>
+
         <div className="grid grid-cols-2 gap-3">
           <TextField label="Cognome" value={g.cognome} onChange={(v) => updateGuest(activeGuestIdx, "cognome", v.toUpperCase())} testid="guest-cognome" />
           <TextField label="Nome" value={g.nome} onChange={(v) => updateGuest(activeGuestIdx, "nome", v.toUpperCase())} testid="guest-nome" />
@@ -353,11 +380,13 @@ export default function Checkin() {
     setSubmitting(true);
     setError("");
     try {
+      // Strip UI-only fields before sending
+      const cleanGuests = guests.map(({ _doc_preview, ...rest }) => rest);
       const r = await api.post("/checkin/submit", {
         property_id: propertyId,
         data_arrivo: dataArrivo,
         data_partenza: dataPartenza,
-        guests,
+        guests: cleanGuests,
       });
       setResult(r.data);
       setStep(5);
