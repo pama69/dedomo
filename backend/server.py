@@ -6,6 +6,7 @@ Ross 1000 e Imposta di Soggiorno comunale.
 
 from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, Depends, UploadFile, File
 from fastapi.responses import StreamingResponse
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -406,12 +407,31 @@ async def guess_codici(
     out = {"success": True}
     # Resolve luogo_nascita -> comune code + provincia
     if body.luogo_nascita:
-        r = cerca_comuni(cfg["utente"], tok["token"], body.luogo_nascita)
+        # Clean: strip parens like "(MI)" and punctuation
+        import re as _re
+        cleaned = _re.sub(r"\([^)]*\)", "", body.luogo_nascita).strip()
+        # Also try to extract province sigla from parens
+        m = _re.search(r"\(([A-Za-z]{2})\)", body.luogo_nascita)
+        hinted_prov = m.group(1).upper() if m else ""
+
+        r = cerca_comuni(cfg["utente"], tok["token"], cleaned or body.luogo_nascita)
         if r.get("success") and r.get("results"):
-            # Find best exact match
-            q = body.luogo_nascita.strip().upper()
-            exact = [x for x in r["results"] if x["nome"].upper() == q]
-            best = exact[0] if exact else r["results"][0]
+            q = (cleaned or body.luogo_nascita).strip().upper()
+            # Best matching strategy:
+            # 1. Exact name + province sigla match (if available)
+            # 2. Exact name match
+            # 3. First result
+            best = None
+            if hinted_prov:
+                best = next(
+                    (x for x in r["results"]
+                     if x["nome"].upper() == q and x["provincia"].upper() == hinted_prov),
+                    None,
+                )
+            if not best:
+                best = next((x for x in r["results"] if x["nome"].upper() == q), None)
+            if not best:
+                best = r["results"][0]
             out["comune_match"] = best
 
     # Quick map for ITA citizenship
@@ -983,7 +1003,9 @@ async def download_ross1000_csv(checkin_id: str, user=Depends(get_current_user))
 async def download_alloggiati_ricevuta(
     checkin_id: str, user=Depends(get_current_user)
 ):
-    """Download official Alloggiati Web PDF receipt (only after PROD send)."""
+    """Download official Alloggiati Web PDF receipt.
+    Serves from cache if available; otherwise fetches on-demand from the WS.
+    """
     c = await db.checkins.find_one(
         {"checkin_id": checkin_id, "user_id": user["user_id"]}, {"_id": 0}
     )
@@ -994,6 +1016,19 @@ async def download_alloggiati_ricevuta(
             400, "Ricevuta ufficiale disponibile solo per invii in modalità PRODUZIONE"
         )
 
+    # Serve from cache if present
+    cached = c.get("alloggiati_ricevuta_pdf")
+    if cached:
+        pdf_bytes = base64.b64decode(cached)
+        return StreamingResponse(
+            io.BytesIO(pdf_bytes),
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f'attachment; filename="alloggiati_{checkin_id}.pdf"'
+            },
+        )
+
+    # Otherwise fetch from WS
     prop = await db.properties.find_one(
         {"property_id": c["property_id"], "user_id": user["user_id"]}, {"_id": 0}
     )
@@ -1001,10 +1036,25 @@ async def download_alloggiati_ricevuta(
     tok = generate_token(cfg["utente"], cfg["password"], cfg["ws_key"])
     if not tok["success"]:
         raise HTTPException(401, tok.get("message", "Autenticazione fallita"))
-    ric = get_ricevuta_pdf(cfg["utente"], tok["token"], c["data_arrivo"])
+    send_date = c["created_at"][:10]
+    ric = get_ricevuta_pdf(cfg["utente"], tok["token"], send_date)
     if not ric.get("success") or not ric.get("pdf_base64"):
-        raise HTTPException(404, "Ricevuta non disponibile dal portale")
+        raise HTTPException(
+            404,
+            "Ricevuta non ancora disponibile dal portale. Le ricevute Alloggiati Web "
+            "sono pubblicate dopo 24h dall'invio. Riprova più tardi.",
+        )
 
+    # Cache it
+    await db.checkins.update_one(
+        {"checkin_id": checkin_id},
+        {
+            "$set": {
+                "alloggiati_ricevuta_pdf": ric["pdf_base64"],
+                "alloggiati_ricevuta_downloaded_at": datetime.now(timezone.utc).isoformat(),
+            }
+        },
+    )
     pdf_bytes = base64.b64decode(ric["pdf_base64"])
     return StreamingResponse(
         io.BytesIO(pdf_bytes),
@@ -1013,6 +1063,17 @@ async def download_alloggiati_ricevuta(
             "Content-Disposition": f'attachment; filename="alloggiati_{checkin_id}.pdf"'
         },
     )
+
+
+@api_router.post("/admin/refresh-receipts")
+async def trigger_receipts_refresh(user=Depends(get_current_user)):
+    """Manually trigger the receipts download job (useful for testing)."""
+    await fetch_alloggiati_receipts()
+    count = await db.checkins.count_documents({
+        "user_id": user["user_id"],
+        "alloggiati_ricevuta_pdf": {"$exists": True, "$ne": ""},
+    })
+    return {"success": True, "total_cached_receipts": count}
 
 
 # ====================================================================
@@ -1042,3 +1103,81 @@ logger = logging.getLogger(__name__)
 @app.on_event("shutdown")
 async def shutdown_db_client():
     client.close()
+    if scheduler and scheduler.running:
+        scheduler.shutdown(wait=False)
+
+
+# ====================================================================
+# BACKGROUND JOB: Auto-download Alloggiati Web receipts after 24h
+# ====================================================================
+
+scheduler: Optional[AsyncIOScheduler] = None
+
+
+async def fetch_alloggiati_receipts():
+    """Periodic job: for every PROD checkin older than 24h without a cached
+    Alloggiati Web receipt, try to download it via Ricevuta API and store it.
+    """
+    cutoff = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
+    pending = await db.checkins.find(
+        {
+            "mode": "PROD",
+            "results.alloggiati_web.success": True,
+            "alloggiati_ricevuta_pdf": {"$in": [None, ""]},
+            "created_at": {"$lte": cutoff},
+        },
+        {"_id": 0},
+    ).to_list(200)
+
+    if not pending:
+        return
+
+    logger.info(f"[receipts-job] {len(pending)} check-in da processare")
+
+    for c in pending:
+        try:
+            prop = await db.properties.find_one(
+                {"property_id": c["property_id"], "user_id": c["user_id"]}, {"_id": 0}
+            )
+            if not prop:
+                continue
+            cfg = prop.get("alloggiati", {})
+            if not (cfg.get("utente") and cfg.get("password") and cfg.get("ws_key")):
+                continue
+
+            tok = generate_token(cfg["utente"], cfg["password"], cfg["ws_key"])
+            if not tok.get("success"):
+                logger.warning(f"[receipts-job] auth failed for {c['checkin_id']}")
+                continue
+
+            # Use the date when the schedina was actually sent (created_at)
+            send_date = c["created_at"][:10]  # YYYY-MM-DD
+            ric = get_ricevuta_pdf(cfg["utente"], tok["token"], send_date)
+            if ric.get("success") and ric.get("pdf_base64"):
+                await db.checkins.update_one(
+                    {"checkin_id": c["checkin_id"]},
+                    {
+                        "$set": {
+                            "alloggiati_ricevuta_pdf": ric["pdf_base64"],
+                            "alloggiati_ricevuta_downloaded_at": datetime.now(timezone.utc).isoformat(),
+                        }
+                    },
+                )
+                logger.info(f"[receipts-job] saved receipt for {c['checkin_id']}")
+        except Exception as e:
+            logger.error(f"[receipts-job] error on {c.get('checkin_id')}: {e}")
+
+
+@app.on_event("startup")
+async def startup_scheduler():
+    global scheduler
+    scheduler = AsyncIOScheduler(timezone="Europe/Rome")
+    # Run every hour, plus once at startup after 60s
+    scheduler.add_job(fetch_alloggiati_receipts, "interval", hours=1, id="aw_receipts")
+    scheduler.add_job(
+        fetch_alloggiati_receipts, "date",
+        run_date=datetime.now(timezone.utc) + timedelta(seconds=60),
+        id="aw_receipts_initial",
+    )
+    scheduler.start()
+    logger.info("[scheduler] started")

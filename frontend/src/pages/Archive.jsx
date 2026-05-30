@@ -38,6 +38,8 @@ export default function Archive() {
         Archivio Invii
       </h2>
 
+      <RefreshReceiptsButton />
+
       {loading ? (
         <p className="text-zinc-500 text-sm font-mono">Caricamento...</p>
       ) : items.length === 0 ? (
@@ -152,9 +154,16 @@ export default function Archive() {
                             href={`${api.defaults.baseURL}/checkins/${c.checkin_id}/alloggiati-ricevuta`}
                             target="_blank"
                             rel="noreferrer"
-                            className="text-center border border-[#1E1E28] hover:border-zinc-500 px-4 py-3 uppercase tracking-widest text-[10px] text-zinc-300 cursor-pointer"
+                            data-testid={`aw-pdf-${c.checkin_id}`}
+                            className={`text-center border px-4 py-3 uppercase tracking-widest text-[10px] cursor-pointer transition-colors ${
+                              c.alloggiati_ricevuta_pdf
+                                ? "border-emerald-500/40 text-emerald-400 hover:border-emerald-400"
+                                : "border-[#1E1E28] text-zinc-500 hover:border-zinc-500"
+                            }`}
                           >
-                            Ricevuta Alloggiati Web (PDF)
+                            {c.alloggiati_ricevuta_pdf
+                              ? "✓ Ricevuta Alloggiati Web (PDF)"
+                              : "Ricevuta Alloggiati Web — Disponibile dopo 24h"}
                           </a>
                         )}
                       </div>
@@ -179,4 +188,42 @@ function Tag({ ok, skipped, label }) {
   const tag = skipped ? "SKIP" : ok ? "OK" : "ERR";
   const color = skipped ? "text-zinc-500" : ok ? "text-emerald-500" : "text-red-500";
   return <span className={color}>{label} [{tag}]</span>;
+}
+
+function RefreshReceiptsButton() {
+  const [loading, setLoading] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  const refresh = async () => {
+    setLoading(true);
+    setMsg("");
+    try {
+      const r = await api.post("/admin/refresh-receipts");
+      setMsg(`Ricevute totali in archivio: ${r.data.total_cached_receipts}`);
+    } catch (e) {
+      setMsg(e.response?.data?.detail || "Errore");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-2">
+      <button
+        type="button"
+        onClick={refresh}
+        disabled={loading}
+        data-testid="refresh-receipts-btn"
+        className="self-start border border-[#1E1E28] hover:border-zinc-500 text-zinc-400 px-4 py-2 uppercase tracking-widest text-[10px] cursor-pointer disabled:opacity-50"
+      >
+        {loading ? "Recupero in corso..." : "↻ Recupera ricevute Alloggiati Web"}
+      </button>
+      {msg && (
+        <p className="text-zinc-500 text-[10px] font-mono">{msg}</p>
+      )}
+      <p className="text-zinc-600 text-[10px] font-mono">
+        Recupero automatico ogni ora. Le ricevute sono disponibili 24h dopo l'invio.
+      </p>
+    </div>
+  );
 }

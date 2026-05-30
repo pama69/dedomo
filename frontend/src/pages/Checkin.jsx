@@ -668,14 +668,14 @@ const fileToBase64 = (file) =>
 
 
 function ComuneNascitaField({ luogoNascita, comuneCode, provSigla, notFound, propertyId, onChange }) {
-  const [query, setQuery] = useState(luogoNascita || "");
+  const cleanQuery = (s) => (s || "").replace(/\([^)]*\)/g, "").replace(/[^\w\s]/g, " ").trim();
+  const [query, setQuery] = useState(cleanQuery(luogoNascita));
   const [results, setResults] = useState([]);
   const [searching, setSearching] = useState(false);
   const [showSearch, setShowSearch] = useState(!!notFound);
 
-  // sync local query with prop changes
   useEffect(() => {
-    setQuery(luogoNascita || "");
+    setQuery(cleanQuery(luogoNascita));
   }, [luogoNascita]);
 
   useEffect(() => {

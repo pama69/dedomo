@@ -412,7 +412,13 @@ def cerca_comuni(utente: str, token: str, query: str) -> Dict[str, Any]:
                 "message": outcome.get("ErroreDes") or "Errore",
             }
 
-        q = (query or "").strip().upper()
+        # Normalize query: strip parens, punctuation, common suffixes
+        import re as _re
+        q_raw = (query or "").strip()
+        q_clean = _re.sub(r"\([^)]*\)", "", q_raw)  # remove (xx)
+        q_clean = _re.sub(r"[^\w\s]", " ", q_clean)  # punctuation -> space
+        q_tokens = [t for t in q_clean.upper().split() if len(t) > 1]
+
         results = []
         for line in csv_data.splitlines():
             parts = [p.strip() for p in line.split(";")]
@@ -422,15 +428,18 @@ def cerca_comuni(utente: str, token: str, query: str) -> Dict[str, Any]:
             descrizione = parts[1]
             if not codice or codice.upper() == "CODICE":
                 continue
-            if not q or q in descrizione.upper():
-                provincia = parts[2] if len(parts) > 2 else ""
-                results.append({
-                    "codice": codice,
-                    "nome": descrizione,
-                    "provincia": provincia,
-                })
-                if len(results) >= 50:
-                    break
+            desc_upper = descrizione.upper()
+            # Match if ALL tokens are substrings of the description
+            if q_tokens and not all(t in desc_upper for t in q_tokens):
+                continue
+            provincia = parts[2] if len(parts) > 2 else ""
+            results.append({
+                "codice": codice,
+                "nome": descrizione,
+                "provincia": provincia,
+            })
+            if len(results) >= 50:
+                break
         return {"success": True, "results": results}
     except Exception as e:
         return {"success": False, "message": f"Errore: {str(e)}"}
