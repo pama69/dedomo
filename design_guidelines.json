@@ -1,0 +1,116 @@
+{
+  "app_name": "Ospitalo",
+  "theme": "dark",
+  "archetype": "Swiss & High-Contrast (Archetype 4)",
+  "design_principles": [
+    "Strict Minimalism: Typography and spacing only. Absolutely NO icons, NO illustrations, and NO emojis.",
+    "High-Contrast & Refined: Pure structural grayscale for hierarchy to emulate a serious, high-end compliance tool (like Linear/Vercel but darker).",
+    "Mobile-First & Persistent Navigation: Bottom navigation must always be visible on mobile, using text-only tabs.",
+    "Function over Form: Clear status texts, large text-based tap targets for 'CHECK IN' and essential actions.",
+    "Italian Language strictly applied across all user interfaces."
+  ],
+  "typography": {
+    "headings": {
+      "font_family": "Cabinet Grotesk, sans-serif",
+      "rules": "Sharp, structural, uppercase for section headers. High tension, tight tracking (tracking-tighter)."
+    },
+    "body": {
+      "font_family": "Geist, sans-serif",
+      "rules": "Highly legible, neutral, functional."
+    },
+    "monospace": {
+      "font_family": "Geist Mono, monospace",
+      "rules": "Crucial for credentials, dates, OCR data, ID numbers, and system statuses."
+    },
+    "scale": {
+      "h1": "text-4xl tracking-tighter uppercase font-bold text-zinc-100",
+      "h2": "text-2xl tracking-tight uppercase text-zinc-100",
+      "h3": "text-xl font-medium text-zinc-200",
+      "body": "text-base text-zinc-300",
+      "small": "text-xs tracking-[0.2em] uppercase text-zinc-500"
+    }
+  },
+  "colors": {
+    "background": {
+      "main": "#05050A",
+      "surface": "#0E0E14",
+      "surface_elevated": "#15151C"
+    },
+    "border": {
+      "default": "#1E1E28",
+      "focus": "#F4F4F5"
+    },
+    "text": {
+      "primary": "#F4F4F5",
+      "secondary": "#A1A1AA",
+      "disabled": "#52525B",
+      "inverse": "#05050A"
+    },
+    "primary_action": {
+      "bg": "#F4F4F5",
+      "text": "#05050A",
+      "hover_bg": "#FFFFFF"
+    },
+    "status": {
+      "success": "#10B981",
+      "error": "#EF4444",
+      "warning": "#F59E0B",
+      "offline": "#71717A"
+    }
+  },
+  "layout": {
+    "spacing_system": "Tailwind standard (p-4, p-6, p-8, p-12). Generous padding inside cards (p-6) to let typography breathe.",
+    "navigation": {
+      "type": "bottom_fixed",
+      "classes": "fixed bottom-0 left-0 w-full h-16 bg-[#05050A]/90 backdrop-blur-xl border-t border-[#1E1E28] flex justify-around items-center z-50",
+      "items": ["CHECK-IN", "ARCHIVIO", "IMPOSTAZIONI"],
+      "style": "Text only, no icons. Active item: 'text-zinc-100 font-bold'. Inactive item: 'text-zinc-500 text-sm'."
+    },
+    "main_container": "w-full max-w-3xl mx-auto pb-24 pt-8 px-4 sm:px-6 flex flex-col gap-8"
+  },
+  "components": {
+    "buttons": {
+      "primary": "bg-zinc-100 text-[#05050A] font-medium px-6 py-4 rounded-none uppercase tracking-wide hover:bg-white active:scale-[0.98] transition-all w-full text-center cursor-pointer",
+      "secondary": "border border-[#1E1E28] bg-transparent text-zinc-300 px-6 py-4 rounded-none uppercase tracking-wide hover:border-zinc-500 transition-colors w-full text-center cursor-pointer",
+      "check_in_hero": "w-full h-32 flex items-center justify-center bg-zinc-100 text-[#05050A] text-3xl font-bold uppercase tracking-widest hover:bg-white active:scale-[0.98] transition-all rounded-none mb-8 cursor-pointer"
+    },
+    "cards": "bg-[#0E0E14] border border-[#1E1E28] rounded-none p-6",
+    "inputs": "bg-transparent border border-[#1E1E28] rounded-none px-4 py-3 text-zinc-100 placeholder:text-zinc-600 focus:border-zinc-300 focus:ring-1 focus:ring-zinc-300 outline-none transition-all w-full font-mono",
+    "status_indicator": "Use typographic brackets and monospace for status. Example: '[ OK ]' in text-emerald-500, '[ ERR ]' in text-red-500. No colored dots, strictly text.",
+    "file_upload": "border-2 border-dashed border-[#1E1E28] bg-[#0E0E14] p-12 flex items-center justify-center hover:border-zinc-500 transition-colors cursor-pointer text-zinc-400 uppercase tracking-widest text-sm text-center w-full"
+  },
+  "workflow_views": {
+    "login": "Minimalist centered layout. Huge 'OSPITALO' logotype. Action: 'ACCEDI CON GOOGLE' text button. No Google icon.",
+    "dashboard": "Prominent 'CHECK IN' giant hero button at the top. Below, a monospace log of recent submissions showing portal statuses.",
+    "check_in_wizard": [
+      "1. Date Selection: 'DATA ARRIVO' and 'DATA PARTENZA' text inputs.",
+      "2. Property Selection: Text-based vertical list of properties.",
+      "3. Upload ID: Large dashed box 'CARICA FOTO DOCUMENTO' for OCR.",
+      "4. Data Review: Monospace grid of parsed guest data (Nome, Cognome, Documento). Editable standard inputs.",
+      "5. Submit: Progress console displaying 'INVIO ALLOGGIATI WEB...', 'INVIO ROSS 1000...' with real-time success/error feedback."
+    ],
+    "settings": "Property management list. Inside property: Input credentials for 'Alloggiati Web', 'Ross 1000', 'Imposta Soggiorno'. Test vs Production toggle implemented as text: '[ TEST ] / [ PROD ]'.",
+    "archive": "List of past guests with submission statuses. Action: 'SCARICA RICEVUTA (PDF)' (text link only)."
+  },
+  "interactions": {
+    "hover": "Text color brightens, border color lightens. No background color shifts on secondary elements.",
+    "focus": "High contrast white/zinc-300 borders or 1px rings.",
+    "motion": "Brutally minimal. 150ms ease-in-out opacities only. No bouncy scales."
+  },
+  "test_ids": {
+    "nav_checkin": "nav-checkin-tab",
+    "nav_archive": "nav-archive-tab",
+    "nav_settings": "nav-settings-tab",
+    "btn_main_checkin": "main-checkin-button",
+    "btn_google_login": "google-login-button",
+    "input_date_start": "date-start-input",
+    "input_date_end": "date-end-input",
+    "upload_id_box": "upload-id-box",
+    "btn_submit_portals": "submit-portals-button",
+    "toggle_test_prod": "test-prod-toggle"
+  },
+  "media": {
+    "image_urls": [],
+    "instructions": "STRICTLY NO ICONS, NO IMAGES, NO LOGOS (not even Google's logo), NO EMOJIS anywhere in the application. Use pure typographical symbols like +, -, [, ], / if absolutely necessary for UI structure."
+  }
+}
