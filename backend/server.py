@@ -194,6 +194,8 @@ class AlloggiatiCredentials(BaseModel):
     utente: str = ""
     password: str = ""
     ws_key: str = ""
+    tipo_account: str = "standard"  # standard | appartamenti | appartamenti_file_unico
+    id_appartamento: int = 0  # required if tipo_account == "appartamenti"
     enabled: bool = True
 
 
@@ -502,12 +504,20 @@ async def checkin_submit(body: CheckinSubmit, user=Depends(get_current_user)):
         else:
             if test_mode:
                 resp = test_schedine(
-                    alloggiati_cfg["utente"], tok["token"], schedine
+                    alloggiati_cfg["utente"],
+                    tok["token"],
+                    schedine,
+                    tipo_account=alloggiati_cfg.get("tipo_account", "standard"),
+                    id_appartamento=int(alloggiati_cfg.get("id_appartamento", 0)),
                 )
                 resp["mode"] = "TEST (validazione, nessun invio reale)"
             else:
                 resp = send_schedine(
-                    alloggiati_cfg["utente"], tok["token"], schedine
+                    alloggiati_cfg["utente"],
+                    tok["token"],
+                    schedine,
+                    tipo_account=alloggiati_cfg.get("tipo_account", "standard"),
+                    id_appartamento=int(alloggiati_cfg.get("id_appartamento", 0)),
                 )
                 resp["mode"] = "PROD (invio definitivo)"
             resp["schedine_preview"] = schedine

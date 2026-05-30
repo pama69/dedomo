@@ -2,7 +2,14 @@ import { useEffect, useState } from "react";
 import Layout from "@/components/Layout";
 import api from "@/lib/api";
 
-const emptyAlloggiati = { utente: "", password: "", ws_key: "", enabled: true };
+const emptyAlloggiati = {
+  utente: "",
+  password: "",
+  ws_key: "",
+  tipo_account: "standard",
+  id_appartamento: 0,
+  enabled: true,
+};
 const emptyRoss = {
   regione: "Abruzzo",
   utente: "",
@@ -256,6 +263,28 @@ function PropertyEditor({ p, setP, save, cancel, saving, error }) {
         <Field label="Utente" value={p.alloggiati.utente} onChange={(v) => upd("alloggiati.utente", v)} testid="aw-utente" />
         <Field label="Password" type="password" value={p.alloggiati.password} onChange={(v) => upd("alloggiati.password", v)} testid="aw-password" />
         <Field label="WS Key" type="password" value={p.alloggiati.ws_key} onChange={(v) => upd("alloggiati.ws_key", v)} testid="aw-wskey" />
+        <label className="flex flex-col gap-1">
+          <span className="text-[10px] tracking-[0.25em] uppercase text-zinc-500">Tipo Account</span>
+          <select
+            data-testid="aw-tipo-account"
+            value={p.alloggiati.tipo_account}
+            onChange={(e) => upd("alloggiati.tipo_account", e.target.value)}
+            className="bg-transparent border border-[#1E1E28] px-4 py-3 text-zinc-100 focus:border-zinc-300 outline-none font-mono text-sm"
+          >
+            <option value="standard" className="bg-[#0E0E14]">Standard (hotel, B&amp;B, struttura unica)</option>
+            <option value="appartamenti" className="bg-[#0E0E14]">Gestore Appartamenti (con ID per ogni appartamento)</option>
+            <option value="appartamenti_file_unico" className="bg-[#0E0E14]">Gestore Appartamenti (file unico)</option>
+          </select>
+        </label>
+        {p.alloggiati.tipo_account === "appartamenti" && (
+          <Field
+            label="ID Appartamento (numerico, da portale Alloggiati Web)"
+            type="number"
+            value={p.alloggiati.id_appartamento}
+            onChange={(v) => upd("alloggiati.id_appartamento", parseInt(v) || 0)}
+            testid="aw-idappartamento"
+          />
+        )}
         {p.property_id && (
           <TestCredentialsButton propertyId={p.property_id} />
         )}

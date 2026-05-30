@@ -144,20 +144,45 @@ def generate_token(utente: str, password: str, ws_key: str) -> Dict[str, Any]:
         return {"success": False, "message": f"Errore connessione: {str(e)}"}
 
 
-def test_schedine(utente: str, token: str, schedine: List[str]) -> Dict[str, Any]:
-    """Validate schedine without submitting. Returns esito + per-row errors.
+def test_schedine(
+    utente: str,
+    token: str,
+    schedine: List[str],
+    tipo_account: str = "standard",
+    id_appartamento: int = 0,
+) -> Dict[str, Any]:
+    """Validate schedine without submitting.
 
-    Response shape:
-      TestResult: EsitoOperazioneServizio (overall esito)
-      result: ElencoSchedineEsito (per-row errors)
+    tipo_account:
+      - "standard": hotels, B&B (uses Test)
+      - "appartamenti": apartment managers (uses GestioneAppartamenti_Test, requires id_appartamento)
+      - "appartamenti_file_unico": apartment managers, single-file mode
     """
     try:
         client = _get_client()
-        resp = client.service.Test(
-            Utente=utente, token=token, ElencoSchedine={"string": schedine}
-        )
+        if tipo_account == "appartamenti":
+            resp = client.service.GestioneAppartamenti_Test(
+                Utente=utente,
+                token=token,
+                ElencoSchedine={"string": schedine},
+                IdAppartamento=id_appartamento,
+            )
+            outcome_key = "GestioneAppartamenti_TestResult"
+        elif tipo_account == "appartamenti_file_unico":
+            resp = client.service.GestioneAppartamenti_FileUnico_Test(
+                Utente=utente,
+                token=token,
+                ElencoSchedine={"string": schedine},
+            )
+            outcome_key = "GestioneAppartamenti_FileUnico_TestResult"
+        else:
+            resp = client.service.Test(
+                Utente=utente, token=token, ElencoSchedine={"string": schedine}
+            )
+            outcome_key = "TestResult"
+
         result = zeep.helpers.serialize_object(resp)
-        outcome = result.get("TestResult") or {}
+        outcome = result.get(outcome_key) or {}
         details = result.get("result") or {}
 
         success = bool(outcome.get("esito"))
@@ -183,20 +208,39 @@ def test_schedine(utente: str, token: str, schedine: List[str]) -> Dict[str, Any
         return {"success": False, "message": f"Errore Test: {str(e)}"}
 
 
-def send_schedine(utente: str, token: str, schedine: List[str]) -> Dict[str, Any]:
-    """Send schedine for real.
-
-    Response shape:
-      SendResult: EsitoOperazioneServizio
-      result: ElencoSchedineEsito
-    """
+def send_schedine(
+    utente: str,
+    token: str,
+    schedine: List[str],
+    tipo_account: str = "standard",
+    id_appartamento: int = 0,
+) -> Dict[str, Any]:
+    """Send schedine for real - selects the proper method based on account type."""
     try:
         client = _get_client()
-        resp = client.service.Send(
-            Utente=utente, token=token, ElencoSchedine={"string": schedine}
-        )
+        if tipo_account == "appartamenti":
+            resp = client.service.GestioneAppartamenti_Send(
+                Utente=utente,
+                token=token,
+                ElencoSchedine={"string": schedine},
+                IdAppartamento=id_appartamento,
+            )
+            outcome_key = "GestioneAppartamenti_SendResult"
+        elif tipo_account == "appartamenti_file_unico":
+            resp = client.service.GestioneAppartamenti_FileUnico_Send(
+                Utente=utente,
+                token=token,
+                ElencoSchedine={"string": schedine},
+            )
+            outcome_key = "GestioneAppartamenti_FileUnico_SendResult"
+        else:
+            resp = client.service.Send(
+                Utente=utente, token=token, ElencoSchedine={"string": schedine}
+            )
+            outcome_key = "SendResult"
+
         result = zeep.helpers.serialize_object(resp)
-        outcome = result.get("SendResult") or {}
+        outcome = result.get(outcome_key) or {}
         details = result.get("result") or {}
 
         success = bool(outcome.get("esito"))
@@ -223,7 +267,6 @@ def send_schedine(utente: str, token: str, schedine: List[str]) -> Dict[str, Any
 
 
 def authentication_test(utente: str, token: str) -> Dict[str, Any]:
-    """Quick credentials validation via Authentication_Test."""
     try:
         client = _get_client()
         resp = client.service.Authentication_Test(Utente=utente, token=token)
