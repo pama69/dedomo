@@ -30,6 +30,8 @@ from services.alloggiati_web import (
     get_ricevuta_pdf,
     authentication_test,
     lista_appartamenti,
+    aggiungi_appartamento,
+    cerca_comuni,
     TIPO_OSPITE_SINGOLO,
     TIPO_CAPO_FAMIGLIA,
     TIPO_FAMILIARE,
@@ -312,6 +314,67 @@ async def list_alloggiati_apartments(
         return {"success": False, "message": tok.get("message")}
     res = lista_appartamenti(cfg["utente"], tok["token"])
     return res
+
+
+class NewAppartamento(BaseModel):
+    descrizione: str
+    comune_codice: str
+    indirizzo: str
+    proprietario: str
+
+
+@api_router.post("/properties/{property_id}/alloggiati/appartamenti/nuovo")
+async def add_alloggiati_apartment(
+    property_id: str,
+    body: NewAppartamento,
+    user=Depends(get_current_user),
+):
+    """Create a new apartment on Alloggiati Web."""
+    p = await db.properties.find_one(
+        {"property_id": property_id, "user_id": user["user_id"]}, {"_id": 0}
+    )
+    if not p:
+        raise HTTPException(404, "Proprietà non trovata")
+    cfg = p.get("alloggiati", {})
+    if not cfg.get("utente") or not cfg.get("password") or not cfg.get("ws_key"):
+        raise HTTPException(400, "Credenziali Alloggiati Web mancanti")
+
+    tok = generate_token(cfg["utente"], cfg["password"], cfg["ws_key"])
+    if not tok["success"]:
+        return {"success": False, "message": tok.get("message")}
+    res = aggiungi_appartamento(
+        cfg["utente"],
+        tok["token"],
+        body.descrizione,
+        body.comune_codice,
+        body.indirizzo,
+        body.proprietario,
+    )
+    if res.get("success"):
+        # Refresh list to get the new IdAppartamento
+        lst = lista_appartamenti(cfg["utente"], tok["token"])
+        res["appartamenti"] = lst.get("appartamenti", [])
+    return res
+
+
+@api_router.get("/properties/{property_id}/alloggiati/comuni")
+async def search_alloggiati_comuni(
+    property_id: str, q: str = "", user=Depends(get_current_user)
+):
+    """Search ISTAT municipalities by name (uses Alloggiati Web Tabella)."""
+    p = await db.properties.find_one(
+        {"property_id": property_id, "user_id": user["user_id"]}, {"_id": 0}
+    )
+    if not p:
+        raise HTTPException(404, "Proprietà non trovata")
+    cfg = p.get("alloggiati", {})
+    if not cfg.get("utente") or not cfg.get("password") or not cfg.get("ws_key"):
+        raise HTTPException(400, "Credenziali Alloggiati Web mancanti")
+
+    tok = generate_token(cfg["utente"], cfg["password"], cfg["ws_key"])
+    if not tok["success"]:
+        return {"success": False, "message": tok.get("message")}
+    return cerca_comuni(cfg["utente"], tok["token"], q)
 
 
 @api_router.post("/properties/{property_id}/turismo5/test")

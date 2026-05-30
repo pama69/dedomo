@@ -311,6 +311,77 @@ def lista_appartamenti(utente: str, token: str) -> Dict[str, Any]:
         return {"success": False, "message": f"Errore: {str(e)}"}
 
 
+def aggiungi_appartamento(
+    utente: str,
+    token: str,
+    descrizione: str,
+    comune_codice: str,
+    indirizzo: str,
+    proprietario: str,
+) -> Dict[str, Any]:
+    """Add a new apartment to the account.
+    Returns success/message. The new IdAppartamento must be fetched via
+    lista_appartamenti() after a successful add.
+    """
+    try:
+        client = _get_client()
+        resp = client.service.GestioneAppartamenti_AggiungiAppartamento(
+            Utente=utente,
+            token=token,
+            Descrizione={"string": [descrizione]},
+            ComuneCodice=comune_codice,
+            Indirizzo=indirizzo,
+            Proprietario=proprietario,
+        )
+        result = zeep.helpers.serialize_object(resp)
+        outcome = result.get("GestioneAppartamenti_AggiungiAppartamentoResult") or {}
+        success = bool(outcome.get("esito"))
+        err_cod = outcome.get("ErroreCod")
+        err_des = outcome.get("ErroreDes") or ""
+        err_det = outcome.get("ErroreDettaglio") or ""
+        if not success:
+            msg = " · ".join([p for p in [f"Cod.{err_cod}" if err_cod else "", err_des, err_det] if p])
+            return {"success": False, "message": msg or "Errore", "raw": result}
+        return {"success": True, "message": "Appartamento aggiunto", "raw": result}
+    except Exception as e:
+        return {"success": False, "message": f"Errore: {str(e)}"}
+
+
+def cerca_comuni(utente: str, token: str, query: str) -> Dict[str, Any]:
+    """Search ISTAT municipality codes by partial name.
+    Uses Tabella(tipo='Comuni') and filters locally.
+    """
+    try:
+        client = _get_client()
+        resp = client.service.Tabella(
+            Utente=utente, token=token, tipo="Comuni"
+        )
+        result = zeep.helpers.serialize_object(resp)
+        outcome = result.get("TabellaResult") or {}
+        csv_data = result.get("CSV") or ""
+        if not outcome.get("esito"):
+            return {
+                "success": False,
+                "message": outcome.get("ErroreDes") or "Errore",
+            }
+
+        q = (query or "").strip().upper()
+        results = []
+        for line in csv_data.splitlines()[1:]:
+            parts = [p.strip() for p in line.split(";")]
+            if len(parts) >= 2 and (not q or q in parts[1].upper()):
+                results.append({
+                    "codice": parts[0],
+                    "nome": parts[1],
+                    "provincia": parts[2] if len(parts) > 2 else "",
+                })
+                if len(results) >= 30:
+                    break
+        return {"success": True, "results": results}
+    except Exception as e:
+        return {"success": False, "message": f"Errore: {str(e)}"}
+
+
 def authentication_test(utente: str, token: str) -> Dict[str, Any]:
     try:
         client = _get_client()

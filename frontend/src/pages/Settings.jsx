@@ -489,6 +489,7 @@ function ApartmentSelector({ propertyId, value, onChange, disabled }) {
   const [items, setItems] = useState([]);
   const [error, setError] = useState("");
   const [loaded, setLoaded] = useState(false);
+  const [showAddForm, setShowAddForm] = useState(false);
 
   const load = async () => {
     if (!propertyId) return;
@@ -503,12 +504,25 @@ function ApartmentSelector({ propertyId, value, onChange, disabled }) {
           onChange(r.data.appartamenti[0].id);
         }
       } else {
-        setError(r.data.message || "Errore caricamento");
+        // Cod.50 = tabella vuota → user has no apartments yet
+        setItems([]);
+        setLoaded(true);
+        setError(r.data.message || "");
       }
     } catch (e) {
       setError(e.response?.data?.detail || "Errore richiesta");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleAdded = (newList) => {
+    setItems(newList);
+    setShowAddForm(false);
+    setError("");
+    // Auto-select the last (most recently added)
+    if (newList.length > 0) {
+      onChange(newList[newList.length - 1].id);
     }
   };
 
@@ -531,11 +545,7 @@ function ApartmentSelector({ propertyId, value, onChange, disabled }) {
         >
           {loading ? "Caricamento..." : "Carica miei appartamenti da Alloggiati Web"}
         </button>
-      ) : items.length === 0 ? (
-        <p className="text-amber-500 text-[10px] font-mono">
-          [ ATTENZIONE ] Nessun appartamento registrato. Aggiungine uno dal portale Alloggiati Web.
-        </p>
-      ) : (
+      ) : items.length > 0 ? (
         <>
           <select
             data-testid="aw-idappartamento"
@@ -550,20 +560,214 @@ function ApartmentSelector({ propertyId, value, onChange, disabled }) {
               </option>
             ))}
           </select>
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={load}
+              className="text-[10px] tracking-[0.25em] uppercase text-zinc-500 hover:text-zinc-100 cursor-pointer"
+            >
+              Ricarica lista
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowAddForm(true)}
+              className="text-[10px] tracking-[0.25em] uppercase text-zinc-500 hover:text-zinc-100 cursor-pointer"
+            >
+              + Nuovo appartamento
+            </button>
+          </div>
+        </>
+      ) : (
+        <div className="border border-amber-500/40 p-3 font-mono text-[10px] text-amber-400">
+          [ ATTENZIONE ] Nessun appartamento registrato su Alloggiati Web per questo account.
+          {!showAddForm && (
+            <button
+              type="button"
+              onClick={() => setShowAddForm(true)}
+              data-testid="add-new-appartamento-btn"
+              className="block mt-2 text-zinc-300 hover:text-zinc-100 uppercase tracking-widest cursor-pointer underline"
+            >
+              + Aggiungi il tuo primo appartamento
+            </button>
+          )}
+        </div>
+      )}
+      {showAddForm && (
+        <AddApartmentForm
+          propertyId={propertyId}
+          onAdded={handleAdded}
+          onCancel={() => setShowAddForm(false)}
+        />
+      )}
+      {error && !showAddForm && items.length > 0 && (
+        <p className="text-red-500 text-[10px] font-mono break-words">
+          [ ERR ] {error}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function AddApartmentForm({ propertyId, onAdded, onCancel }) {
+  const [form, setForm] = useState({
+    descrizione: "",
+    comune_codice: "",
+    comune_nome: "",
+    indirizzo: "",
+    proprietario: "",
+  });
+  const [comuneQuery, setComuneQuery] = useState("");
+  const [comuneResults, setComuneResults] = useState([]);
+  const [searchingComuni, setSearchingComuni] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+
+  const searchComuni = async () => {
+    if (!comuneQuery.trim()) return;
+    setSearchingComuni(true);
+    try {
+      const r = await api.get(
+        `/properties/${propertyId}/alloggiati/comuni?q=${encodeURIComponent(comuneQuery)}`
+      );
+      setComuneResults(r.data.results || []);
+    } catch (e) {
+      setError(e.response?.data?.detail || "Errore ricerca");
+    } finally {
+      setSearchingComuni(false);
+    }
+  };
+
+  const submit = async () => {
+    setError("");
+    if (!form.descrizione || !form.comune_codice || !form.indirizzo || !form.proprietario) {
+      setError("Tutti i campi sono obbligatori.");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const r = await api.post(`/properties/${propertyId}/alloggiati/appartamenti/nuovo`, {
+        descrizione: form.descrizione,
+        comune_codice: form.comune_codice,
+        indirizzo: form.indirizzo,
+        proprietario: form.proprietario,
+      });
+      if (r.data.success) {
+        onAdded(r.data.appartamenti || []);
+      } else {
+        setError(r.data.message || "Errore aggiunta");
+      }
+    } catch (e) {
+      setError(e.response?.data?.detail || "Errore richiesta");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="border border-[#1E1E28] p-4 flex flex-col gap-3 bg-[#0E0E14]">
+      <p className="text-xs tracking-[0.25em] uppercase text-zinc-300">
+        Nuovo Appartamento
+      </p>
+      <label className="flex flex-col gap-1">
+        <span className="text-[10px] tracking-[0.25em] uppercase text-zinc-500">Descrizione</span>
+        <input
+          type="text"
+          data-testid="new-app-descrizione"
+          value={form.descrizione}
+          onChange={(e) => setForm({ ...form, descrizione: e.target.value })}
+          placeholder="Es. Villa Mare Appartamento 2"
+          className="bg-transparent border border-[#1E1E28] px-3 py-2 text-zinc-100 placeholder:text-zinc-600 focus:border-zinc-300 outline-none text-sm"
+        />
+      </label>
+      <label className="flex flex-col gap-1">
+        <span className="text-[10px] tracking-[0.25em] uppercase text-zinc-500">Comune (ricerca per nome)</span>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            data-testid="new-app-comune-query"
+            value={comuneQuery}
+            onChange={(e) => setComuneQuery(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), searchComuni())}
+            placeholder="Es. Pescara"
+            className="flex-1 bg-transparent border border-[#1E1E28] px-3 py-2 text-zinc-100 placeholder:text-zinc-600 focus:border-zinc-300 outline-none text-sm"
+          />
           <button
             type="button"
-            onClick={load}
-            className="text-[10px] tracking-[0.25em] uppercase text-zinc-500 hover:text-zinc-100 self-start cursor-pointer"
+            onClick={searchComuni}
+            disabled={searchingComuni}
+            className="border border-[#1E1E28] hover:border-zinc-500 px-4 text-zinc-300 uppercase tracking-widest text-[10px] cursor-pointer disabled:opacity-50"
           >
-            Ricarica lista
+            {searchingComuni ? "..." : "Cerca"}
           </button>
-        </>
-      )}
+        </div>
+        {comuneResults.length > 0 && (
+          <select
+            data-testid="new-app-comune-select"
+            value={form.comune_codice}
+            onChange={(e) => {
+              const c = comuneResults.find((x) => x.codice === e.target.value);
+              setForm({
+                ...form,
+                comune_codice: e.target.value,
+                comune_nome: c ? c.nome : "",
+              });
+            }}
+            className="bg-transparent border border-[#1E1E28] px-3 py-2 text-zinc-100 focus:border-zinc-300 outline-none font-mono text-sm mt-1"
+          >
+            <option value="" className="bg-[#0E0E14]">— Seleziona comune —</option>
+            {comuneResults.map((c) => (
+              <option key={c.codice} value={c.codice} className="bg-[#0E0E14]">
+                {c.nome} ({c.provincia}) — {c.codice}
+              </option>
+            ))}
+          </select>
+        )}
+      </label>
+      <label className="flex flex-col gap-1">
+        <span className="text-[10px] tracking-[0.25em] uppercase text-zinc-500">Indirizzo</span>
+        <input
+          type="text"
+          data-testid="new-app-indirizzo"
+          value={form.indirizzo}
+          onChange={(e) => setForm({ ...form, indirizzo: e.target.value })}
+          placeholder="Es. Via Roma, 25"
+          className="bg-transparent border border-[#1E1E28] px-3 py-2 text-zinc-100 placeholder:text-zinc-600 focus:border-zinc-300 outline-none text-sm"
+        />
+      </label>
+      <label className="flex flex-col gap-1">
+        <span className="text-[10px] tracking-[0.25em] uppercase text-zinc-500">Proprietario</span>
+        <input
+          type="text"
+          data-testid="new-app-proprietario"
+          value={form.proprietario}
+          onChange={(e) => setForm({ ...form, proprietario: e.target.value })}
+          placeholder="Nome Cognome del proprietario"
+          className="bg-transparent border border-[#1E1E28] px-3 py-2 text-zinc-100 placeholder:text-zinc-600 focus:border-zinc-300 outline-none text-sm"
+        />
+      </label>
       {error && (
         <p className="text-red-500 text-[10px] font-mono break-words">
           [ ERR ] {error}
         </p>
       )}
+      <div className="flex gap-2 mt-2">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="flex-1 border border-[#1E1E28] hover:border-zinc-500 text-zinc-400 px-4 py-3 uppercase tracking-widest text-[10px] cursor-pointer"
+        >
+          Annulla
+        </button>
+        <button
+          type="button"
+          onClick={submit}
+          disabled={submitting}
+          data-testid="confirm-add-appartamento-btn"
+          className="flex-1 bg-zinc-100 hover:bg-white text-[#05050A] font-medium px-4 py-3 uppercase tracking-widest text-[10px] cursor-pointer disabled:opacity-50"
+        >
+          {submitting ? "Aggiunta..." : "Aggiungi"}
+        </button>
+      </div>
     </div>
   );
 }
