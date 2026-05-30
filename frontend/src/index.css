@@ -52,6 +52,15 @@ input[type="number"]::-webkit-outer-spin-button {
   body { @apply bg-background text-foreground; }
 }
 
+/* OCR scanning blink animation: black ↔ magenta */
+@keyframes ocr-blink {
+  0%, 100% { color: #f4f4f5; }
+  50% { color: #ff00ff; text-shadow: 0 0 8px rgba(255, 0, 255, 0.6); }
+}
+.animate-ocr-blink {
+  animation: ocr-blink 0.9s ease-in-out infinite;
+}
+
 /* Date input dark theme */
 input[type="date"]::-webkit-calendar-picker-indicator {
   filter: invert(0.7);

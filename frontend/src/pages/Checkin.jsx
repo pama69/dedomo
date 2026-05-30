@@ -24,7 +24,10 @@ export default function Checkin() {
   const [step, setStep] = useState(1);
   const [properties, setProperties] = useState([]);
   const [propertyId, setPropertyId] = useState("");
-  const [dataArrivo, setDataArrivo] = useState("");
+  // Default arrival = today (Europe/Rome)
+  const todayRome = new Date(new Date().toLocaleString("en-US", { timeZone: "Europe/Rome" }))
+    .toISOString().slice(0, 10);
+  const [dataArrivo, setDataArrivo] = useState(todayRome);
   const [dataPartenza, setDataPartenza] = useState("");
   const [guests, setGuests] = useState([]);
   const [activeGuestIdx, setActiveGuestIdx] = useState(0);
@@ -38,16 +41,17 @@ export default function Checkin() {
     api.get("/properties").then((r) => setProperties(r.data));
   }, []);
 
-  const today = new Date().toISOString().slice(0, 10);
-
   // ============ STEP 1: dates ============
   const renderStep1 = () => (
     <>
-      <StepHeader n="01" label="Date Soggiorno" />
+      <StepHeader n="01" label="Soggiorno" />
       <div className="grid grid-cols-2 gap-3">
-        <DateField label="Data Arrivo" value={dataArrivo} onChange={setDataArrivo} testid="date-start-input" />
-        <DateField label="Data Partenza" value={dataPartenza} onChange={setDataPartenza} testid="date-end-input" min={dataArrivo} />
+        <DateField label={`Arrivo (oggi)`} value={dataArrivo} onChange={setDataArrivo} testid="date-start-input" />
+        <DateField label="Partenza" value={dataPartenza} onChange={setDataPartenza} testid="date-end-input" min={dataArrivo} />
       </div>
+      <p className="text-zinc-500 text-[10px] tracking-[0.25em] uppercase font-mono">
+        Data arrivo preimpostata a oggi · puoi modificarla se serve
+      </p>
       <NextBtn
         disabled={!dataArrivo || !dataPartenza || dataPartenza <= dataArrivo}
         onClick={() => setStep(2)}
@@ -218,20 +222,25 @@ export default function Checkin() {
         <StepHeader n="03" label={`Ospite ${activeGuestIdx + 1} / ${guests.length}`} />
 
         <div className="flex gap-2 flex-wrap">
-          {guests.map((_, i) => (
-            <button
-              key={i}
-              onClick={() => setActiveGuestIdx(i)}
-              data-testid={`guest-tab-${i}`}
-              className={`text-[10px] tracking-[0.25em] uppercase border px-4 py-2 cursor-pointer transition-colors ${
-                i === activeGuestIdx
-                  ? "border-zinc-100 text-zinc-100"
-                  : "border-[#1E1E28] text-zinc-500 hover:text-zinc-300"
-              }`}
-            >
-              Ospite {i + 1}
-            </button>
-          ))}
+          {guests.map((gx, i) => {
+            const lbl = gx.cognome
+              ? `${gx.cognome}${gx.nome ? " " + gx.nome[0] + "." : ""}`
+              : `Ospite ${i + 1}`;
+            return (
+              <button
+                key={i}
+                onClick={() => setActiveGuestIdx(i)}
+                data-testid={`guest-tab-${i}`}
+                className={`text-[10px] tracking-[0.25em] uppercase border px-4 py-2 cursor-pointer transition-colors ${
+                  i === activeGuestIdx
+                    ? "border-zinc-100 text-zinc-100"
+                    : "border-[#1E1E28] text-zinc-500 hover:text-zinc-300"
+                }`}
+              >
+                {i === 0 ? "★ " : ""}{lbl}
+              </button>
+            );
+          })}
           <button
             data-testid="add-guest-btn"
             onClick={() => {
@@ -243,6 +252,9 @@ export default function Checkin() {
             + Aggiungi
           </button>
         </div>
+        <p className="text-zinc-600 text-[10px] tracking-widest uppercase font-mono">
+          ★ Capofamiglia · gli altri verranno collegati
+        </p>
 
         <div className="grid grid-cols-2 gap-2">
           <label className="border-2 border-dashed border-[#1E1E28] bg-[#0E0E14] py-6 flex flex-col items-center justify-center hover:border-zinc-500 transition-colors cursor-pointer text-zinc-400 uppercase tracking-widest text-[10px] text-center">
@@ -255,7 +267,7 @@ export default function Checkin() {
               onChange={(e) => e.target.files?.[0] && handleOcr(e.target.files[0])}
             />
             {ocrLoading ? (
-              <span className="font-mono">…</span>
+              <span className="font-mono animate-ocr-blink">…</span>
             ) : (
               <>
                 <span className="text-zinc-300">Scatta foto</span>
@@ -272,7 +284,7 @@ export default function Checkin() {
               onChange={(e) => e.target.files?.[0] && handleOcr(e.target.files[0])}
             />
             {ocrLoading ? (
-              <span className="font-mono">SCANSIONE…</span>
+              <span className="font-mono animate-ocr-blink">SCANSIONE…</span>
             ) : (
               <>
                 <span className="text-zinc-300">Carica file</span>
@@ -282,7 +294,7 @@ export default function Checkin() {
           </label>
         </div>
         {ocrLoading && (
-          <p className="text-zinc-500 text-[10px] font-mono uppercase tracking-widest text-center">
+          <p className="text-center text-[10px] font-mono uppercase tracking-widest animate-ocr-blink">
             ANALISI DOCUMENTO IN CORSO...
           </p>
         )}
@@ -422,6 +434,8 @@ export default function Checkin() {
 
   const renderStep4 = () => {
     const prop = properties.find((p) => p.property_id === propertyId);
+    const capo = guests[0];
+    const familiari = guests.slice(1);
     return (
       <>
         <StepHeader n="04" label="Riepilogo" />
@@ -432,18 +446,51 @@ export default function Checkin() {
           <Row label="PARTENZA" value={new Date(dataPartenza).toLocaleDateString("it-IT")} />
           <Row label="OSPITI" value={guests.length} />
         </div>
-        <div className="flex flex-col gap-2">
-          {guests.map((g, i) => (
-            <div key={i} className="bg-[#0E0E14] border border-[#1E1E28] p-4 font-mono text-xs">
-              <p className="text-zinc-300 font-bold">
-                #{i + 1} — {g.cognome} {g.nome} [{g.sesso}]
-              </p>
-              <p className="text-zinc-500 mt-1">
-                {g.data_nascita} · {g.cittadinanza} · {g.tipo_documento} {g.numero_documento}
-              </p>
+
+        {/* Tree view of guests: capofamiglia at root, familiari indented */}
+        <div className="bg-[#0E0E14] border border-[#1E1E28] p-5 font-mono text-xs flex flex-col gap-2">
+          <p className="text-[10px] tracking-[0.3em] uppercase text-zinc-500 mb-2">
+            Struttura Familiare
+          </p>
+          {capo && (
+            <div className="flex flex-col gap-2">
+              <div className="text-zinc-100">
+                <span className="text-amber-400">★</span>{" "}
+                <span className="font-bold">{capo.cognome || "—"} {capo.nome}</span>
+                <span className="text-zinc-500 ml-2">
+                  {guests.length === 1 ? "[OSPITE SINGOLO]" : "[CAPOFAMIGLIA]"}
+                </span>
+              </div>
+              {familiari.map((g, i) => (
+                <div key={i} className="ml-6 flex items-center gap-2 text-zinc-300 border-l border-[#1E1E28] pl-4 py-1">
+                  <span className="text-zinc-600">└</span>
+                  <span className="font-bold">{g.cognome || "—"} {g.nome}</span>
+                  <span className="text-zinc-500 text-[10px]">[FAMILIARE]</span>
+                </div>
+              ))}
             </div>
-          ))}
+          )}
         </div>
+
+        {/* Details per guest in collapsible */}
+        <details className="text-xs">
+          <summary className="text-zinc-500 cursor-pointer text-[10px] tracking-[0.25em] uppercase hover:text-zinc-300">
+            Dettagli dati ospite (verifica)
+          </summary>
+          <div className="flex flex-col gap-2 mt-3">
+            {guests.map((g, i) => (
+              <div key={i} className="bg-[#0E0E14] border border-[#1E1E28] p-4 font-mono text-xs">
+                <p className="text-zinc-300 font-bold">
+                  #{i + 1} — {g.cognome} {g.nome} [{g.sesso}]
+                </p>
+                <p className="text-zinc-500 mt-1">
+                  {g.data_nascita} · {g.luogo_nascita} · {g.tipo_documento} {g.numero_documento}
+                </p>
+              </div>
+            ))}
+          </div>
+        </details>
+
         {error && (
           <p className="text-red-500 text-xs font-mono uppercase tracking-wider">
             [ ERR ] {error}
