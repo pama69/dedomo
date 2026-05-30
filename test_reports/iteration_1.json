@@ -1,0 +1,48 @@
+{
+  "summary": "Backend-only testing of Ospitalo MVP (vacation rental guest data tool). Seeded session via Mongo (auth_testing.md playbook), then ran 22 pytest cases covering health, auth, properties CRUD, OCR, check-in submission to all 3 portals (Alloggiati Web, Ross 1000, Imposta di Soggiorno), tourist tax exemption for minors, archive listing, PDF receipt + CSV downloads, and logout. ALL 22 TESTS PASSED.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/ocr/document", "issue": "When OCR provider returns BadRequest (e.g. unsupported image), the endpoint raises HTTP 500 with the raw LiteLLM error message in 'detail'. Functional but leaks provider internals to the client; consider mapping to 422 with a friendlier message."},
+      {"endpoint": "/api/auth/logout", "issue": "Logout only invalidates the session if the session_token cookie is present in the request. A Bearer-token-only client cannot logout (the DB row is left dangling until expiry). Consider also checking Authorization header for symmetry with get_current_user."},
+      {"endpoint": "/api/properties (POST)", "issue": "Returns 200 instead of 201 for resource creation. Minor REST convention deviation."},
+      {"endpoint": "services/imposta_soggiorno.py calcola_imposta", "issue": "Age is computed as (arr - bd).days // 365 which ignores leap years and may misclassify guests born exactly on the boundary date. For tax accuracy, use a proper year-difference calculation (e.g. dateutil.relativedelta)."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/conftest.py",
+    "/app/backend/tests/test_ospitalo_backend.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "Map OCR provider failures to a user-friendly 4xx response (e.g. 422 'Immagine non valida') instead of forwarding raw LiteLLM error in a 500.",
+    "Make /api/auth/logout also accept Bearer token (parity with get_current_user) so token-based clients can invalidate sessions server-side.",
+    "Consider POST 201 for /api/properties creation (REST convention).",
+    "Replace ad-hoc age calculation in imposta_soggiorno with dateutil.relativedelta for accuracy across leap years."
+  ],
+  "critical_code_review_comments": [
+    "server.py is a single 661-line file. Once features grow it should be split into routers/ (auth, properties, ocr, checkin, archive) per the >700-line guideline.",
+    "alloggiati_web.py uses fake creds and gracefully returns success:false (verified). Good.",
+    "Ross1000 csv_manual path is purely client-side and always succeeds with csv_content; this matches the configurable Abruzzo default. Good.",
+    "All Mongo queries correctly use {\"_id\": 0} projection (no ObjectId leak).",
+    "Env vars are read without defaults via os.environ[...] (fails fast). Good.",
+    "Bearer-token-only logout doesn't invalidate the DB session (cookie-only) — see action item."
+  ],
+  "updated_files": [
+    "/app/backend/tests/__init__.py",
+    "/app/backend/tests/conftest.py",
+    "/app/backend/tests/test_ospitalo_backend.py"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "not_tested"},
+  "test_credentials": "No real credentials needed. Test session seeded directly in MongoDB via /app/auth_testing.md playbook (user_sessions + users collections). Each pytest run seeds a unique short-lived session and cleans it up in teardown. EMERGENT_LLM_KEY in /app/backend/.env is used live by OCR endpoint (gpt-5.2 via litellm).",
+  "seed_data_creation": "Pytest session-scoped fixture creates one user + one session_token in MongoDB and tears down user, sessions, created properties, and created checkins after the run. Properties are prefixed with TEST_ for easy identification.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Backend pytest suite at /app/backend/tests/test_ospitalo_backend.py covers all critical endpoints and passes 22/22. To re-run: `cd /app && python -m pytest backend/tests/test_ospitalo_backend.py -v --junitxml=/app/test_reports/pytest/pytest_results.xml`. The suite seeds its own auth via Mongo (no UI login needed). Alloggiati Web SOAP intentionally fails auth with fake creds and returns success:false (expected); Ross1000 csv_manual always succeeds with csv_content; tourist tax exemption for under-12 verified (age computed from data_nascita vs data_arrivo).",
+  "rca of the issue": "N/A — no functional bugs blocking. Only minor improvements noted in action_items."
+}
