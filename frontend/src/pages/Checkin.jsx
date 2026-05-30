@@ -134,11 +134,14 @@ export default function Checkin() {
       // Try to auto-resolve comune code + provincia from luogo_nascita
       let comuneCode = "";
       let provSigla = "";
+      let comuneNotFound = false;
       if (data.luogo_nascita) {
         const guess = await lookupComune(data.luogo_nascita);
         if (guess?.comune_match) {
           comuneCode = guess.comune_match.codice || "";
           provSigla = guess.comune_match.provincia || "";
+        } else {
+          comuneNotFound = true;
         }
       }
 
@@ -314,24 +317,19 @@ export default function Checkin() {
           <SelectField label="Sesso" value={g.sesso} onChange={(v) => updateGuest(activeGuestIdx, "sesso", v)} testid="guest-sesso" options={[["M", "M"], ["F", "F"]]} />
           <DateField label="Data Nascita" value={g.data_nascita} onChange={(v) => updateGuest(activeGuestIdx, "data_nascita", v)} testid="guest-nascita" />
         </div>
-        <label className="flex flex-col gap-1">
-          <span className="text-[10px] tracking-[0.25em] uppercase text-zinc-500">Luogo Nascita</span>
-          <input
-            type="text"
-            data-testid="guest-luogo"
-            value={g.luogo_nascita ?? ""}
-            onChange={(e) => updateGuest(activeGuestIdx, "luogo_nascita", e.target.value)}
-            onBlur={(e) => handleLuogoBlur(e.target.value)}
-            placeholder="Es. Pescara"
-            className="bg-transparent border border-[#1E1E28] px-4 py-3 text-zinc-100 placeholder:text-zinc-600 focus:border-zinc-300 focus:ring-1 focus:ring-zinc-300 outline-none transition-all w-full font-mono text-sm"
-          />
-        </label>
-        <div className="grid grid-cols-3 gap-3">
-          <TextField label="Cod. Comune (ISTAT 9 cifre)" value={g.codice_comune_nascita} onChange={(v) => updateGuest(activeGuestIdx, "codice_comune_nascita", v)} testid="guest-codcomune" />
-          <TextField label="Prov." value={g.sigla_provincia_nascita} onChange={(v) => updateGuest(activeGuestIdx, "sigla_provincia_nascita", v.toUpperCase())} testid="guest-prov" />
-          <TextField label="Stato Nasc. (9 cifre)" value={g.stato_nascita} onChange={(v) => updateGuest(activeGuestIdx, "stato_nascita", v)} testid="guest-statonasc" />
-        </div>
-        <TextField label="Cittadinanza (codice 9 cifre)" value={g.cittadinanza} onChange={(v) => updateGuest(activeGuestIdx, "cittadinanza", v)} testid="guest-citt" />
+        <ComuneNascitaField
+          luogoNascita={g.luogo_nascita}
+          comuneCode={g.codice_comune_nascita}
+          provSigla={g.sigla_provincia_nascita}
+          notFound={g._comune_not_found}
+          propertyId={propertyId}
+          onChange={(luogo, codice, prov) => {
+            updateGuest(activeGuestIdx, "luogo_nascita", luogo);
+            updateGuest(activeGuestIdx, "codice_comune_nascita", codice);
+            updateGuest(activeGuestIdx, "sigla_provincia_nascita", prov);
+            updateGuest(activeGuestIdx, "_comune_not_found", false);
+          }}
+        />
         <SelectField
           label="Tipo Documento"
           value={g.tipo_documento}
@@ -344,10 +342,35 @@ export default function Checkin() {
             ["PATEN", "Patente"],
           ]}
         />
-        <div className="grid grid-cols-2 gap-3">
-          <TextField label="Numero Documento" value={g.numero_documento} onChange={(v) => updateGuest(activeGuestIdx, "numero_documento", v.toUpperCase())} testid="guest-numdoc" />
-          <TextField label="Luogo Rilascio (codice 9 cifre)" value={g.stato_rilascio_documento} onChange={(v) => updateGuest(activeGuestIdx, "stato_rilascio_documento", v)} testid="guest-statorilascio" />
-        </div>
+        <TextField label="Numero Documento" value={g.numero_documento} onChange={(v) => updateGuest(activeGuestIdx, "numero_documento", v.toUpperCase())} testid="guest-numdoc" />
+
+        <details className="text-[10px] tracking-[0.2em] uppercase text-zinc-600 font-mono">
+          <summary className="cursor-pointer hover:text-zinc-400">
+            Codici tecnici (avanzato)
+          </summary>
+          <div className="mt-3 grid grid-cols-2 gap-2 text-[10px]">
+            <div>
+              <div className="text-zinc-500">Cod. Comune Nascita</div>
+              <div className="text-zinc-300">{g.codice_comune_nascita || "—"}</div>
+            </div>
+            <div>
+              <div className="text-zinc-500">Prov.</div>
+              <div className="text-zinc-300">{g.sigla_provincia_nascita || "—"}</div>
+            </div>
+            <div>
+              <div className="text-zinc-500">Cittadinanza</div>
+              <div className="text-zinc-300">{g.cittadinanza || "—"}</div>
+            </div>
+            <div>
+              <div className="text-zinc-500">Stato Nascita</div>
+              <div className="text-zinc-300">{g.stato_nascita || "—"}</div>
+            </div>
+            <div>
+              <div className="text-zinc-500">Luogo Rilascio Doc</div>
+              <div className="text-zinc-300">{g.stato_rilascio_documento || "—"}</div>
+            </div>
+          </div>
+        </details>
 
         {guests.length > 1 && (
           <button
@@ -475,9 +498,18 @@ export default function Checkin() {
         </div>
 
         {result?.test_mode && (
-          <p className="text-amber-500 text-[10px] tracking-[0.25em] uppercase font-mono">
-            [ MODALITÀ TEST ATTIVA — NESSUN INVIO REALE EFFETTUATO ]
-          </p>
+          <div className="border-2 border-amber-500/60 bg-amber-500/10 p-4 flex flex-col gap-2">
+            <p className="text-amber-300 text-xs tracking-[0.3em] uppercase font-bold">
+              ⚠ Modalità TEST attiva
+            </p>
+            <p className="text-amber-200/80 text-[10px] font-mono leading-relaxed">
+              Nessun dato è stato realmente inviato ai portali.<br/>
+              · Alloggiati Web → solo validazione formato<br/>
+              · Turismo 5 → solo XML generato in locale<br/>
+              · Imposta di Soggiorno → solo calcolo locale<br/>
+              Per inviare realmente, passa la struttura in PROD nelle Impostazioni.
+            </p>
+          </div>
         )}
 
         <div className="flex flex-col gap-2">
@@ -633,3 +665,113 @@ const fileToBase64 = (file) =>
     reader.onerror = rej;
     reader.readAsDataURL(file);
   });
+
+
+function ComuneNascitaField({ luogoNascita, comuneCode, provSigla, notFound, propertyId, onChange }) {
+  const [query, setQuery] = useState(luogoNascita || "");
+  const [results, setResults] = useState([]);
+  const [searching, setSearching] = useState(false);
+  const [showSearch, setShowSearch] = useState(!!notFound);
+
+  // sync local query with prop changes
+  useEffect(() => {
+    setQuery(luogoNascita || "");
+  }, [luogoNascita]);
+
+  useEffect(() => {
+    if (notFound) setShowSearch(true);
+  }, [notFound]);
+
+  const doSearch = async () => {
+    if (!query.trim() || !propertyId) return;
+    setSearching(true);
+    try {
+      const r = await api.get(
+        `/properties/${propertyId}/alloggiati/comuni?q=${encodeURIComponent(query)}`
+      );
+      setResults(r.data?.results || []);
+    } catch {
+      setResults([]);
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  const pick = (c) => {
+    onChange(c.nome, c.codice, c.provincia);
+    setShowSearch(false);
+    setResults([]);
+  };
+
+  const hasMatch = comuneCode && provSigla;
+
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="text-[10px] tracking-[0.25em] uppercase text-zinc-500">Luogo Nascita</span>
+      <input
+        type="text"
+        data-testid="guest-luogo"
+        value={luogoNascita || ""}
+        onChange={(e) => onChange(e.target.value, "", "")}
+        placeholder="Es. Pescara"
+        className="bg-transparent border border-[#1E1E28] px-4 py-3 text-zinc-100 placeholder:text-zinc-600 focus:border-zinc-300 outline-none w-full font-mono text-sm"
+      />
+      {hasMatch ? (
+        <div className="flex items-center gap-2 text-[10px] font-mono mt-1">
+          <span className="text-emerald-500">✓ {provSigla}</span>
+          <span className="text-zinc-500">[ {comuneCode} ]</span>
+          <button
+            type="button"
+            onClick={() => { setShowSearch(true); setQuery(luogoNascita || ""); }}
+            className="ml-auto text-zinc-500 hover:text-zinc-100 uppercase tracking-widest cursor-pointer"
+          >
+            Cambia
+          </button>
+        </div>
+      ) : luogoNascita ? (
+        <div className="text-amber-400 text-[10px] font-mono mt-1">
+          ⚠ Comune non riconosciuto. Cercalo manualmente:
+        </div>
+      ) : null}
+
+      {showSearch && (
+        <div className="border border-[#1E1E28] p-3 mt-2 flex flex-col gap-2 bg-[#0E0E14]">
+          <div className="flex gap-2">
+            <input
+              type="text"
+              data-testid="comune-search-input"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), doSearch())}
+              placeholder="Digita nome comune..."
+              className="flex-1 bg-transparent border border-[#1E1E28] px-3 py-2 text-zinc-100 placeholder:text-zinc-600 focus:border-zinc-300 outline-none text-sm font-mono"
+            />
+            <button
+              type="button"
+              onClick={doSearch}
+              disabled={searching}
+              data-testid="comune-search-btn"
+              className="border border-[#1E1E28] hover:border-zinc-500 px-3 py-2 text-zinc-300 uppercase tracking-widest text-[10px] cursor-pointer disabled:opacity-50"
+            >
+              {searching ? "..." : "Cerca"}
+            </button>
+          </div>
+          {results.length > 0 && (
+            <div className="max-h-40 overflow-y-auto flex flex-col gap-1">
+              {results.map((c) => (
+                <button
+                  key={c.codice}
+                  type="button"
+                  onClick={() => pick(c)}
+                  className="text-left text-[10px] font-mono text-zinc-300 hover:text-zinc-100 hover:bg-[#15151C] px-2 py-2 cursor-pointer"
+                >
+                  {c.nome} {c.provincia ? `(${c.provincia})` : ""} — {c.codice}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
