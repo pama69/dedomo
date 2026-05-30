@@ -75,10 +75,20 @@ export default function Settings() {
     setSaving(true);
     setError("");
     try {
+      // Normalize empty strings to numeric defaults before submit
+      const payload = JSON.parse(JSON.stringify(editing));
+      const num = (v, def = 0) => (v === "" || v === null || isNaN(v) ? def : Number(v));
+      payload.ross1000.n_camere = num(payload.ross1000.n_camere, 1);
+      payload.ross1000.n_letti = num(payload.ross1000.n_letti, 1);
+      payload.imposta_soggiorno.tariffa_per_notte = num(payload.imposta_soggiorno.tariffa_per_notte, 0);
+      payload.imposta_soggiorno.max_notti_tassabili = num(payload.imposta_soggiorno.max_notti_tassabili, 7);
+      payload.imposta_soggiorno.esenti_under_anni = num(payload.imposta_soggiorno.esenti_under_anni, 0);
+      payload.alloggiati.id_appartamento = num(payload.alloggiati.id_appartamento, 0);
+
       if (editing.property_id) {
-        await api.put(`/properties/${editing.property_id}`, editing);
+        await api.put(`/properties/${editing.property_id}`, payload);
       } else {
-        await api.post("/properties", editing);
+        await api.post("/properties", payload);
       }
       setEditing(null);
       await load();
@@ -308,8 +318,8 @@ function PropertyEditor({ p, setP, save, cancel, saving, error }) {
         <Field label="Utente" value={p.ross1000.utente} onChange={(v) => upd("ross1000.utente", v)} testid="r1k-utente" />
         <Field label="Password" type="password" value={p.ross1000.password} onChange={(v) => upd("ross1000.password", v)} testid="r1k-password" />
         <div className="grid grid-cols-2 gap-3">
-          <Field label="N. Camere" type="number" value={p.ross1000.n_camere} onChange={(v) => upd("ross1000.n_camere", parseInt(v) || 1)} testid="r1k-camere" />
-          <Field label="N. Letti totali" type="number" value={p.ross1000.n_letti} onChange={(v) => upd("ross1000.n_letti", parseInt(v) || 1)} testid="r1k-letti" />
+          <Field label="N. Camere" type="number" value={p.ross1000.n_camere ?? ""} onChange={(v) => upd("ross1000.n_camere", v === "" ? "" : parseInt(v))} testid="r1k-camere" />
+          <Field label="N. Letti totali" type="number" value={p.ross1000.n_letti ?? ""} onChange={(v) => upd("ross1000.n_letti", v === "" ? "" : parseInt(v))} testid="r1k-letti" />
         </div>
         <label className="flex flex-col gap-1">
           <span className="text-[10px] tracking-[0.25em] uppercase text-zinc-500">Modalità invio</span>
@@ -331,10 +341,10 @@ function PropertyEditor({ p, setP, save, cancel, saving, error }) {
       <Section title="Imposta di Soggiorno (Comune)">
         <Toggle label="Abilita Imposta di Soggiorno" value={p.imposta_soggiorno.enabled} onChange={(v) => upd("imposta_soggiorno.enabled", v)} testid="is-enabled" />
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Tariffa / notte (€)" type="number" value={p.imposta_soggiorno.tariffa_per_notte} onChange={(v) => upd("imposta_soggiorno.tariffa_per_notte", parseFloat(v) || 0)} testid="is-tariffa" />
-          <Field label="Max notti tassabili" type="number" value={p.imposta_soggiorno.max_notti_tassabili} onChange={(v) => upd("imposta_soggiorno.max_notti_tassabili", parseInt(v) || 0)} testid="is-maxnotti" />
+          <Field label="Tariffa / notte (€)" type="number" value={p.imposta_soggiorno.tariffa_per_notte ?? ""} onChange={(v) => upd("imposta_soggiorno.tariffa_per_notte", v === "" ? "" : parseFloat(v))} testid="is-tariffa" />
+          <Field label="Max notti tassabili" type="number" value={p.imposta_soggiorno.max_notti_tassabili ?? ""} onChange={(v) => upd("imposta_soggiorno.max_notti_tassabili", v === "" ? "" : parseInt(v))} testid="is-maxnotti" />
         </div>
-        <Field label="Esenti sotto i (anni)" type="number" value={p.imposta_soggiorno.esenti_under_anni} onChange={(v) => upd("imposta_soggiorno.esenti_under_anni", parseInt(v) || 0)} testid="is-esenti" />
+        <Field label="Esenti sotto i (anni)" type="number" value={p.imposta_soggiorno.esenti_under_anni ?? ""} onChange={(v) => upd("imposta_soggiorno.esenti_under_anni", v === "" ? "" : parseInt(v))} testid="is-esenti" />
         <Field label="Endpoint Comune (opzionale)" value={p.imposta_soggiorno.endpoint_comune} onChange={(v) => upd("imposta_soggiorno.endpoint_comune", v)} testid="is-endpoint" placeholder="https://..." />
       </Section>
 
