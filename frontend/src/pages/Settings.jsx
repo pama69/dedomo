@@ -408,6 +408,13 @@ function TestCredentialsButton({ propertyId }) {
               {result.message}
             </div>
           )}
+          {result.test_schedina && (
+            <div className="text-zinc-500 mt-2 border-t border-zinc-700 pt-2">
+              Metodo usato: <span className="text-amber-400">{result.test_schedina.tipo_account_used}</span><br/>
+              ID Appartamento: <span className="text-amber-400">{result.test_schedina.id_appartamento_used || "—"}</span><br/>
+              Lunghezza schedina: <span className="text-amber-400">{result.test_schedina.schedina_length}</span> chars
+            </div>
+          )}
           {result.token_expires && (
             <div className="text-zinc-500 mt-1">
               Token valido fino al {result.token_expires}
