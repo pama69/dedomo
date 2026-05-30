@@ -349,12 +349,15 @@ def aggiungi_appartamento(
 
 def cerca_comuni(utente: str, token: str, query: str) -> Dict[str, Any]:
     """Search ISTAT municipality codes by partial name.
-    Uses Tabella(tipo='Comuni') and filters locally.
+    Uses Tabella(tipo='Luoghi') and filters locally.
+
+    The 'Luoghi' table contains both Italian municipalities and foreign countries
+    in a CSV with columns: Codice;Descrizione;...
     """
     try:
         client = _get_client()
         resp = client.service.Tabella(
-            Utente=utente, token=token, tipo="Comuni"
+            Utente=utente, token=token, tipo="Luoghi"
         )
         result = zeep.helpers.serialize_object(resp)
         outcome = result.get("TabellaResult") or {}
@@ -367,15 +370,22 @@ def cerca_comuni(utente: str, token: str, query: str) -> Dict[str, Any]:
 
         q = (query or "").strip().upper()
         results = []
-        for line in csv_data.splitlines()[1:]:
+        for line in csv_data.splitlines():
             parts = [p.strip() for p in line.split(";")]
-            if len(parts) >= 2 and (not q or q in parts[1].upper()):
+            if len(parts) < 2:
+                continue
+            codice = parts[0]
+            descrizione = parts[1]
+            if not codice or codice.upper() == "CODICE":
+                continue
+            if not q or q in descrizione.upper():
+                provincia = parts[2] if len(parts) > 2 else ""
                 results.append({
-                    "codice": parts[0],
-                    "nome": parts[1],
-                    "provincia": parts[2] if len(parts) > 2 else "",
+                    "codice": codice,
+                    "nome": descrizione,
+                    "provincia": provincia,
                 })
-                if len(results) >= 30:
+                if len(results) >= 50:
                     break
         return {"success": True, "results": results}
     except Exception as e:

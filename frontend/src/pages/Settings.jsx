@@ -578,18 +578,58 @@ function ApartmentSelector({ propertyId, value, onChange, disabled }) {
           </div>
         </>
       ) : (
-        <div className="border border-amber-500/40 p-3 font-mono text-[10px] text-amber-400">
-          [ ATTENZIONE ] Nessun appartamento registrato su Alloggiati Web per questo account.
-          {!showAddForm && (
-            <button
-              type="button"
-              onClick={() => setShowAddForm(true)}
-              data-testid="add-new-appartamento-btn"
-              className="block mt-2 text-zinc-300 hover:text-zinc-100 uppercase tracking-widest cursor-pointer underline"
-            >
-              + Aggiungi il tuo primo appartamento
-            </button>
-          )}
+        <div className="border border-amber-500/40 p-3 font-mono text-[10px] text-amber-400 flex flex-col gap-3">
+          <div>
+            [ ATTENZIONE ] La lista è vuota. Possibili cause:
+            <ul className="mt-2 text-zinc-400 list-disc list-inside space-y-1">
+              <li>Account "Gestore Appartamenti" appena attivato</li>
+              <li>Appartamento pre-creato dalla Questura (spesso ID=1)</li>
+              <li>Appartamento gestito esternamente (es. via Turismo 5)</li>
+            </ul>
+          </div>
+          <div className="border-t border-amber-500/30 pt-3 flex flex-col gap-2">
+            <span className="text-zinc-300">Soluzione 1 — Prova ID di default:</span>
+            <div className="flex gap-2">
+              <input
+                type="number"
+                data-testid="aw-idappartamento-manual"
+                value={value || ""}
+                onChange={(e) => onChange(parseInt(e.target.value) || 0)}
+                placeholder="es. 1"
+                className="flex-1 bg-transparent border border-[#1E1E28] px-3 py-2 text-zinc-100 placeholder:text-zinc-600 focus:border-zinc-300 outline-none font-mono text-sm"
+              />
+              <button
+                type="button"
+                onClick={() => onChange(1)}
+                className="border border-[#1E1E28] hover:border-zinc-500 px-3 py-2 text-zinc-300 uppercase tracking-widest text-[10px] cursor-pointer"
+              >
+                Usa 1
+              </button>
+            </div>
+            <span className="text-zinc-500 mt-1">
+              Salva e poi fai il "Test credenziali" per verificare se l'ID funziona.
+            </span>
+          </div>
+          <div className="border-t border-amber-500/30 pt-3">
+            <span className="text-zinc-300">Soluzione 2 — Crea un nuovo appartamento:</span>
+            {!showAddForm && (
+              <button
+                type="button"
+                onClick={() => setShowAddForm(true)}
+                data-testid="add-new-appartamento-btn"
+                className="block mt-2 text-zinc-300 hover:text-zinc-100 uppercase tracking-widest cursor-pointer underline"
+              >
+                + Aggiungi nuovo
+              </button>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={load}
+            className="self-start text-zinc-500 hover:text-zinc-100 uppercase tracking-widest cursor-pointer"
+          >
+            ↻ Ricarica lista
+          </button>
         </div>
       )}
       {showAddForm && (

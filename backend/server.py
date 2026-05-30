@@ -435,8 +435,9 @@ async def list_regioni():
 async def test_alloggiati_credentials(
     property_id: str, user=Depends(get_current_user)
 ):
-    """Quick credentials test: just GenerateToken + Authentication_Test.
-    Returns detailed response for debugging.
+    """Quick credentials test: GenerateToken + Authentication_Test.
+    Also, if account is 'appartamenti' with an IdAppartamento set, runs a dry Test
+    with the configured ID to verify it's valid.
     """
     p = await db.properties.find_one(
         {"property_id": property_id, "user_id": user["user_id"]}, {"_id": 0}
@@ -459,13 +460,55 @@ async def test_alloggiati_credentials(
 
     auth = authentication_test(cfg["utente"], tok["token"])
     logger.info(f"[AW-TEST] Authentication_Test raw response: {auth.get('raw')}")
-    return {
-        "success": auth["success"],
+    if not auth["success"]:
+        return {
+            "success": False,
+            "step": "Authentication_Test",
+            "message": auth.get("message") or "Auth test fallito",
+            "raw": auth.get("raw"),
+        }
+
+    response = {
+        "success": True,
         "step": "Authentication_Test",
         "token_expires": tok.get("expires"),
-        "message": "Credenziali valide" if auth["success"] else (auth.get("message") or "Auth test fallito"),
-        "auth_raw": auth.get("raw"),
+        "message": "Credenziali valide",
     }
+
+    # If user is "appartamenti" type with an IdAppartamento configured, validate it
+    tipo_account = cfg.get("tipo_account", "standard")
+    id_app = int(cfg.get("id_appartamento", 0))
+    if tipo_account == "appartamenti" and id_app > 0:
+        # Send a dummy schedina to validate the IdAppartamento
+        dummy = build_schedina(
+            tipo_alloggiato="16",
+            data_arrivo="2099-12-31",
+            giorni_permanenza=1,
+            cognome="TEST",
+            nome="TEST",
+            sesso="M",
+            data_nascita="2000-01-01",
+            codice_stato_nascita="100000100",
+            codice_stato_cittadinanza="100000100",
+            tipo_documento="IDENTITA",
+            numero_documento="X00000000",
+            codice_stato_rilascio_doc="100000100",
+        )
+        ts = test_schedine(
+            cfg["utente"], tok["token"], [dummy],
+            tipo_account="appartamenti",
+            id_appartamento=id_app,
+        )
+        response["id_appartamento_check"] = {
+            "id": id_app,
+            "valid": ts.get("success"),
+            "message": ts.get("message"),
+        }
+        if not ts.get("success"):
+            response["success"] = False
+            response["message"] = f"Credenziali OK, ma IdAppartamento={id_app} non valido: {ts.get('message')}"
+
+    return response
 
 
 # ====================================================================
