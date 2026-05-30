@@ -8,8 +8,11 @@ const emptyRoss = {
   utente: "",
   password: "",
   endpoint_url: "",
-  format: "csv_manual",
+  format: "soap_v2",
   codice_struttura: "",
+  nome_prodotto: "Ospitalo",
+  n_camere: 1,
+  n_letti: 2,
   enabled: true,
 };
 const emptyImposta = {
@@ -258,27 +261,42 @@ function PropertyEditor({ p, setP, save, cancel, saving, error }) {
         )}
       </Section>
 
-      <Section title="Ross 1000 (Regione)">
-        <Toggle label="Abilita Ross 1000" value={p.ross1000.enabled} onChange={(v) => upd("ross1000.enabled", v)} testid="r1k-enabled" />
-        <Field label="Regione" value={p.ross1000.regione} onChange={(v) => upd("ross1000.regione", v)} testid="r1k-regione" mono={false} />
-        <Field label="Codice Struttura" value={p.ross1000.codice_struttura} onChange={(v) => upd("ross1000.codice_struttura", v)} testid="r1k-codstruttura" />
+      <Section title="Turismo 5 / Ross 1000 (Regione)">
+        <Toggle label="Abilita Turismo 5" value={p.ross1000.enabled} onChange={(v) => upd("ross1000.enabled", v)} testid="r1k-enabled" />
+        <label className="flex flex-col gap-1">
+          <span className="text-[10px] tracking-[0.25em] uppercase text-zinc-500">Regione</span>
+          <select
+            data-testid="r1k-regione"
+            value={p.ross1000.regione}
+            onChange={(e) => upd("ross1000.regione", e.target.value)}
+            className="bg-transparent border border-[#1E1E28] px-4 py-3 text-zinc-100 focus:border-zinc-300 outline-none font-mono text-sm"
+          >
+            {["Abruzzo","Basilicata","Calabria","Emilia-Romagna","Lazio","Liguria","Lombardia","Marche","Molise","Piemonte","Sardegna","Toscana","Veneto"].map((r) => (
+              <option key={r} value={r} className="bg-[#0E0E14]">{r}</option>
+            ))}
+          </select>
+        </label>
+        <Field label="Codice Struttura (rilasciato dalla Regione)" value={p.ross1000.codice_struttura} onChange={(v) => upd("ross1000.codice_struttura", v)} testid="r1k-codstruttura" />
         <Field label="Utente" value={p.ross1000.utente} onChange={(v) => upd("ross1000.utente", v)} testid="r1k-utente" />
         <Field label="Password" type="password" value={p.ross1000.password} onChange={(v) => upd("ross1000.password", v)} testid="r1k-password" />
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="N. Camere" type="number" value={p.ross1000.n_camere} onChange={(v) => upd("ross1000.n_camere", parseInt(v) || 1)} testid="r1k-camere" />
+          <Field label="N. Letti totali" type="number" value={p.ross1000.n_letti} onChange={(v) => upd("ross1000.n_letti", parseInt(v) || 1)} testid="r1k-letti" />
+        </div>
         <label className="flex flex-col gap-1">
-          <span className="text-[10px] tracking-[0.25em] uppercase text-zinc-500">Modalità Invio</span>
+          <span className="text-[10px] tracking-[0.25em] uppercase text-zinc-500">Modalità invio</span>
           <select
             data-testid="r1k-format"
             value={p.ross1000.format}
             onChange={(e) => upd("ross1000.format", e.target.value)}
             className="bg-transparent border border-[#1E1E28] px-4 py-3 text-zinc-100 focus:border-zinc-300 outline-none font-mono text-sm"
           >
-            <option value="csv_manual" className="bg-[#0E0E14]">CSV manuale (scarica e carica sul portale)</option>
-            <option value="rest_json" className="bg-[#0E0E14]">REST JSON (endpoint diretto)</option>
-            <option value="soap_xml" className="bg-[#0E0E14]">SOAP XML (endpoint diretto)</option>
+            <option value="soap_v2" className="bg-[#0E0E14]">Web service automatico (consigliato)</option>
+            <option value="csv_manual" className="bg-[#0E0E14]">CSV manuale (download + upload)</option>
           </select>
         </label>
-        {p.ross1000.format !== "csv_manual" && (
-          <Field label="Endpoint URL" value={p.ross1000.endpoint_url} onChange={(v) => upd("ross1000.endpoint_url", v)} testid="r1k-endpoint" placeholder="https://..." />
+        {p.property_id && p.ross1000.format === "soap_v2" && (
+          <TestTurismo5Button propertyId={p.property_id} />
         )}
       </Section>
 
@@ -366,6 +384,70 @@ function TestCredentialsButton({ propertyId }) {
             <div className="text-zinc-500 mt-1">
               Token valido fino al {result.token_expires}
             </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+function TestTurismo5Button({ propertyId }) {
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState(null);
+
+  const run = async () => {
+    setLoading(true);
+    setResult(null);
+    try {
+      const r = await api.post(`/properties/${propertyId}/turismo5/test`);
+      setResult(r.data);
+    } catch (e) {
+      setResult({
+        success: false,
+        message: e.response?.data?.detail || "Errore richiesta",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-2 mt-2">
+      <button
+        type="button"
+        onClick={run}
+        disabled={loading}
+        data-testid="test-turismo5-btn"
+        className="border border-[#1E1E28] hover:border-zinc-500 text-zinc-300 px-4 py-3 uppercase tracking-widest text-[10px] transition-colors cursor-pointer disabled:opacity-50"
+      >
+        {loading ? "Test in corso..." : "Test credenziali Turismo 5"}
+      </button>
+      {result && (
+        <div
+          className={`border p-3 font-mono text-[10px] ${
+            result.success
+              ? "border-emerald-500/40 text-emerald-400"
+              : "border-red-500/40 text-red-400"
+          }`}
+        >
+          <div className="font-bold tracking-widest">
+            [{result.success ? "OK" : "ERR"}] HTTP {result.status_code ?? "—"}
+          </div>
+          {result.endpoint && (
+            <div className="text-zinc-500 mt-1 break-all">
+              {result.endpoint}
+            </div>
+          )}
+          {result.message && (
+            <div className="text-zinc-400 mt-1 break-words">
+              {result.message}
+            </div>
+          )}
+          {result.response_preview && (
+            <pre className="text-zinc-600 mt-2 whitespace-pre-wrap break-all text-[9px]">
+              {result.response_preview}
+            </pre>
           )}
         </div>
       )}

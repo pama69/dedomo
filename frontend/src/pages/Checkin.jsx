@@ -332,7 +332,7 @@ export default function Checkin() {
             message={aw?.message || aw?.mode}
           />
           <ResultRow
-            label="ROSS 1000"
+            label="TURISMO 5 / ROSS 1000"
             ok={r1k?.success}
             skipped={r1k?.skipped}
             message={r1k?.message || r1k?.mode}

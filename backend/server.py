@@ -37,6 +37,12 @@ from services.alloggiati_web import (
     TIPO_DOC_MAP,
 )
 from services.ross1000 import build_movimenti_csv, submit_to_endpoint
+from services.turismo5 import (
+    REGIONAL_ENDPOINTS,
+    send_movimentazione,
+    map_country_iso3_to_code,
+    ITALIA_CODE,
+)
 from services.imposta_soggiorno import calcola_imposta
 from services.pdf_service import generate_tax_receipt
 
@@ -192,12 +198,15 @@ class AlloggiatiCredentials(BaseModel):
 
 
 class Ross1000Credentials(BaseModel):
-    regione: str = ""  # es. "Abruzzo"
+    regione: str = "Abruzzo"
     utente: str = ""
     password: str = ""
-    endpoint_url: str = ""
-    format: str = "csv_manual"  # rest_json | soap_xml | csv_manual
+    endpoint_url: str = ""  # auto-filled from REGIONAL_ENDPOINTS if blank
+    format: str = "soap_v2"  # soap_v2 | csv_manual
     codice_struttura: str = ""
+    nome_prodotto: str = "Ospitalo"
+    n_camere: int = 1
+    n_letti: int = 2
     enabled: bool = True
 
 
@@ -277,6 +286,60 @@ async def delete_property(property_id: str, user=Depends(get_current_user)):
         {"property_id": property_id, "user_id": user["user_id"]}
     )
     return {"success": result.deleted_count > 0}
+
+
+@api_router.post("/properties/{property_id}/turismo5/test")
+async def test_turismo5_credentials(
+    property_id: str, user=Depends(get_current_user)
+):
+    """Quick credentials test for Turismo 5 / Ross 1000.
+
+    Sends an empty movimentazione (no movimenti) to validate endpoint reachability + Basic Auth.
+    Returns detailed response for debugging.
+    """
+    p = await db.properties.find_one(
+        {"property_id": property_id, "user_id": user["user_id"]}, {"_id": 0}
+    )
+    if not p:
+        raise HTTPException(404, "Proprietà non trovata")
+    cfg = p.get("ross1000", {})
+    if not cfg.get("utente") or not cfg.get("password"):
+        raise HTTPException(400, "Credenziali Turismo 5 mancanti")
+    if not cfg.get("codice_struttura"):
+        raise HTTPException(400, "Codice struttura mancante")
+
+    regione = cfg.get("regione", "Abruzzo")
+    endpoint_url = cfg.get("endpoint_url") or REGIONAL_ENDPOINTS.get(regione, "")
+    if not endpoint_url:
+        raise HTTPException(400, f"Endpoint per regione '{regione}' non configurato")
+
+    # Send a minimal payload (no movimenti) just to test auth + endpoint
+    resp = send_movimentazione(
+        endpoint_url=endpoint_url,
+        username=cfg["utente"],
+        password=cfg["password"],
+        codice_struttura=cfg["codice_struttura"],
+        movimenti=[],
+        prodotto=cfg.get("nome_prodotto", "Ospitalo"),
+        test_mode=False,
+    )
+    logger.info(f"[T5-TEST] response: status={resp.get('status_code')} ok={resp.get('success')}")
+    return {
+        "success": resp.get("success"),
+        "endpoint": endpoint_url,
+        "status_code": resp.get("status_code"),
+        "message": resp.get("message"),
+        "response_preview": (resp.get("response_text") or "")[:500],
+    }
+
+
+@api_router.get("/turismo5/regioni")
+async def list_regioni():
+    """Return the supported regions and their default endpoints."""
+    return [
+        {"regione": name, "endpoint": url}
+        for name, url in REGIONAL_ENDPOINTS.items()
+    ]
 
 
 @api_router.post("/properties/{property_id}/alloggiati/test")
@@ -456,54 +519,127 @@ async def checkin_submit(body: CheckinSubmit, user=Depends(get_current_user)):
             "message": "Alloggiati Web non configurato per questa proprietà.",
         }
 
-    # -------- ROSS 1000 --------
+    # -------- TURISMO 5 / ROSS 1000 (SOAP v2) --------
     ross_cfg = prop.get("ross1000", {})
     if ross_cfg.get("enabled"):
-        # Build movimenti payload
-        guest_dicts = [
-            {
-                "data_arrivo": body.data_arrivo,
-                "data_partenza": body.data_partenza,
-                "cognome": g.cognome,
-                "nome": g.nome,
-                "sesso": g.sesso,
-                "data_nascita": g.data_nascita,
-                "comune_nascita": g.luogo_nascita,
-                "stato_nascita": g.stato_nascita,
-                "cittadinanza": g.cittadinanza,
-                "tipo_documento": g.tipo_documento,
-                "numero_documento": g.numero_documento,
-            }
-            for g in body.guests
-        ]
-        csv_data = build_movimenti_csv(
-            guest_dicts, ross_cfg.get("codice_struttura", "")
-        )
-        format_type = ross_cfg.get("format", "csv_manual")
+        regione = ross_cfg.get("regione", "Abruzzo")
+        endpoint_url = ross_cfg.get("endpoint_url") or REGIONAL_ENDPOINTS.get(regione, "")
+        codice_struttura = ross_cfg.get("codice_struttura", "")
+        format_type = ross_cfg.get("format", "soap_v2")
 
-        if format_type == "csv_manual":
+        # Build arrivi list for the movimento on data_arrivo
+        idcapo = f"{body.property_id[:8]}-{body.data_arrivo}"
+        arrivi_list = []
+        for i, g in enumerate(body.guests):
+            if len(body.guests) == 1:
+                tipo_alloggiato = "16"  # ospite singolo
+                idcapo_field = ""
+            elif i == 0:
+                tipo_alloggiato = "17"  # capofamiglia
+                idcapo_field = ""
+            else:
+                tipo_alloggiato = "18"  # familiare
+                idcapo_field = idcapo
+
+            arrivi_list.append({
+                "idswh": f"{body.property_id[:8]}-{body.data_arrivo}-{i+1}",
+                "tipoalloggiato": tipo_alloggiato,
+                "idcapo": idcapo_field,
+                "sesso": g.sesso,
+                "cittadinanza": map_country_iso3_to_code(g.cittadinanza) or g.cittadinanza,
+                "statoresidenza": map_country_iso3_to_code(g.cittadinanza) or g.cittadinanza,
+                "luogoresidenza": g.codice_comune_nascita or "",
+                "datanascita": g.data_nascita,
+                "statonascita": map_country_iso3_to_code(g.stato_nascita) or g.stato_nascita,
+                "comunenascita": g.codice_comune_nascita or "",
+                "tipoturismo": "",
+                "mezzotrasporto": "",
+                "canaleprenotazione": "",
+            })
+
+        # Build partenze list for the movimento on data_partenza
+        partenze_list = [
+            {
+                "idswh": f"{body.property_id[:8]}-{body.data_arrivo}-{i+1}",
+                "tipoalloggiato": arrivi_list[i]["tipoalloggiato"],
+                "arrivo": body.data_arrivo,
+            }
+            for i in range(len(body.guests))
+        ]
+
+        n_camere = int(ross_cfg.get("n_camere", 1))
+        n_letti = int(ross_cfg.get("n_letti", 2))
+
+        # Two movimenti: one for arrival day (with arrivi), one for departure day (with partenze)
+        movimenti = [
+            {
+                "data": body.data_arrivo,
+                "struttura": {
+                    "apertura": "SI",
+                    "camereoccupate": n_camere,
+                    "cameredisponibili": n_camere,
+                    "lettidisponibili": n_letti,
+                },
+                "arrivi": arrivi_list,
+            },
+            {
+                "data": body.data_partenza,
+                "struttura": {
+                    "apertura": "SI",
+                    "camereoccupate": 0,
+                    "cameredisponibili": n_camere,
+                    "lettidisponibili": n_letti,
+                },
+                "partenze": partenze_list,
+            },
+        ]
+
+        if format_type == "soap_v2":
+            t5_resp = send_movimentazione(
+                endpoint_url=endpoint_url,
+                username=ross_cfg.get("utente", ""),
+                password=ross_cfg.get("password", ""),
+                codice_struttura=codice_struttura,
+                movimenti=movimenti,
+                prodotto=ross_cfg.get("nome_prodotto", "Ospitalo"),
+                test_mode=test_mode,
+            )
+            t5_resp["mode"] = (
+                "TEST (XML generato, nessun invio reale)"
+                if test_mode
+                else "PROD (invio SOAP completato)"
+            )
+            results["ross1000"] = t5_resp
+        else:
+            # csv_manual fallback (legacy)
+            guest_dicts = [
+                {
+                    "data_arrivo": body.data_arrivo,
+                    "data_partenza": body.data_partenza,
+                    "cognome": g.cognome,
+                    "nome": g.nome,
+                    "sesso": g.sesso,
+                    "data_nascita": g.data_nascita,
+                    "comune_nascita": g.luogo_nascita,
+                    "stato_nascita": g.stato_nascita,
+                    "cittadinanza": g.cittadinanza,
+                    "tipo_documento": g.tipo_documento,
+                    "numero_documento": g.numero_documento,
+                }
+                for g in body.guests
+            ]
+            csv_data = build_movimenti_csv(guest_dicts, codice_struttura)
             results["ross1000"] = {
                 "success": True,
-                "mode": "CSV manuale generato (scarica e carica sul portale regionale)",
+                "mode": "CSV manuale generato (scarica e carica sul portale)",
                 "csv_content": csv_data,
                 "test_mode": test_mode,
             }
-        else:
-            ross_resp = submit_to_endpoint(
-                endpoint_url=ross_cfg.get("endpoint_url", ""),
-                username=ross_cfg.get("utente", ""),
-                password=ross_cfg.get("password", ""),
-                format_type=format_type,
-                payload={"movimenti": guest_dicts, "csv": csv_data},
-                test_mode=test_mode,
-            )
-            ross_resp["csv_content"] = csv_data
-            results["ross1000"] = ross_resp
     else:
         results["ross1000"] = {
             "success": False,
             "skipped": True,
-            "message": "Ross 1000 non abilitato.",
+            "message": "Turismo 5 / Ross 1000 non abilitato.",
         }
 
     # -------- IMPOSTA DI SOGGIORNO --------
