@@ -277,12 +277,11 @@ function PropertyEditor({ p, setP, save, cancel, saving, error }) {
           </select>
         </label>
         {p.alloggiati.tipo_account === "appartamenti" && (
-          <Field
-            label="ID Appartamento (numerico, da portale Alloggiati Web)"
-            type="number"
+          <ApartmentSelector
+            propertyId={p.property_id}
             value={p.alloggiati.id_appartamento}
-            onChange={(v) => upd("alloggiati.id_appartamento", parseInt(v) || 0)}
-            testid="aw-idappartamento"
+            onChange={(v) => upd("alloggiati.id_appartamento", v)}
+            disabled={!p.property_id}
           />
         )}
         {p.property_id && (
@@ -479,6 +478,91 @@ function TestTurismo5Button({ propertyId }) {
             </pre>
           )}
         </div>
+      )}
+    </div>
+  );
+}
+
+
+function ApartmentSelector({ propertyId, value, onChange, disabled }) {
+  const [loading, setLoading] = useState(false);
+  const [items, setItems] = useState([]);
+  const [error, setError] = useState("");
+  const [loaded, setLoaded] = useState(false);
+
+  const load = async () => {
+    if (!propertyId) return;
+    setLoading(true);
+    setError("");
+    try {
+      const r = await api.post(`/properties/${propertyId}/alloggiati/appartamenti`);
+      if (r.data.success) {
+        setItems(r.data.appartamenti || []);
+        setLoaded(true);
+        if (!value && r.data.appartamenti?.length === 1) {
+          onChange(r.data.appartamenti[0].id);
+        }
+      } else {
+        setError(r.data.message || "Errore caricamento");
+      }
+    } catch (e) {
+      setError(e.response?.data?.detail || "Errore richiesta");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-2">
+      <span className="text-[10px] tracking-[0.25em] uppercase text-zinc-500">
+        ID Appartamento
+      </span>
+      {disabled ? (
+        <p className="text-zinc-600 text-[10px] font-mono">
+          Salva prima la struttura per caricare i tuoi appartamenti.
+        </p>
+      ) : !loaded ? (
+        <button
+          type="button"
+          onClick={load}
+          disabled={loading}
+          data-testid="load-appartamenti-btn"
+          className="border border-[#1E1E28] hover:border-zinc-500 text-zinc-300 px-4 py-3 uppercase tracking-widest text-[10px] transition-colors cursor-pointer disabled:opacity-50"
+        >
+          {loading ? "Caricamento..." : "Carica miei appartamenti da Alloggiati Web"}
+        </button>
+      ) : items.length === 0 ? (
+        <p className="text-amber-500 text-[10px] font-mono">
+          [ ATTENZIONE ] Nessun appartamento registrato. Aggiungine uno dal portale Alloggiati Web.
+        </p>
+      ) : (
+        <>
+          <select
+            data-testid="aw-idappartamento"
+            value={value || ""}
+            onChange={(e) => onChange(parseInt(e.target.value) || 0)}
+            className="bg-transparent border border-[#1E1E28] px-4 py-3 text-zinc-100 focus:border-zinc-300 outline-none font-mono text-sm"
+          >
+            <option value="" className="bg-[#0E0E14]">— Seleziona appartamento —</option>
+            {items.map((a) => (
+              <option key={a.id} value={a.id} className="bg-[#0E0E14]">
+                [{a.id}] {a.descrizione} — {a.comune} ({a.prov})
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={load}
+            className="text-[10px] tracking-[0.25em] uppercase text-zinc-500 hover:text-zinc-100 self-start cursor-pointer"
+          >
+            Ricarica lista
+          </button>
+        </>
+      )}
+      {error && (
+        <p className="text-red-500 text-[10px] font-mono break-words">
+          [ ERR ] {error}
+        </p>
       )}
     </div>
   );

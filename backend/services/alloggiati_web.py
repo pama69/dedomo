@@ -266,6 +266,51 @@ def send_schedine(
         return {"success": False, "message": f"Errore Send: {str(e)}"}
 
 
+def lista_appartamenti(utente: str, token: str) -> Dict[str, Any]:
+    """Get the list of apartments registered for this account.
+
+    Uses the Tabella method with tipo='ListaAppartamenti'.
+    Returns a parsed list of dicts: [{id, descrizione, comune, prov, indirizzo, proprietario}].
+    """
+    try:
+        client = _get_client()
+        resp = client.service.Tabella(
+            Utente=utente, token=token, tipo="ListaAppartamenti"
+        )
+        result = zeep.helpers.serialize_object(resp)
+        outcome = result.get("TabellaResult") or {}
+        csv_data = result.get("CSV") or ""
+
+        if not outcome.get("esito"):
+            err_des = outcome.get("ErroreDes") or "Errore"
+            err_det = outcome.get("ErroreDettaglio") or ""
+            err_cod = outcome.get("ErroreCod")
+            msg = f"Cod.{err_cod} · {err_des} · {err_det}".strip(" ·")
+            return {"success": False, "message": msg, "raw": result}
+
+        # Parse CSV: IDAPP;Descrizione;COMUNE;PROV;Indirizzo;Proprietario
+        rows = []
+        lines = csv_data.strip().splitlines()
+        for line in lines[1:]:  # skip header
+            parts = [p.strip() for p in line.split(";")]
+            if len(parts) >= 6 and parts[0].strip():
+                rows.append({
+                    "id": int(parts[0]) if parts[0].isdigit() else parts[0],
+                    "descrizione": parts[1],
+                    "comune": parts[2],
+                    "prov": parts[3],
+                    "indirizzo": parts[4],
+                    "proprietario": parts[5],
+                })
+        return {
+            "success": True,
+            "appartamenti": rows,
+            "csv_raw": csv_data,
+        }
+    except Exception as e:
+        return {"success": False, "message": f"Errore: {str(e)}"}
+
+
 def authentication_test(utente: str, token: str) -> Dict[str, Any]:
     try:
         client = _get_client()

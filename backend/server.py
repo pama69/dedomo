@@ -29,6 +29,7 @@ from services.alloggiati_web import (
     send_schedine,
     get_ricevuta_pdf,
     authentication_test,
+    lista_appartamenti,
     TIPO_OSPITE_SINGOLO,
     TIPO_CAPO_FAMIGLIA,
     TIPO_FAMILIARE,
@@ -288,6 +289,29 @@ async def delete_property(property_id: str, user=Depends(get_current_user)):
         {"property_id": property_id, "user_id": user["user_id"]}
     )
     return {"success": result.deleted_count > 0}
+
+
+@api_router.post("/properties/{property_id}/alloggiati/appartamenti")
+async def list_alloggiati_apartments(
+    property_id: str, user=Depends(get_current_user)
+):
+    """List the apartments registered on Alloggiati Web for this account.
+    Used to let the user pick the correct IdAppartamento for the property.
+    """
+    p = await db.properties.find_one(
+        {"property_id": property_id, "user_id": user["user_id"]}, {"_id": 0}
+    )
+    if not p:
+        raise HTTPException(404, "Proprietà non trovata")
+    cfg = p.get("alloggiati", {})
+    if not cfg.get("utente") or not cfg.get("password") or not cfg.get("ws_key"):
+        raise HTTPException(400, "Credenziali Alloggiati Web mancanti")
+
+    tok = generate_token(cfg["utente"], cfg["password"], cfg["ws_key"])
+    if not tok["success"]:
+        return {"success": False, "message": tok.get("message")}
+    res = lista_appartamenti(cfg["utente"], tok["token"])
+    return res
 
 
 @api_router.post("/properties/{property_id}/turismo5/test")
