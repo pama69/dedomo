@@ -83,7 +83,12 @@ export default function Settings() {
       payload.imposta_soggiorno.tariffa_per_notte = num(payload.imposta_soggiorno.tariffa_per_notte, 0);
       payload.imposta_soggiorno.max_notti_tassabili = num(payload.imposta_soggiorno.max_notti_tassabili, 7);
       payload.imposta_soggiorno.esenti_under_anni = num(payload.imposta_soggiorno.esenti_under_anni, 0);
-      payload.alloggiati.id_appartamento = num(payload.alloggiati.id_appartamento, 0);
+      payload.alloggiati.id_appartamento =
+        payload.alloggiati.id_appartamento === "" ||
+        payload.alloggiati.id_appartamento === undefined ||
+        isNaN(payload.alloggiati.id_appartamento)
+          ? null
+          : Number(payload.alloggiati.id_appartamento);
 
       if (editing.property_id) {
         await api.put(`/properties/${editing.property_id}`, payload);
@@ -566,8 +571,8 @@ function ApartmentSelector({ propertyId, value, onChange, disabled }) {
         <>
           <select
             data-testid="aw-idappartamento"
-            value={value || ""}
-            onChange={(e) => onChange(parseInt(e.target.value) || 0)}
+            value={value !== undefined && value !== null && value !== "" ? value : ""}
+            onChange={(e) => onChange(e.target.value === "" ? null : parseInt(e.target.value))}
             className="bg-transparent border border-[#1E1E28] px-4 py-3 text-zinc-100 focus:border-zinc-300 outline-none font-mono text-sm"
           >
             <option value="" className="bg-[#0E0E14]">— Seleziona appartamento —</option>

@@ -199,7 +199,7 @@ class AlloggiatiCredentials(BaseModel):
     password: str = ""
     ws_key: str = ""
     tipo_account: str = "standard"  # standard | appartamenti | appartamenti_file_unico
-    id_appartamento: int = 0  # required if tipo_account == "appartamenti"
+    id_appartamento: Optional[int] = None  # None = not set; 0 is a valid value
     enabled: bool = True
 
 
@@ -562,7 +562,9 @@ async def test_alloggiati_credentials(
     # Run a dummy Test call to validate that the schedina format is accepted.
     # This is the BEST way to confirm the account category + tracciato.
     tipo_account = cfg.get("tipo_account", "standard")
-    id_app = int(cfg.get("id_appartamento", 0))
+    id_app_raw = cfg.get("id_appartamento")
+    id_app = int(id_app_raw) if id_app_raw is not None else None
+    id_app_set = id_app is not None  # 0 is valid; only None means "not set"
 
     # Build a dummy schedina with realistic Italian values
     dummy = build_schedina(
@@ -580,17 +582,17 @@ async def test_alloggiati_credentials(
         tipo_documento="IDENT",
         numero_documento="AA0000000",
         codice_stato_rilascio_doc="100000100",
-        id_appartamento_file_unico=str(id_app) if tipo_account == "appartamenti_file_unico" else "",
+        id_appartamento_file_unico=str(id_app) if (tipo_account == "appartamenti_file_unico" and id_app_set) else "",
     )
     ts = test_schedine(
         cfg["utente"], tok["token"], [dummy],
         tipo_account=tipo_account,
-        id_appartamento=id_app,
+        id_appartamento=id_app if id_app_set else 0,
     )
     logger.info(f"[AW-TEST] Test schedina raw: {ts.get('raw')}")
     response["test_schedina"] = {
         "tipo_account_used": tipo_account,
-        "id_appartamento_used": id_app,
+        "id_appartamento_used": id_app if id_app_set else None,
         "schedina_length": len(dummy),
         "valid": ts.get("success"),
         "message": ts.get("message"),
@@ -704,18 +706,21 @@ async def checkin_submit(body: CheckinSubmit, user=Depends(get_current_user)):
     alloggiati_cfg = prop.get("alloggiati", {})
     if alloggiati_cfg.get("enabled") and alloggiati_cfg.get("utente"):
         tipo_account = alloggiati_cfg.get("tipo_account", "standard")
-        id_app = int(alloggiati_cfg.get("id_appartamento", 0))
+        id_app_raw = alloggiati_cfg.get("id_appartamento")
+        id_app = int(id_app_raw) if id_app_raw is not None else None
+        id_app_set = id_app is not None
 
         # Determine tipo_alloggiato
         n = len(body.guests)
         if n == 1:
             tipos = [TIPO_OSPITE_SINGOLO]
         else:
-            # Capo famiglia + familiari (simpler default)
             tipos = [TIPO_CAPO_FAMIGLIA] + [TIPO_FAMILIARE] * (n - 1)
 
         # For FileUnico mode, append IdAppartamento to each schedina
-        id_for_schedina = str(id_app) if tipo_account == "appartamenti_file_unico" and id_app else ""
+        id_for_schedina = (
+            str(id_app) if (tipo_account == "appartamenti_file_unico" and id_app_set) else ""
+        )
 
         schedine = [
             _guest_to_schedina(g, tipos[i], body.data_arrivo, giorni, id_for_schedina)
@@ -740,7 +745,7 @@ async def checkin_submit(body: CheckinSubmit, user=Depends(get_current_user)):
                     tok["token"],
                     schedine,
                     tipo_account=alloggiati_cfg.get("tipo_account", "standard"),
-                    id_appartamento=int(alloggiati_cfg.get("id_appartamento", 0)),
+                    id_appartamento=id_app if id_app_set else 0,
                 )
                 resp["mode"] = "TEST (validazione, nessun invio reale)"
             else:
@@ -749,7 +754,7 @@ async def checkin_submit(body: CheckinSubmit, user=Depends(get_current_user)):
                     tok["token"],
                     schedine,
                     tipo_account=alloggiati_cfg.get("tipo_account", "standard"),
-                    id_appartamento=int(alloggiati_cfg.get("id_appartamento", 0)),
+                    id_appartamento=id_app if id_app_set else 0,
                 )
                 resp["mode"] = "PROD (invio definitivo)"
             resp["schedine_preview"] = schedine
