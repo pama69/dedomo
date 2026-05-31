@@ -1185,16 +1185,20 @@ async def create_comune_receipt(
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "pdf_base64": base64.b64encode(pdf_bytes).decode(),
     }
-    await db.checkins.update_one(
+    result = await db.checkins.find_one_and_update(
         {"checkin_id": checkin_id},
         {"$push": {"comune_receipts": receipt_entry}},
+        return_document=True,
+        projection={"_id": 0, "comune_receipts": 1},
     )
+    new_index = len(result.get("comune_receipts", [])) - 1 if result else 0
 
-    return StreamingResponse(
-        io.BytesIO(pdf_bytes),
-        media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="ricevuta_comune_{body.numero_ricevuta}.pdf"'},
-    )
+    return {
+        "ok": True,
+        "index": new_index,
+        "numero": body.numero_ricevuta,
+        "download_url": f"/api/checkins/{checkin_id}/comune-receipts/{new_index}",
+    }
 
 
 @api_router.get("/checkins/{checkin_id}/comune-receipts")

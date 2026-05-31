@@ -820,27 +820,16 @@ function ComuneReceiptButton({ checkinId, guests, importo }) {
     if (!numero.trim()) { setError("Numero ricevuta obbligatorio"); return; }
     setLoading(true); setError("");
     try {
-      const r = await api.post(`/checkins/${checkinId}/comune-receipt`, { numero_ricevuta: numero, data_ricevuta: data, ospite_index: ospiteIdx }, { responseType: "blob" });
-      console.log("[comune-receipt] response size:", r.data?.size, "type:", r.data?.type);
-      if (!r.data || r.data.size === 0) {
-        setError("PDF vuoto restituito dal server");
-        return;
-      }
-      const blob = new Blob([r.data], { type: "application/pdf" });
-      const url = URL.createObjectURL(blob);
-      // Open in new tab — browser will show the PDF and offer download
-      const win = window.open(url, "_blank");
-      if (!win) {
-        // Popup blocked → fall back to anchor download
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `ricevuta_comune_${numero}.pdf`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-      }
-      setTimeout(() => URL.revokeObjectURL(url), 60000);
+      const r = await api.post(`/checkins/${checkinId}/comune-receipt`, { numero_ricevuta: numero, data_ricevuta: data, ospite_index: ospiteIdx });
+      const downloadUrl = `${process.env.REACT_APP_BACKEND_URL}${r.data.download_url}`;
+      // Open backend GET URL directly — uses session cookie, no blob: URL
+      // (ad-blockers don't block normal HTTP URLs on the same origin)
+      window.open(downloadUrl, "_blank");
       setOpen(false); setNumero("");
+    } catch (e) {
+      setError(e.response?.data?.detail || e.message || "Errore generazione ricevuta");
+    } finally { setLoading(false); }
+  };
     } catch (e) {
       let msg = "Errore generazione ricevuta";
       try {
