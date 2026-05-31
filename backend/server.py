@@ -1100,8 +1100,6 @@ async def root():
     return {"app": "Ospitalo", "status": "ok"}
 
 
-app.include_router(api_router)
-
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
@@ -1350,3 +1348,7 @@ async def startup_scheduler():
     )
     scheduler.start()
     logger.info("[scheduler] started")
+
+
+# Include all routes AFTER they are all defined
+app.include_router(api_router)
