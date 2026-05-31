@@ -823,8 +823,12 @@ function ComuneReceiptButton({ checkinId, guests, importo }) {
       const r = await api.post(`/checkins/${checkinId}/comune-receipt`, { numero_ricevuta: numero, data_ricevuta: data, ospite_index: ospiteIdx }, { responseType: "blob" });
       const url = URL.createObjectURL(new Blob([r.data], { type: "application/pdf" }));
       const a = document.createElement("a");
-      a.href = url; a.download = `ricevuta_comune_${numero}.pdf`; a.click();
-      URL.revokeObjectURL(url);
+      a.href = url;
+      a.download = `ricevuta_comune_${numero}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
       setOpen(false); setNumero("");
     } catch (e) {
       let msg = "Errore generazione ricevuta";
