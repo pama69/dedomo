@@ -561,15 +561,11 @@ export default function Checkin() {
 
         <div className="flex flex-col gap-2">
           {isResult?.calculation && (
-            <a
-              href={`${api.defaults.baseURL}/checkins/${result.checkin_id}/receipt-pdf`}
-              target="_blank"
-              rel="noreferrer"
-              data-testid="download-pdf-receipt"
-              className="text-center border border-[#1E1E28] hover:border-zinc-500 px-6 py-4 uppercase tracking-widest text-xs text-zinc-300 cursor-pointer"
-            >
-              Scarica Ricevuta Imposta (PDF)
-            </a>
+            <ComuneReceiptButton
+              checkinId={result.checkin_id}
+              guests={guests}
+              importo={isResult.calculation.totale_imposta}
+            />
           )}
           {r1k?.csv_content && (
             <a
@@ -793,25 +789,14 @@ function ComuneNascitaField({ luogoNascita, comuneCode, provSigla, notFound, pro
               placeholder="Digita nome comune..."
               className="flex-1 bg-transparent border border-[#1E1E28] px-3 py-2 text-zinc-100 placeholder:text-zinc-600 focus:border-zinc-300 outline-none text-sm font-mono"
             />
-            <button
-              type="button"
-              onClick={doSearch}
-              disabled={searching}
-              data-testid="comune-search-btn"
-              className="border border-[#1E1E28] hover:border-zinc-500 px-3 py-2 text-zinc-300 uppercase tracking-widest text-[10px] cursor-pointer disabled:opacity-50"
-            >
+            <button type="button" onClick={doSearch} disabled={searching} className="border border-[#1E1E28] hover:border-zinc-500 px-3 py-2 text-zinc-300 uppercase tracking-widest text-[10px] cursor-pointer disabled:opacity-50">
               {searching ? "..." : "Cerca"}
             </button>
           </div>
           {results.length > 0 && (
             <div className="max-h-40 overflow-y-auto flex flex-col gap-1">
               {results.map((c) => (
-                <button
-                  key={c.codice}
-                  type="button"
-                  onClick={() => pick(c)}
-                  className="text-left text-[10px] font-mono text-zinc-300 hover:text-zinc-100 hover:bg-[#15151C] px-2 py-2 cursor-pointer"
-                >
+                <button key={c.codice} type="button" onClick={() => pick(c)} className="text-left text-[10px] font-mono text-zinc-300 hover:text-zinc-100 hover:bg-[#15151C] px-2 py-2 cursor-pointer">
                   {c.nome} {c.provincia ? `(${c.provincia})` : ""} — {c.codice}
                 </button>
               ))}
@@ -819,6 +804,66 @@ function ComuneNascitaField({ luogoNascita, comuneCode, provSigla, notFound, pro
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+function ComuneReceiptButton({ checkinId, guests, importo }) {
+  const [open, setOpen] = useState(false);
+  const [numero, setNumero] = useState("");
+  const [data, setData] = useState(new Date().toISOString().slice(0, 10));
+  const [ospiteIdx, setOspiteIdx] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const submit = async () => {
+    if (!numero.trim()) { setError("Numero ricevuta obbligatorio"); return; }
+    setLoading(true); setError("");
+    try {
+      const r = await api.post(`/checkins/${checkinId}/comune-receipt`, { numero_ricevuta: numero, data_ricevuta: data, ospite_index: ospiteIdx }, { responseType: "blob" });
+      const url = URL.createObjectURL(new Blob([r.data], { type: "application/pdf" }));
+      const a = document.createElement("a");
+      a.href = url; a.download = `ricevuta_comune_${numero}.pdf`; a.click();
+      URL.revokeObjectURL(url);
+      setOpen(false); setNumero("");
+    } catch (e) {
+      setError(e.response?.data?.detail || "Errore generazione ricevuta");
+    } finally { setLoading(false); }
+  };
+
+  if (!open) {
+    return (
+      <button onClick={() => setOpen(true)} data-testid="download-pdf-receipt" className="text-center border border-[#1E1E28] hover:border-zinc-500 px-6 py-4 uppercase tracking-widest text-xs text-zinc-300 cursor-pointer">
+        Genera Ricevuta Imposta (PDF) — € {importo?.toFixed(2)}
+      </button>
+    );
+  }
+  return (
+    <div className="border border-[#1E1E28] bg-[#0E0E14] p-4 flex flex-col gap-3">
+      <p className="text-xs tracking-[0.3em] uppercase text-zinc-300">Nuova Ricevuta Comune</p>
+      <label className="flex flex-col gap-1">
+        <span className="text-[10px] tracking-[0.25em] uppercase text-zinc-500">N. Ricevuta</span>
+        <input type="text" data-testid="ricevuta-numero-input" value={numero} onChange={(e) => setNumero(e.target.value)} placeholder="Es. 2026/001" className="bg-transparent border border-[#1E1E28] px-3 py-2 text-zinc-100 placeholder:text-zinc-600 focus:border-zinc-300 outline-none text-sm font-mono"/>
+      </label>
+      <label className="flex flex-col gap-1">
+        <span className="text-[10px] tracking-[0.25em] uppercase text-zinc-500">Data Ricevuta</span>
+        <input type="date" data-testid="ricevuta-data-input" value={data} onChange={(e) => setData(e.target.value)} className="bg-transparent border border-[#1E1E28] px-3 py-2 text-zinc-100 focus:border-zinc-300 outline-none text-sm font-mono"/>
+      </label>
+      {guests && guests.length > 1 && (
+        <label className="flex flex-col gap-1">
+          <span className="text-[10px] tracking-[0.25em] uppercase text-zinc-500">Intestatario</span>
+          <select value={ospiteIdx} onChange={(e) => setOspiteIdx(parseInt(e.target.value))} className="bg-transparent border border-[#1E1E28] px-3 py-2 text-zinc-100 focus:border-zinc-300 outline-none text-sm font-mono">
+            {guests.map((g, i) => (<option key={i} value={i} className="bg-[#0E0E14]">{g.cognome} {g.nome}</option>))}
+          </select>
+        </label>
+      )}
+      {error && <p className="text-red-500 text-[10px] font-mono break-words">[ ERR ] {error}</p>}
+      <div className="flex gap-2">
+        <button type="button" onClick={() => setOpen(false)} className="flex-1 border border-[#1E1E28] hover:border-zinc-500 text-zinc-400 px-4 py-3 uppercase tracking-widest text-[10px] cursor-pointer">Annulla</button>
+        <button type="button" onClick={submit} disabled={loading} data-testid="generate-ricevuta-btn" className="flex-1 bg-zinc-100 hover:bg-white text-[#05050A] px-4 py-3 uppercase tracking-widest text-[10px] cursor-pointer disabled:opacity-50">
+          {loading ? "Generazione..." : "Genera e scarica"}
+        </button>
+      </div>
     </div>
   );
 }

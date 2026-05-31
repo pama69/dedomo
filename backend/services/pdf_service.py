@@ -18,6 +18,191 @@ from reportlab.platypus import (
 from reportlab.lib.units import cm
 
 
+def generate_comune_receipt(
+    numero_ricevuta: str,
+    data_ricevuta: str,  # YYYY-MM-DD
+    comune_nome: str,
+    property_name: str,
+    property_address: str,
+    property_comune: str,
+    ospite_nome_cognome: str,
+    ospite_residenza: str,
+    importo: float,
+    data_arrivo: str,
+    data_partenza: str,
+    pernottamenti: int,
+    causale_extra: str = "",
+    comune_pec: str = "",
+    comune_piva: str = "",
+) -> bytes:
+    """Generate PDF receipt for municipal tourist tax (Italian format).
+
+    Layout mimics the user-provided HTML template.
+    """
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buf, pagesize=A4, leftMargin=2 * cm, rightMargin=2 * cm,
+        topMargin=2 * cm, bottomMargin=2 * cm,
+    )
+
+    primary = colors.HexColor("#003087")
+    accent = colors.HexColor("#d32f2f")
+
+    styles = getSampleStyleSheet()
+
+    title_style = ParagraphStyle(
+        "TitleStyle", parent=styles["Heading1"], fontSize=18,
+        textColor=primary, alignment=1, spaceAfter=4,
+    )
+    sub_style = ParagraphStyle(
+        "SubStyle", parent=styles["Normal"], fontSize=14,
+        textColor=accent, alignment=1, fontName="Helvetica-Bold", spaceAfter=4,
+    )
+    h2_style = ParagraphStyle(
+        "H2Style", parent=styles["Heading2"], fontSize=16,
+        textColor=primary, alignment=1, spaceAfter=8,
+    )
+    body = styles["Normal"]
+    body.fontSize = 10
+
+    story = []
+    story.append(Paragraph(f"COMUNE DI {comune_nome.upper()}", title_style))
+    story.append(Paragraph("IMPOSTA DI SOGGIORNO", sub_style))
+    story.append(Paragraph("Ricevuta / Quietanza", h2_style))
+
+    # Separator line via empty table
+    sep = Table([[""]], colWidths=[16 * cm], rowHeights=[0.05 * cm])
+    sep.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, -1), primary)]))
+    story.append(sep)
+    story.append(Spacer(1, 0.4 * cm))
+
+    # Info header
+    data_fmt = datetime.fromisoformat(data_ricevuta).strftime("%d/%m/%Y")
+    head_info = [
+        [
+            Paragraph(f"<b>N. Ricevuta:</b> {numero_ricevuta}<br/><b>Data:</b> {data_fmt}", body),
+            Paragraph(
+                f"<para alignment='right'><b>Struttura Ricettiva:</b><br/>"
+                f"{property_name}<br/>{property_address} — {property_comune}</para>",
+                body,
+            ),
+        ]
+    ]
+    t = Table(head_info, colWidths=[8 * cm, 8 * cm])
+    t.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP")]))
+    story.append(t)
+    story.append(Spacer(1, 0.5 * cm))
+
+    # Ospite table
+    ospite_data = [
+        [Paragraph("<b>Ospite</b>", body), ""],
+        ["Nome e Cognome:", ospite_nome_cognome],
+        ["Residenza:", ospite_residenza or "—"],
+    ]
+    t = Table(ospite_data, colWidths=[5 * cm, 11 * cm])
+    t.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#f0f4ff")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), primary),
+        ("SPAN", (0, 0), (1, 0)),
+        ("BOX", (0, 0), (-1, -1), 0.75, primary),
+        ("INNERGRID", (0, 0), (-1, -1), 0.5, primary),
+        ("FONT", (0, 1), (0, -1), "Helvetica-Bold", 10),
+        ("FONT", (1, 1), (1, -1), "Helvetica", 10),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+        ("TOPPADDING", (0, 0), (-1, -1), 6),
+    ]))
+    story.append(t)
+    story.append(Spacer(1, 0.5 * cm))
+
+    # Importo
+    importo_style = ParagraphStyle(
+        "Importo", parent=body, fontSize=20, alignment=1,
+        textColor=accent, fontName="Helvetica-Bold",
+    )
+    imp_box = Table(
+        [[Paragraph(f"€ {importo:.2f}", importo_style)]],
+        colWidths=[16 * cm],
+    )
+    imp_box.setStyle(TableStyle([
+        ("BOX", (0, 0), (-1, -1), 1.5, primary),
+        ("LINEBELOW", (0, 0), (-1, 0), 0.5, primary),
+        ("TOPPADDING", (0, 0), (-1, -1), 12),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 12),
+    ]))
+    story.append(imp_box)
+    story.append(Spacer(1, 0.5 * cm))
+
+    # Soggiorno
+    arrivo_fmt = datetime.fromisoformat(data_arrivo).strftime("%d/%m/%Y")
+    partenza_fmt = datetime.fromisoformat(data_partenza).strftime("%d/%m/%Y")
+    soggiorno_data = [
+        ["Periodo di soggiorno:", f"Dal {arrivo_fmt} al {partenza_fmt}"],
+        ["N. pernottamenti:", str(pernottamenti)],
+    ]
+    t = Table(soggiorno_data, colWidths=[5 * cm, 11 * cm])
+    t.setStyle(TableStyle([
+        ("BOX", (0, 0), (-1, -1), 0.75, primary),
+        ("INNERGRID", (0, 0), (-1, -1), 0.5, primary),
+        ("FONT", (0, 0), (0, -1), "Helvetica-Bold", 10),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+        ("TOPPADDING", (0, 0), (-1, -1), 6),
+    ]))
+    story.append(t)
+    story.append(Spacer(1, 0.5 * cm))
+
+    causale = (
+        "<b>Causale:</b> Pagamento Imposta di Soggiorno ex art. 4 D.Lgs. 23/2011 "
+        "e Regolamento Comunale. Operazione fuori campo IVA."
+    )
+    if causale_extra:
+        causale = f"<b>Causale:</b> {causale_extra}"
+    story.append(Paragraph(causale, body))
+    story.append(Spacer(1, 0.3 * cm))
+
+    note_style = ParagraphStyle(
+        "Note", parent=body, fontSize=9, textColor=colors.HexColor("#444444"),
+    )
+    story.append(Paragraph(
+        f"L'importo sopra indicato sarà riversato al Comune di {comune_nome} "
+        "secondo le modalità previste dal regolamento.<br/>"
+        "<b>Conservare questa ricevuta.</b>",
+        note_style,
+    ))
+    story.append(Spacer(1, 1.5 * cm))
+
+    # Signatures
+    firma_data = [[
+        Paragraph(
+            "<para alignment='center'>______________________________________<br/>"
+            "Firma del Gestore / Titolare Struttura<br/>"
+            "<font size='8'>Timbro della Struttura</font></para>",
+            body,
+        ),
+        Paragraph(
+            "<para alignment='center'>______________________________________<br/>"
+            "Firma dell'Ospite (facoltativa)</para>",
+            body,
+        ),
+    ]]
+    t = Table(firma_data, colWidths=[8 * cm, 8 * cm])
+    story.append(t)
+    story.append(Spacer(1, 0.8 * cm))
+
+    footer_style = ParagraphStyle(
+        "Footer", parent=body, fontSize=8, alignment=1,
+        textColor=colors.HexColor("#666666"),
+    )
+    footer_parts = [f"Comune di {comune_nome}"]
+    if comune_piva:
+        footer_parts.append(f"P.IVA {comune_piva}")
+    if comune_pec:
+        footer_parts.append(f"PEC: {comune_pec}")
+    story.append(Paragraph(" • ".join(footer_parts), footer_style))
+
+    doc.build(story)
+    return buf.getvalue()
+
+
 def generate_tax_receipt(
     property_name: str,
     property_address: str,

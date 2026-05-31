@@ -48,7 +48,7 @@ from services.turismo5 import (
     ITALIA_CODE,
 )
 from services.imposta_soggiorno import calcola_imposta
-from services.pdf_service import generate_tax_receipt
+from services.pdf_service import generate_tax_receipt, generate_comune_receipt
 
 
 ROOT_DIR = Path(__file__).parent
@@ -1115,6 +1115,158 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
+
+
+class ComuneReceiptRequest(BaseModel):
+    numero_ricevuta: str
+    data_ricevuta: str  # YYYY-MM-DD
+    ospite_index: int = 0  # default first guest, but user can pick
+    comune_piva: str = ""
+    comune_pec: str = ""
+
+
+@api_router.post("/checkins/{checkin_id}/comune-receipt")
+async def create_comune_receipt(
+    checkin_id: str,
+    body: ComuneReceiptRequest,
+    user=Depends(get_current_user),
+):
+    """Generate a municipal tourist tax receipt PDF (per the user's template).
+    Also archives the receipt entry in the checkin record.
+    Returns the PDF as a streaming response.
+    """
+    c = await db.checkins.find_one(
+        {"checkin_id": checkin_id, "user_id": user["user_id"]}, {"_id": 0}
+    )
+    if not c:
+        raise HTTPException(404, "Check-in non trovato")
+    prop = await db.properties.find_one(
+        {"property_id": c["property_id"], "user_id": user["user_id"]}, {"_id": 0}
+    )
+    if not prop:
+        raise HTTPException(404, "Proprietà non trovata")
+
+    is_result = c.get("results", {}).get("imposta_soggiorno", {})
+    calc = is_result.get("calculation")
+    if not calc:
+        raise HTTPException(400, "Nessun calcolo imposta di soggiorno per questo check-in")
+
+    guests = c.get("guests", [])
+    idx = max(0, min(body.ospite_index, len(guests) - 1))
+    g = guests[idx] if guests else {}
+    ospite_nome = f"{g.get('cognome','')} {g.get('nome','')}".strip()
+    ospite_res = g.get("luogo_nascita", "") or "—"
+
+    nights = calc.get("nights", 1)
+    totale = calc.get("totale_imposta", 0.0)
+
+    pdf_bytes = generate_comune_receipt(
+        numero_ricevuta=body.numero_ricevuta,
+        data_ricevuta=body.data_ricevuta,
+        comune_nome=prop.get("comune", "—"),
+        property_name=prop.get("nome", ""),
+        property_address=f"{prop.get('indirizzo','')} {prop.get('cap','')}".strip(),
+        property_comune=f"{prop.get('comune','')} ({prop.get('provincia','')})",
+        ospite_nome_cognome=ospite_nome,
+        ospite_residenza=ospite_res,
+        importo=totale,
+        data_arrivo=c["data_arrivo"],
+        data_partenza=c["data_partenza"],
+        pernottamenti=nights,
+        comune_piva=body.comune_piva,
+        comune_pec=body.comune_pec,
+    )
+
+    # Archive entry in the checkin record
+    receipt_entry = {
+        "numero": body.numero_ricevuta,
+        "data": body.data_ricevuta,
+        "ospite_index": idx,
+        "ospite_nome": ospite_nome,
+        "importo": totale,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "pdf_base64": base64.b64encode(pdf_bytes).decode(),
+    }
+    await db.checkins.update_one(
+        {"checkin_id": checkin_id},
+        {"$push": {"comune_receipts": receipt_entry}},
+    )
+
+    return StreamingResponse(
+        io.BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="ricevuta_comune_{body.numero_ricevuta}.pdf"'},
+    )
+
+
+@api_router.get("/checkins/{checkin_id}/comune-receipts")
+async def list_comune_receipts(checkin_id: str, user=Depends(get_current_user)):
+    """List archived municipal receipts for a checkin."""
+    c = await db.checkins.find_one(
+        {"checkin_id": checkin_id, "user_id": user["user_id"]},
+        {"_id": 0, "comune_receipts": 1},
+    )
+    if not c:
+        raise HTTPException(404, "Check-in non trovato")
+    receipts = c.get("comune_receipts", [])
+    # Don't return the PDF base64 in list, only metadata
+    return [
+        {k: v for k, v in r.items() if k != "pdf_base64"}
+        for r in receipts
+    ]
+
+
+@api_router.get("/checkins/{checkin_id}/comune-receipts/{index}")
+async def download_comune_receipt(
+    checkin_id: str, index: int, user=Depends(get_current_user)
+):
+    """Download an archived municipal receipt PDF by index."""
+    c = await db.checkins.find_one(
+        {"checkin_id": checkin_id, "user_id": user["user_id"]}, {"_id": 0}
+    )
+    if not c:
+        raise HTTPException(404, "Check-in non trovato")
+    receipts = c.get("comune_receipts", [])
+    if index < 0 or index >= len(receipts):
+        raise HTTPException(404, "Ricevuta non trovata")
+    pdf_b64 = receipts[index].get("pdf_base64")
+    if not pdf_b64:
+        raise HTTPException(404, "PDF non disponibile")
+    return StreamingResponse(
+        io.BytesIO(base64.b64decode(pdf_b64)),
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="ricevuta_{receipts[index].get("numero","")}.pdf"'
+        },
+    )
+
+
+@api_router.get("/properties/{property_id}/comune-receipts")
+async def property_comune_receipts(
+    property_id: str, user=Depends(get_current_user)
+):
+    """List all municipal receipts for a property across all check-ins."""
+    cursor = db.checkins.find(
+        {"property_id": property_id, "user_id": user["user_id"], "comune_receipts": {"$exists": True, "$ne": []}},
+        {"_id": 0, "checkin_id": 1, "data_arrivo": 1, "data_partenza": 1, "comune_receipts": 1},
+    )
+    out = []
+    async for c in cursor:
+        for idx, r in enumerate(c.get("comune_receipts", [])):
+            out.append({
+                "checkin_id": c["checkin_id"],
+                "index": idx,
+                "data_arrivo": c["data_arrivo"],
+                "data_partenza": c["data_partenza"],
+                "numero": r.get("numero"),
+                "data": r.get("data"),
+                "ospite_nome": r.get("ospite_nome"),
+                "importo": r.get("importo"),
+                "generated_at": r.get("generated_at"),
+            })
+    # Sort by data desc
+    out.sort(key=lambda x: x.get("data", ""), reverse=True)
+    return out
 
 
 @app.on_event("shutdown")
