@@ -192,15 +192,30 @@ function Tag({ ok, skipped, label }) {
 }
 
 function downloadBlob(blob, filename) {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.style.display = "none";
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  setTimeout(() => URL.revokeObjectURL(url), 60000);
+  // Convert to data: URL (more extension-friendly than blob: URL)
+  const reader = new FileReader();
+  reader.onload = () => {
+    const a = document.createElement("a");
+    a.href = reader.result; // data:application/pdf;base64,...
+    a.download = filename;
+    a.style.display = "none";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+  reader.onerror = () => {
+    // Fallback to blob URL if FileReader fails
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.style.display = "none";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  };
+  reader.readAsDataURL(blob);
 }
 
 function DownloadReceiptBtn({ checkinId, index, numero, data, importo }) {
