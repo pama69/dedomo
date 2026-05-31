@@ -232,6 +232,8 @@ class PropertyCreate(BaseModel):
     cap: str = ""
     cin: str = ""
     tipologia: str = "Casa Vacanza"
+    proprietario: str = ""
+    codice_fiscale: str = ""
     mode: str = "TEST"  # TEST | PROD
     alloggiati: AlloggiatiCredentials = AlloggiatiCredentials()
     ross1000: Ross1000Credentials = Ross1000Credentials()
@@ -1165,6 +1167,8 @@ async def create_comune_receipt(
         property_name=prop.get("nome", ""),
         property_address=f"{prop.get('indirizzo','')} {prop.get('cap','')}".strip(),
         property_comune=f"{prop.get('comune','')} ({prop.get('provincia','')})",
+        proprietario=prop.get("proprietario", ""),
+        codice_fiscale=prop.get("codice_fiscale", ""),
         ospite_nome_cognome=ospite_nome,
         ospite_residenza=ospite_res,
         importo=totale,

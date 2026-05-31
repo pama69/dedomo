@@ -38,6 +38,8 @@ const newProperty = () => ({
   cap: "",
   cin: "",
   tipologia: "Casa Vacanza",
+  proprietario: "",
+  codice_fiscale: "",
   mode: "TEST",
   alloggiati: { ...emptyAlloggiati },
   ross1000: { ...emptyRoss },
@@ -259,6 +261,12 @@ function PropertyEditor({ p, setP, save, cancel, saving, error }) {
           <Field label="CAP" value={p.cap} onChange={(v) => upd("cap", v)} testid="prop-cap" />
         </div>
         <Field label="CIN (Codice Identificativo Nazionale)" value={p.cin} onChange={(v) => upd("cin", v)} testid="prop-cin" />
+
+        <div className="border-t border-[#1E1E28] pt-3 flex flex-col gap-3">
+          <p className="text-[10px] tracking-[0.25em] uppercase text-zinc-500">Intestazione Ricevute Imposta di Soggiorno</p>
+          <Field label="Proprietario" value={p.proprietario || ""} onChange={(v) => upd("proprietario", v)} testid="prop-proprietario" placeholder="Es. Mario Rossi" mono={false} />
+          <Field label="Codice Fiscale" value={p.codice_fiscale || ""} onChange={(v) => upd("codice_fiscale", (v || "").toUpperCase())} testid="prop-codice-fiscale" placeholder="RSSMRA80A01H501U" />
+        </div>
 
         <Toggle
           label={`Modalità — [${p.mode}]`}

@@ -31,6 +31,8 @@ def generate_comune_receipt(
     data_arrivo: str,
     data_partenza: str,
     pernottamenti: int,
+    proprietario: str = "",
+    codice_fiscale: str = "",
     causale_extra: str = "",
     comune_pec: str = "",
     comune_piva: str = "",
@@ -78,14 +80,20 @@ def generate_comune_receipt(
 
     # Info header
     data_fmt = datetime.fromisoformat(data_ricevuta).strftime("%d/%m/%Y")
+    # Build right-side block with proprietario/CF if provided
+    right_lines = ["<b>Struttura Ricettiva:</b>"]
+    right_lines.append(property_name)
+    right_lines.append(f"{property_address} — {property_comune}")
+    if proprietario:
+        right_lines.append("<br/><b>Proprietario:</b>")
+        right_lines.append(proprietario)
+    if codice_fiscale:
+        right_lines.append(f"<b>C.F.:</b> {codice_fiscale}")
+    right_html = "<br/>".join(right_lines)
     head_info = [
         [
             Paragraph(f"<b>N. Ricevuta:</b> {numero_ricevuta}<br/><b>Data:</b> {data_fmt}", body),
-            Paragraph(
-                f"<para alignment='right'><b>Struttura Ricettiva:</b><br/>"
-                f"{property_name}<br/>{property_address} — {property_comune}</para>",
-                body,
-            ),
+            Paragraph(f"<para alignment='right'>{right_html}</para>", body),
         ]
     ]
     t = Table(head_info, colWidths=[8 * cm, 8 * cm])
@@ -171,11 +179,16 @@ def generate_comune_receipt(
     story.append(Spacer(1, 1.5 * cm))
 
     # Signatures
+    firma_left_lines = ["______________________________________"]
+    if proprietario:
+        firma_left_lines.append(f"<b>{proprietario}</b>")
+        firma_left_lines.append("<font size='8'>Gestore / Titolare Struttura</font>")
+    else:
+        firma_left_lines.append("Firma del Gestore / Titolare Struttura")
+    firma_left_lines.append("<font size='8'>Timbro della Struttura</font>")
     firma_data = [[
         Paragraph(
-            "<para alignment='center'>______________________________________<br/>"
-            "Firma del Gestore / Titolare Struttura<br/>"
-            "<font size='8'>Timbro della Struttura</font></para>",
+            "<para alignment='center'>" + "<br/>".join(firma_left_lines) + "</para>",
             body,
         ),
         Paragraph(
