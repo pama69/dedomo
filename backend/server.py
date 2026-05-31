@@ -944,9 +944,9 @@ async def list_checkins(
     query = {"user_id": user["user_id"]}
     if property_id:
         query["property_id"] = property_id
-    items = await db.checkins.find(query, {"_id": 0}).sort(
-        "created_at", -1
-    ).to_list(1000)
+    items = await db.checkins.find(
+        query, {"_id": 0, "comune_receipts.pdf_base64": 0}
+    ).sort("created_at", -1).to_list(1000)
     return items
 
 

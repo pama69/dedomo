@@ -118,16 +118,28 @@ export default function Archive() {
                         </div>
                       )}
                       <div className="flex flex-col gap-2 mt-2">
-                        {is_?.calculation && (
-                          <a
-                            href={`${api.defaults.baseURL}/checkins/${c.checkin_id}/receipt-pdf`}
-                            target="_blank"
-                            rel="noreferrer"
-                            data-testid={`pdf-${c.checkin_id}`}
-                            className="text-center border border-[#1E1E28] hover:border-zinc-500 px-4 py-3 uppercase tracking-widest text-[10px] text-zinc-300 cursor-pointer"
-                          >
-                            Scarica Ricevuta (PDF)
-                          </a>
+                        {c.comune_receipts && c.comune_receipts.length > 0 && (
+                          <div className="flex flex-col gap-1 border border-[#1E1E28] p-3">
+                            <span className="text-[10px] tracking-[0.25em] uppercase text-zinc-500 mb-1">Ricevute Imposta di Soggiorno</span>
+                            {c.comune_receipts.map((rc, idx) => (
+                              <a
+                                key={idx}
+                                href={`${api.defaults.baseURL}/checkins/${c.checkin_id}/comune-receipts/${idx}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                data-testid={`comune-receipt-${c.checkin_id}-${idx}`}
+                                className="flex justify-between items-center text-[10px] font-mono text-zinc-300 hover:text-zinc-100 hover:bg-[#15151C] px-2 py-2 cursor-pointer"
+                              >
+                                <span>N. {rc.numero} — {rc.data}</span>
+                                <span className="text-emerald-500">€ {rc.importo?.toFixed(2)} ↓</span>
+                              </a>
+                            ))}
+                          </div>
+                        )}
+                        {is_?.calculation && (!c.comune_receipts || c.comune_receipts.length === 0) && (
+                          <p className="text-zinc-600 text-[10px] font-mono border border-dashed border-[#1E1E28] p-3 text-center">
+                            Nessuna ricevuta generata. Genera dalla schermata Check-in.
+                          </p>
                         )}
                         {r1k?.xml_preview && (
                           <details className="border border-[#1E1E28] p-3 text-[10px]">
