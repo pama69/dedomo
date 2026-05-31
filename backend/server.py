@@ -1245,9 +1245,10 @@ async def download_comune_receipt(
 
 @api_router.get("/checkins/{checkin_id}/comune-receipts/{index}/preview")
 async def preview_comune_receipt(
-    checkin_id: str, index: int, user=Depends(get_current_user)
+    checkin_id: str, index: int, download: int = 0, user=Depends(get_current_user)
 ):
-    """Render archived municipal receipt as a PNG image (firewall-safe)."""
+    """Render archived municipal receipt as a PNG image (firewall-safe).
+    Add ?download=1 to force download instead of inline display."""
     import fitz  # PyMuPDF
     c = await db.checkins.find_one(
         {"checkin_id": checkin_id, "user_id": user["user_id"]}, {"_id": 0}
@@ -1264,14 +1265,18 @@ async def preview_comune_receipt(
     pdf_bytes = base64.b64decode(pdf_b64)
     doc = fitz.open(stream=pdf_bytes, filetype="pdf")
     page = doc[0]
-    pix = page.get_pixmap(dpi=150)
+    pix = page.get_pixmap(dpi=180)
     png_bytes = pix.tobytes("png")
     doc.close()
 
+    numero = receipts[index].get("numero", "ricevuta")
+    headers = {"Cache-Control": "no-store"}
+    if download:
+        headers["Content-Disposition"] = f'attachment; filename="ricevuta_{numero}.png"'
     return StreamingResponse(
         io.BytesIO(png_bytes),
         media_type="image/png",
-        headers={"Cache-Control": "no-store"},
+        headers=headers,
     )
 
 

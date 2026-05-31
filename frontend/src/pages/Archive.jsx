@@ -257,16 +257,30 @@ function DownloadReceiptBtn({ checkinId, index, numero, data, importo }) {
             className="w-full border border-[#1E1E28] bg-white"
             data-testid={`comune-receipt-preview-${checkinId}-${index}`}
           />
-          {pdfDataUrl && (
+          <p className="text-zinc-500 text-[10px] font-mono leading-relaxed">
+            Tasto destro sull'immagine → "Salva immagine come..." per salvare la ricevuta.
+            <br/>Oppure usa i pulsanti qui sotto.
+          </p>
+          <div className="flex gap-2 flex-wrap">
             <a
-              href={pdfDataUrl}
-              download={`ricevuta_comune_${numero}.pdf`}
-              data-testid={`comune-receipt-download-${checkinId}-${index}`}
-              className="text-center border border-emerald-500/40 hover:border-emerald-400 text-emerald-400 px-4 py-2 uppercase tracking-widest text-[10px] cursor-pointer"
+              href={`${previewSrc}?download=1`}
+              download={`ricevuta_${numero}.png`}
+              data-testid={`comune-receipt-png-${checkinId}-${index}`}
+              className="flex-1 text-center border border-emerald-500/40 hover:border-emerald-400 text-emerald-400 px-4 py-2 uppercase tracking-widest text-[10px] cursor-pointer"
             >
-              ↓ Scarica PDF
+              ↓ Scarica come PNG
             </a>
-          )}
+            {pdfDataUrl && (
+              <a
+                href={pdfDataUrl}
+                download={`ricevuta_comune_${numero}.pdf`}
+                data-testid={`comune-receipt-download-${checkinId}-${index}`}
+                className="flex-1 text-center border border-[#1E1E28] hover:border-zinc-500 text-zinc-400 px-4 py-2 uppercase tracking-widest text-[10px] cursor-pointer"
+              >
+                ↓ PDF
+              </a>
+            )}
+          </div>
         </div>
       )}
     </div>
