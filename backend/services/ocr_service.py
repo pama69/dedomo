@@ -11,7 +11,7 @@ from typing import Dict, Any
 from emergentintegrations.llm.chat import LlmChat, UserMessage, ImageContent
 
 
-SYSTEM_PROMPT = """Sei un esperto OCR specializzato in documenti italiani: Carta d'Identità (CIE/CIE elettronica/cartacea), Passaporto, Patente di Guida.
+SYSTEM_PROMPT = """Sei un esperto OCR specializzato in documenti italiani ed esteri: Carta d'Identità (CIE/CIE elettronica/cartacea), Passaporto, Patente di Guida.
 
 Devi estrarre i dati anagrafici dal documento. Se è presente una zona MRZ (Machine Readable Zone), usala come fonte primaria perché è più affidabile.
 
@@ -23,11 +23,14 @@ Restituisci ESCLUSIVAMENTE un JSON valido (no markdown, no testo extra) con ques
   "nome": "string maiuscolo",
   "sesso": "M" | "F",
   "data_nascita": "YYYY-MM-DD",
-  "luogo_nascita": "string",
-  "stato_nascita": "string codice ISO3 oppure nome italiano (es. ITA, FRA, USA)",
-  "cittadinanza": "string codice ISO3 oppure nome italiano (es. ITA, FRA)",
+  "luogo_nascita": "string (città/comune di nascita scritto come appare sul documento)",
+  "stato_nascita_nome": "string (NOME DEL PAESE IN ITALIANO MAIUSCOLO, es. ITALIA, ALBANIA, GERMANIA, STATI UNITI, REGNO UNITO, FRANCIA, ROMANIA)",
+  "stato_nascita_iso3": "string codice ISO3 (es. ITA, FRA, USA, ALB, DEU, ROU, GBR)",
+  "cittadinanza_nome": "string (NOME PAESE IN ITALIANO MAIUSCOLO)",
+  "cittadinanza_iso3": "string codice ISO3",
   "data_scadenza": "YYYY-MM-DD",
-  "stato_rilascio_documento": "string codice ISO3 (es. ITA)",
+  "stato_rilascio_documento_iso3": "string codice ISO3",
+  "is_foreign": true | false,
   "mrz_detected": true | false,
   "confidence": "alta" | "media" | "bassa"
 }
@@ -37,8 +40,10 @@ REGOLE:
 - Cognome e nome sempre in MAIUSCOLO senza accenti.
 - Se un campo non è leggibile, metti stringa vuota "".
 - Se la qualità dell'immagine è scarsa, imposta confidence="bassa".
-- Per passaporti italiani: stato_rilascio_documento="ITA".
-- Riconosci MRZ a 2 o 3 righe (TD1, TD2, TD3) e estrai i dati da lì se disponibili.
+- `is_foreign` = true SE la cittadinanza non è italiana (stato_nascita_iso3 e cittadinanza_iso3 ≠ ITA). Per passaporti stranieri il paese di cittadinanza è quello che ha emesso il documento.
+- `stato_nascita_nome` e `cittadinanza_nome` devono essere il NOME ITALIANO DEL PAESE (NON in inglese, NON sigla). Esempi: "ALBANIA", "FRANCIA", "GERMANIA", "STATI UNITI", "REGNO UNITO", "ROMANIA", "ITALIA".
+- Per passaporti italiani: tutti i campi paese = ITALIA / ITA, is_foreign=false.
+- Riconosci MRZ a 2 o 3 righe (TD1, TD2, TD3) e estrai i dati da lì se disponibili. Nel MRZ il codice paese è 3 lettere.
 """
 
 

@@ -445,6 +445,87 @@ def cerca_comuni(utente: str, token: str, query: str) -> Dict[str, Any]:
         return {"success": False, "message": f"Errore: {str(e)}"}
 
 
+# ISO3 -> Italian country name mapping for foreign state lookup
+# Used as fallback when OCR only returns ISO3 code
+ISO3_TO_ITALIAN_NAME = {
+    "ITA": "ITALIA",
+    "FRA": "FRANCIA", "DEU": "GERMANIA", "ESP": "SPAGNA", "PRT": "PORTOGALLO",
+    "GBR": "REGNO UNITO", "IRL": "IRLANDA", "NLD": "PAESI BASSI", "BEL": "BELGIO",
+    "LUX": "LUSSEMBURGO", "AUT": "AUSTRIA", "CHE": "SVIZZERA", "DNK": "DANIMARCA",
+    "NOR": "NORVEGIA", "SWE": "SVEZIA", "FIN": "FINLANDIA", "ISL": "ISLANDA",
+    "POL": "POLONIA", "CZE": "REPUBBLICA CECA", "SVK": "SLOVACCHIA",
+    "HUN": "UNGHERIA", "ROU": "ROMANIA", "BGR": "BULGARIA", "GRC": "GRECIA",
+    "ALB": "ALBANIA", "MKD": "MACEDONIA DEL NORD", "SRB": "SERBIA",
+    "HRV": "CROAZIA", "SVN": "SLOVENIA", "BIH": "BOSNIA ED ERZEGOVINA",
+    "MNE": "MONTENEGRO", "MDA": "MOLDAVIA", "UKR": "UCRAINA", "BLR": "BIELORUSSIA",
+    "RUS": "RUSSIA", "LTU": "LITUANIA", "LVA": "LETTONIA", "EST": "ESTONIA",
+    "TUR": "TURCHIA", "CYP": "CIPRO", "MLT": "MALTA",
+    "USA": "STATI UNITI D'AMERICA", "CAN": "CANADA", "MEX": "MESSICO",
+    "BRA": "BRASILE", "ARG": "ARGENTINA", "CHL": "CILE", "COL": "COLOMBIA",
+    "PER": "PERU'", "VEN": "VENEZUELA", "URY": "URUGUAY", "ECU": "ECUADOR",
+    "CHN": "CINA", "JPN": "GIAPPONE", "KOR": "COREA DEL SUD", "IND": "INDIA",
+    "PAK": "PAKISTAN", "BGD": "BANGLADESH", "LKA": "SRI LANKA", "PHL": "FILIPPINE",
+    "IDN": "INDONESIA", "MYS": "MALAYSIA", "THA": "THAILANDIA", "VNM": "VIETNAM",
+    "SGP": "SINGAPORE", "AUS": "AUSTRALIA", "NZL": "NUOVA ZELANDA",
+    "EGY": "EGITTO", "MAR": "MAROCCO", "TUN": "TUNISIA", "DZA": "ALGERIA",
+    "LBY": "LIBIA", "SEN": "SENEGAL", "NGA": "NIGERIA", "GHA": "GHANA",
+    "CIV": "COSTA D'AVORIO", "KEN": "KENYA", "ETH": "ETIOPIA", "ZAF": "SUDAFRICA",
+    "ZAR": "REPUBBLICA DEMOCRATICA DEL CONGO", "COD": "REPUBBLICA DEMOCRATICA DEL CONGO",
+    "ISR": "ISRAELE", "JOR": "GIORDANIA", "LBN": "LIBANO", "SYR": "SIRIA",
+    "IRQ": "IRAQ", "IRN": "IRAN", "SAU": "ARABIA SAUDITA", "ARE": "EMIRATI ARABI UNITI",
+    "QAT": "QATAR", "KWT": "KUWAIT", "AFG": "AFGHANISTAN",
+}
+
+
+def cerca_stato(utente: str, token: str, paese: str) -> Dict[str, Any]:
+    """Search a foreign country in the 'Luoghi' table and return its 9-digit code.
+
+    `paese` can be either:
+      - Italian country name (e.g. "ALBANIA", "STATI UNITI D'AMERICA")
+      - ISO3 code (e.g. "ALB", "USA") — will be mapped via ISO3_TO_ITALIAN_NAME
+
+    Returns: {"success": bool, "codice": "9-digit code" or None, "nome": ..., "candidates": [...]}
+    """
+    if not paese:
+        return {"success": False, "message": "Paese vuoto"}
+
+    raw = paese.strip().upper()
+    # If looks like ISO3, translate
+    if len(raw) == 3 and raw.isalpha():
+        translated = ISO3_TO_ITALIAN_NAME.get(raw)
+        if translated:
+            raw = translated
+
+    # Foreign countries in the 'Luoghi' table have codes starting with prefixes
+    # different from Italian comuni (Italian comuni: 9-digit ISTAT starting with 1xxxxxxxx).
+    # Italy itself is 100000100. All other countries are listed by Italian name.
+    r = cerca_comuni(utente, token, raw)
+    if not r.get("success"):
+        return {"success": False, "message": r.get("message", "Errore tabella")}
+
+    candidates = r.get("results", [])
+    if not candidates:
+        return {"success": True, "codice": None, "candidates": []}
+
+    # Best match: exact name (case-insensitive)
+    best = next((x for x in candidates if x["nome"].upper() == raw), None)
+    if not best:
+        # Try without diacritics or apostrophes
+        import re as _re
+        def _norm(s: str) -> str:
+            return _re.sub(r"[^A-Z0-9 ]", "", s.upper())
+        best = next((x for x in candidates if _norm(x["nome"]) == _norm(raw)), None)
+    if not best:
+        best = candidates[0]
+
+    return {
+        "success": True,
+        "codice": best["codice"],
+        "nome": best["nome"],
+        "candidates": candidates[:10],
+    }
+
+
 def authentication_test(utente: str, token: str) -> Dict[str, Any]:
     try:
         client = _get_client()

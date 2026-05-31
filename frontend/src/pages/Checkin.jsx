@@ -16,6 +16,8 @@ const emptyGuest = () => ({
   stato_rilascio_documento: "100000100",
   codice_comune_nascita: "",
   sigla_provincia_nascita: "",
+  is_foreign: false,
+  paese_nome: "",
   _doc_preview: null,
 });
 
@@ -107,7 +109,20 @@ export default function Checkin() {
     try {
       const r = await api.post(
         `/properties/${propertyId}/alloggiati/guess-codici`,
-        { luogo_nascita: luogoNascita }
+        { luogo_nascita: luogoNascita, is_foreign: false }
+      );
+      return r.data;
+    } catch {
+      return null;
+    }
+  };
+
+  const lookupStato = async (paese, cittadinanza) => {
+    if (!paese || !propertyId) return null;
+    try {
+      const r = await api.post(
+        `/properties/${propertyId}/alloggiati/guess-codici`,
+        { stato_nascita: paese, cittadinanza: cittadinanza || paese, is_foreign: true }
       );
       return r.data;
     } catch {
@@ -135,29 +150,38 @@ export default function Checkin() {
       });
       const data = r.data;
 
-      // Try to auto-resolve comune code + provincia from luogo_nascita
+      // Detect foreign guest from OCR result
+      const isForeign = !!data.is_foreign ||
+        (data.cittadinanza_iso3 && data.cittadinanza_iso3.toUpperCase() !== "ITA" && data.cittadinanza_iso3 !== "");
+
       let comuneCode = "";
       let provSigla = "";
-      let comuneNotFound = false;
-      if (data.luogo_nascita) {
+      let statoCode = "100000100";
+      let cittadinanzaCode = "100000100";
+      let paeseNome = "";
+
+      if (isForeign) {
+        // Resolve foreign country code via 'Luoghi' table
+        const paeseQuery = data.stato_nascita_nome || data.cittadinanza_nome ||
+                           data.stato_nascita_iso3 || data.cittadinanza_iso3 || "";
+        const cittadinanzaQuery = data.cittadinanza_nome || data.cittadinanza_iso3 || paeseQuery;
+        if (paeseQuery) {
+          const guess = await lookupStato(paeseQuery, cittadinanzaQuery);
+          if (guess?.stato_match?.codice) {
+            statoCode = guess.stato_match.codice;
+            paeseNome = guess.stato_match.nome;
+          }
+          cittadinanzaCode = guess?.cittadinanza_match?.codice || statoCode;
+        }
+      } else if (data.luogo_nascita) {
+        // Italian guest: resolve comune
         const guess = await lookupComune(data.luogo_nascita);
         if (guess?.comune_match) {
           comuneCode = guess.comune_match.codice || "";
           provSigla = guess.comune_match.provincia || "";
-        } else {
-          comuneNotFound = true;
         }
       }
 
-      // Map ITA to ISTAT code
-      const mapStato = (v) => {
-        if (!v) return "100000100";
-        const u = v.toUpperCase();
-        if (u === "ITA" || u === "ITALIA" || u === "IT") return "100000100";
-        return v;
-      };
-
-      // Map tipo documento OCR output to Alloggiati codes
       const mapDoc = (v) => {
         const m = {
           CARTA_IDENTITA: "IDENT",
@@ -178,13 +202,16 @@ export default function Checkin() {
           sesso: data.sesso || g.sesso,
           data_nascita: data.data_nascita || g.data_nascita,
           luogo_nascita: data.luogo_nascita || g.luogo_nascita,
-          stato_nascita: mapStato(data.stato_nascita) || g.stato_nascita,
-          cittadinanza: mapStato(data.cittadinanza) || g.cittadinanza,
+          stato_nascita: statoCode,
+          cittadinanza: cittadinanzaCode,
           tipo_documento: mapDoc(data.tipo_documento),
           numero_documento: data.numero_documento || g.numero_documento,
-          stato_rilascio_documento: mapStato(data.stato_rilascio_documento) || g.stato_rilascio_documento,
-          codice_comune_nascita: comuneCode || g.codice_comune_nascita,
-          sigla_provincia_nascita: provSigla || g.sigla_provincia_nascita,
+          // For foreigners: document released by their own country
+          stato_rilascio_documento: isForeign ? statoCode : "100000100",
+          codice_comune_nascita: isForeign ? "" : (comuneCode || g.codice_comune_nascita),
+          sigla_provincia_nascita: isForeign ? "" : (provSigla || g.sigla_provincia_nascita),
+          is_foreign: isForeign,
+          paese_nome: paeseNome || data.stato_nascita_nome || "",
         };
         return copy;
       });
@@ -329,19 +356,56 @@ export default function Checkin() {
           <SelectField label="Sesso" value={g.sesso} onChange={(v) => updateGuest(activeGuestIdx, "sesso", v)} testid="guest-sesso" options={[["M", "M"], ["F", "F"]]} />
           <DateField label="Data Nascita" value={g.data_nascita} onChange={(v) => updateGuest(activeGuestIdx, "data_nascita", v)} testid="guest-nascita" />
         </div>
-        <ComuneNascitaField
-          luogoNascita={g.luogo_nascita}
-          comuneCode={g.codice_comune_nascita}
-          provSigla={g.sigla_provincia_nascita}
-          notFound={g._comune_not_found}
-          propertyId={propertyId}
-          onChange={(luogo, codice, prov) => {
-            updateGuest(activeGuestIdx, "luogo_nascita", luogo);
-            updateGuest(activeGuestIdx, "codice_comune_nascita", codice);
-            updateGuest(activeGuestIdx, "sigla_provincia_nascita", prov);
-            updateGuest(activeGuestIdx, "_comune_not_found", false);
-          }}
-        />
+
+        <div className="flex items-center gap-2">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              data-testid="guest-foreign-toggle"
+              checked={!!g.is_foreign}
+              onChange={(e) => updateGuest(activeGuestIdx, "is_foreign", e.target.checked)}
+              className="accent-zinc-100"
+            />
+            <span className="text-[10px] tracking-[0.25em] uppercase text-zinc-300 font-mono">
+              Ospite straniero
+            </span>
+          </label>
+          {g.is_foreign && g.paese_nome && (
+            <span className="text-[10px] font-mono text-amber-400 ml-auto">
+              [ {g.paese_nome} ]
+            </span>
+          )}
+        </div>
+
+        {g.is_foreign ? (
+          <PaeseField
+            paeseNome={g.paese_nome}
+            statoCode={g.stato_nascita}
+            propertyId={propertyId}
+            onChange={(nome, codice) => {
+              updateGuest(activeGuestIdx, "paese_nome", nome);
+              updateGuest(activeGuestIdx, "stato_nascita", codice);
+              updateGuest(activeGuestIdx, "cittadinanza", codice);
+              updateGuest(activeGuestIdx, "stato_rilascio_documento", codice);
+              updateGuest(activeGuestIdx, "codice_comune_nascita", "");
+              updateGuest(activeGuestIdx, "sigla_provincia_nascita", "");
+            }}
+          />
+        ) : (
+          <ComuneNascitaField
+            luogoNascita={g.luogo_nascita}
+            comuneCode={g.codice_comune_nascita}
+            provSigla={g.sigla_provincia_nascita}
+            notFound={g._comune_not_found}
+            propertyId={propertyId}
+            onChange={(luogo, codice, prov) => {
+              updateGuest(activeGuestIdx, "luogo_nascita", luogo);
+              updateGuest(activeGuestIdx, "codice_comune_nascita", codice);
+              updateGuest(activeGuestIdx, "sigla_provincia_nascita", prov);
+              updateGuest(activeGuestIdx, "_comune_not_found", false);
+            }}
+          />
+        )}
         <SelectField
           label="Tipo Documento"
           value={g.tipo_documento}
@@ -801,6 +865,127 @@ function ComuneNascitaField({ luogoNascita, comuneCode, provSigla, notFound, pro
                 </button>
               ))}
             </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PaeseField({ paeseNome, statoCode, propertyId, onChange }) {
+  const [query, setQuery] = useState(paeseNome || "");
+  const [results, setResults] = useState([]);
+  const [searching, setSearching] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
+  const [searched, setSearched] = useState(false);
+
+  useEffect(() => {
+    setQuery(paeseNome || "");
+  }, [paeseNome]);
+
+  const doSearch = async () => {
+    if (!query.trim() || !propertyId) return;
+    setSearching(true);
+    setSearched(true);
+    try {
+      const r = await api.post(
+        `/properties/${propertyId}/alloggiati/guess-codici`,
+        { stato_nascita: query, is_foreign: true }
+      );
+      // Use candidates list (multiple matches) from cerca_stato
+      // We need the full list; the endpoint returns top match only for now,
+      // so fall back to searching via the comuni search which also returns countries.
+      const top = r.data?.stato_match;
+      if (top) setResults([top]);
+      else setResults([]);
+      // Also do a wider search to show candidates
+      try {
+        const r2 = await api.get(
+          `/properties/${propertyId}/alloggiati/comuni?q=${encodeURIComponent(query)}`
+        );
+        // Filter only entries that look like foreign states (no provincia + uppercase only letters/spaces)
+        const all = r2.data?.results || [];
+        const foreign = all.filter((x) => !x.provincia);
+        setResults(foreign.length > 0 ? foreign : all);
+      } catch {/* keep top match */}
+    } catch {
+      setResults([]);
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  const pick = (c) => {
+    onChange(c.nome, c.codice);
+    setShowSearch(false);
+    setResults([]);
+  };
+
+  const hasMatch = !!statoCode && statoCode !== "100000100" && !!paeseNome;
+
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="text-[10px] tracking-[0.25em] uppercase text-zinc-500">Paese (Cittadinanza)</span>
+      <input
+        type="text"
+        data-testid="guest-paese"
+        value={paeseNome || ""}
+        onChange={(e) => onChange(e.target.value.toUpperCase(), "")}
+        placeholder="Es. ALBANIA, GERMANIA, STATI UNITI..."
+        className="bg-transparent border border-[#1E1E28] px-4 py-3 text-zinc-100 placeholder:text-zinc-600 focus:border-zinc-300 outline-none w-full font-mono text-sm"
+      />
+      {hasMatch ? (
+        <div className="flex items-center gap-2 text-[10px] font-mono mt-1">
+          <span className="text-emerald-500">✓ {paeseNome}</span>
+          <span className="text-zinc-500">[ {statoCode} ]</span>
+          <button
+            type="button"
+            onClick={() => { setShowSearch(true); setQuery(paeseNome || ""); }}
+            className="ml-auto text-zinc-500 hover:text-zinc-100 uppercase tracking-widest cursor-pointer"
+          >
+            Cambia
+          </button>
+        </div>
+      ) : paeseNome ? (
+        <div className="text-amber-400 text-[10px] font-mono mt-1">
+          ⚠ Paese non risolto. Cercalo manualmente:
+          <button
+            type="button"
+            onClick={() => { setShowSearch(true); setQuery(paeseNome || ""); doSearch(); }}
+            className="ml-2 text-amber-300 hover:text-amber-100 uppercase tracking-widest cursor-pointer"
+          >
+            Cerca
+          </button>
+        </div>
+      ) : null}
+
+      {showSearch && (
+        <div className="border border-[#1E1E28] p-3 mt-2 flex flex-col gap-2 bg-[#0E0E14]">
+          <div className="flex gap-2">
+            <input
+              type="text"
+              data-testid="paese-search-input"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), doSearch())}
+              placeholder="Digita nome paese..."
+              className="flex-1 bg-transparent border border-[#1E1E28] px-3 py-2 text-zinc-100 placeholder:text-zinc-600 focus:border-zinc-300 outline-none text-sm font-mono"
+            />
+            <button type="button" onClick={doSearch} disabled={searching} data-testid="paese-search-btn" className="border border-[#1E1E28] hover:border-zinc-500 px-3 py-2 text-zinc-300 uppercase tracking-widest text-[10px] cursor-pointer disabled:opacity-50">
+              {searching ? "..." : "Cerca"}
+            </button>
+          </div>
+          {results.length > 0 && (
+            <div className="max-h-40 overflow-y-auto flex flex-col gap-1">
+              {results.map((c) => (
+                <button key={c.codice} type="button" onClick={() => pick(c)} data-testid={`paese-result-${c.codice}`} className="text-left text-[10px] font-mono text-zinc-300 hover:text-zinc-100 hover:bg-[#15151C] px-2 py-2 cursor-pointer">
+                  {c.nome} — {c.codice}
+                </button>
+              ))}
+            </div>
+          )}
+          {searched && !searching && results.length === 0 && (
+            <p className="text-zinc-500 text-[10px] font-mono">Nessun paese trovato.</p>
           )}
         </div>
       )}

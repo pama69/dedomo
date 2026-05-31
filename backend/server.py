@@ -33,6 +33,8 @@ from services.alloggiati_web import (
     lista_appartamenti,
     aggiungi_appartamento,
     cerca_comuni,
+    cerca_stato,
+    ISO3_TO_ITALIAN_NAME,
     TIPO_OSPITE_SINGOLO,
     TIPO_CAPO_FAMIGLIA,
     TIPO_FAMILIARE,
@@ -384,6 +386,7 @@ class GuessLocationRequest(BaseModel):
     luogo_nascita: str = ""
     cittadinanza: str = ""
     stato_nascita: str = ""
+    is_foreign: bool = False
 
 
 @api_router.post("/properties/{property_id}/alloggiati/guess-codici")
@@ -392,7 +395,11 @@ async def guess_codici(
     body: GuessLocationRequest,
     user=Depends(get_current_user),
 ):
-    """Resolve textual place names to ISTAT codes for a check-in form."""
+    """Resolve textual place/country names to ISTAT/Stati codes for a check-in form.
+
+    For Italian guests: looks up `luogo_nascita` (city) in 'Luoghi' table → comune code.
+    For foreign guests: looks up `stato_nascita` (country) in 'Luoghi' table → country code.
+    """
     p = await db.properties.find_one(
         {"property_id": property_id, "user_id": user["user_id"]}, {"_id": 0}
     )
@@ -406,23 +413,38 @@ async def guess_codici(
     if not tok["success"]:
         return {"success": False, "message": tok.get("message")}
 
-    out = {"success": True}
-    # Resolve luogo_nascita -> comune code + provincia
+    out = {"success": True, "is_foreign": body.is_foreign}
+
+    # FOREIGN guest: resolve country (state) code, skip comune
+    if body.is_foreign:
+        paese = body.stato_nascita or body.cittadinanza
+        if paese:
+            r = cerca_stato(cfg["utente"], tok["token"], paese)
+            if r.get("success") and r.get("codice"):
+                out["stato_match"] = {
+                    "codice": r["codice"],
+                    "nome": r["nome"],
+                }
+        # Also resolve cittadinanza separately if different
+        if body.cittadinanza and body.cittadinanza != body.stato_nascita:
+            r2 = cerca_stato(cfg["utente"], tok["token"], body.cittadinanza)
+            if r2.get("success") and r2.get("codice"):
+                out["cittadinanza_match"] = {
+                    "codice": r2["codice"],
+                    "nome": r2["nome"],
+                }
+        return out
+
+    # ITALIAN guest: resolve comune by luogo_nascita (existing logic)
     if body.luogo_nascita:
-        # Clean: strip parens like "(MI)" and punctuation
         import re as _re
         cleaned = _re.sub(r"\([^)]*\)", "", body.luogo_nascita).strip()
-        # Also try to extract province sigla from parens
         m = _re.search(r"\(([A-Za-z]{2})\)", body.luogo_nascita)
         hinted_prov = m.group(1).upper() if m else ""
 
         r = cerca_comuni(cfg["utente"], tok["token"], cleaned or body.luogo_nascita)
         if r.get("success") and r.get("results"):
             q = (cleaned or body.luogo_nascita).strip().upper()
-            # Best matching strategy:
-            # 1. Exact name + province sigla match (if available)
-            # 2. Exact name match
-            # 3. First result
             best = None
             if hinted_prov:
                 best = next(
@@ -436,10 +458,7 @@ async def guess_codici(
                 best = r["results"][0]
             out["comune_match"] = best
 
-    # Quick map for ITA citizenship
-    iso_to_code = {
-        "ITA": "100000100", "ITALIA": "100000100", "IT": "100000100",
-    }
+    iso_to_code = {"ITA": "100000100", "ITALIA": "100000100", "IT": "100000100"}
     if body.cittadinanza:
         out["cittadinanza_code"] = iso_to_code.get(
             body.cittadinanza.upper(), body.cittadinanza
@@ -635,13 +654,15 @@ class GuestData(BaseModel):
     sesso: str  # M | F (mapped to 1/2 internally)
     data_nascita: str  # YYYY-MM-DD
     luogo_nascita: str = ""
-    stato_nascita: str = "100000100"  # ITA codice
+    stato_nascita: str = "100000100"  # ITA codice (9-digit) for italians, foreign code for foreigners
     cittadinanza: str = "100000100"
     tipo_documento: str = "IDENT"  # codice 5 char
     numero_documento: str = ""
     stato_rilascio_documento: str = "100000100"
-    codice_comune_nascita: str = ""  # 9 chars ISTAT code (only italians)
-    sigla_provincia_nascita: str = ""  # 2 chars (only italians)
+    codice_comune_nascita: str = ""  # 9 chars ISTAT code (only italians, empty for foreigners)
+    sigla_provincia_nascita: str = ""  # 2 chars (only italians, empty for foreigners)
+    is_foreign: bool = False  # True if guest is foreign (cittadinanza ≠ ITA)
+    paese_nome: str = ""  # Italian country name (for display/receipt, e.g. "ALBANIA")
 
 
 class CheckinSubmit(BaseModel):
@@ -664,7 +685,16 @@ def _guest_to_schedina(
     else:
         tipo_doc_field = tipo_doc
         num_doc_field = g.numero_documento
-        stato_ril_field = g.stato_rilascio_documento
+        # For foreigners: document released by their own country (= stato_nascita)
+        stato_ril_field = g.stato_rilascio_documento or g.stato_nascita
+
+    # For FOREIGN guests: clear comune/provincia, only stato_nascita is filled
+    if g.is_foreign:
+        codice_comune = ""
+        sigla_prov = ""
+    else:
+        codice_comune = g.codice_comune_nascita
+        sigla_prov = g.sigla_provincia_nascita
 
     return build_schedina(
         tipo_alloggiato=tipo_alloggiato,
@@ -674,8 +704,8 @@ def _guest_to_schedina(
         nome=g.nome,
         sesso=g.sesso,
         data_nascita=g.data_nascita,
-        codice_comune_nascita=g.codice_comune_nascita,
-        sigla_provincia_nascita=g.sigla_provincia_nascita,
+        codice_comune_nascita=codice_comune,
+        sigla_provincia_nascita=sigla_prov,
         codice_stato_nascita=g.stato_nascita,
         codice_stato_cittadinanza=g.cittadinanza,
         tipo_documento=tipo_doc_field,
@@ -795,12 +825,14 @@ async def checkin_submit(body: CheckinSubmit, user=Depends(get_current_user)):
                 "tipoalloggiato": tipo_alloggiato,
                 "idcapo": idcapo_field,
                 "sesso": g.sesso,
-                "cittadinanza": map_country_iso3_to_code(g.cittadinanza) or g.cittadinanza,
-                "statoresidenza": map_country_iso3_to_code(g.cittadinanza) or g.cittadinanza,
-                "luogoresidenza": g.codice_comune_nascita or "",
+                "cittadinanza": g.cittadinanza or ITALIA_CODE,
+                "statoresidenza": g.cittadinanza or ITALIA_CODE,
+                # luogoresidenza: only for italians (comune ISTAT), empty for foreigners
+                "luogoresidenza": "" if g.is_foreign else (g.codice_comune_nascita or ""),
                 "datanascita": g.data_nascita,
-                "statonascita": map_country_iso3_to_code(g.stato_nascita) or g.stato_nascita,
-                "comunenascita": g.codice_comune_nascita or "",
+                "statonascita": g.stato_nascita or ITALIA_CODE,
+                # comunenascita: only for italians (comune ISTAT), empty for foreigners
+                "comunenascita": "" if g.is_foreign else (g.codice_comune_nascita or ""),
                 "tipoturismo": "",
                 "mezzotrasporto": "",
                 "canaleprenotazione": "",
