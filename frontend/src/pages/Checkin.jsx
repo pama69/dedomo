@@ -830,22 +830,6 @@ function ComuneReceiptButton({ checkinId, guests, importo }) {
       setError(e.response?.data?.detail || e.message || "Errore generazione ricevuta");
     } finally { setLoading(false); }
   };
-    } catch (e) {
-      let msg = "Errore generazione ricevuta";
-      try {
-        const blob = e.response?.data;
-        if (blob && typeof blob.text === "function") {
-          const text = await blob.text();
-          try { msg = JSON.parse(text).detail || msg; } catch { msg = text || msg; }
-        } else if (e.response?.data?.detail) {
-          msg = e.response.data.detail;
-        } else if (e.message) {
-          msg = e.message;
-        }
-      } catch (_) { /* swallow */ }
-      setError(msg);
-    } finally { setLoading(false); }
-  };
 
   if (!open) {
     return (
