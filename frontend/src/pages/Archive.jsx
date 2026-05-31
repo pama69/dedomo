@@ -219,47 +219,54 @@ function downloadBlob(blob, filename) {
 }
 
 function DownloadReceiptBtn({ checkinId, index, numero, data, importo }) {
-  const [loading, setLoading] = useState(false);
-  const [dataUrl, setDataUrl] = useState("");
+  const [open, setOpen] = useState(false);
+  const [pdfDataUrl, setPdfDataUrl] = useState("");
 
-  const load = async () => {
-    if (dataUrl) { setDataUrl(""); return; }  // toggle close
-    setLoading(true);
-    try {
-      const r = await api.get(`/checkins/${checkinId}/comune-receipts/${index}`, { responseType: "blob" });
-      const reader = new FileReader();
-      reader.onload = () => setDataUrl(reader.result);
-      reader.readAsDataURL(new Blob([r.data], { type: "application/pdf" }));
-    } finally { setLoading(false); }
+  const toggle = async () => {
+    if (open) { setOpen(false); return; }
+    setOpen(true);
+    // Lazy-load the PDF as data URL (for download button)
+    if (!pdfDataUrl) {
+      try {
+        const r = await api.get(`/checkins/${checkinId}/comune-receipts/${index}`, { responseType: "blob" });
+        const reader = new FileReader();
+        reader.onload = () => setPdfDataUrl(reader.result);
+        reader.readAsDataURL(new Blob([r.data], { type: "application/pdf" }));
+      } catch (_) { /* image fallback below still works */ }
+    }
   };
+
+  const previewSrc = `${api.defaults.baseURL}/checkins/${checkinId}/comune-receipts/${index}/preview`;
 
   return (
     <div className="flex flex-col gap-2">
       <button
         type="button"
-        onClick={load}
-        disabled={loading}
+        onClick={toggle}
         data-testid={`comune-receipt-${checkinId}-${index}`}
-        className="flex justify-between items-center text-[10px] font-mono text-zinc-300 hover:text-zinc-100 hover:bg-[#15151C] px-2 py-2 cursor-pointer disabled:opacity-50"
+        className="flex justify-between items-center text-[10px] font-mono text-zinc-300 hover:text-zinc-100 hover:bg-[#15151C] px-2 py-2 cursor-pointer"
       >
         <span>N. {numero} — {data}</span>
-        <span className="text-emerald-500">€ {importo?.toFixed(2)} {loading ? "..." : dataUrl ? "▲" : "▼"}</span>
+        <span className="text-emerald-500">€ {importo?.toFixed(2)} {open ? "▲" : "▼"}</span>
       </button>
-      {dataUrl && (
+      {open && (
         <div className="flex flex-col gap-2">
-          <iframe
-            src={dataUrl}
-            title={`Ricevuta ${numero}`}
-            className="w-full h-[600px] border border-[#1E1E28] bg-white"
-            data-testid={`comune-receipt-viewer-${checkinId}-${index}`}
+          <img
+            src={previewSrc}
+            alt={`Ricevuta ${numero}`}
+            className="w-full border border-[#1E1E28] bg-white"
+            data-testid={`comune-receipt-preview-${checkinId}-${index}`}
           />
-          <a
-            href={dataUrl}
-            download={`ricevuta_comune_${numero}.pdf`}
-            className="text-center border border-emerald-500/40 hover:border-emerald-400 text-emerald-400 px-4 py-2 uppercase tracking-widest text-[10px] cursor-pointer"
-          >
-            ↓ Scarica PDF
-          </a>
+          {pdfDataUrl && (
+            <a
+              href={pdfDataUrl}
+              download={`ricevuta_comune_${numero}.pdf`}
+              data-testid={`comune-receipt-download-${checkinId}-${index}`}
+              className="text-center border border-emerald-500/40 hover:border-emerald-400 text-emerald-400 px-4 py-2 uppercase tracking-widest text-[10px] cursor-pointer"
+            >
+              ↓ Scarica PDF
+            </a>
+          )}
         </div>
       )}
     </div>
