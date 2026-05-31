@@ -1187,7 +1187,12 @@ async def create_comune_receipt(
     idx = max(0, min(body.ospite_index, len(guests) - 1))
     g = guests[idx] if guests else {}
     ospite_nome = f"{g.get('cognome','')} {g.get('nome','')}".strip()
-    ospite_res = g.get("luogo_nascita", "") or "—"
+    # For foreign guests, residenza = country name (as per Italian municipal regulations
+    # for tourist tax receipts). For Italian guests, residenza = city of birth.
+    if g.get("is_foreign"):
+        ospite_res = g.get("paese_nome") or g.get("luogo_nascita") or "—"
+    else:
+        ospite_res = g.get("luogo_nascita") or "—"
 
     nights = calc.get("nights", 1)
     totale = calc.get("totale_imposta", 0.0)
@@ -1342,6 +1347,223 @@ async def property_comune_receipts(
     # Sort by data desc
     out.sort(key=lambda x: x.get("data", ""), reverse=True)
     return out
+
+
+# ====================================================================
+# OWNERS / FISCAL CODE ARCHIVE
+# ====================================================================
+
+@api_router.get("/owners")
+async def list_owners(user=Depends(get_current_user)):
+    """List unique (proprietario, codice_fiscale) pairs from user's properties
+    with stats on associated checkins."""
+    props = await db.properties.find(
+        {"user_id": user["user_id"]}, {"_id": 0}
+    ).to_list(1000)
+
+    # Group properties by codice_fiscale (or proprietario if CF missing)
+    groups: Dict[str, Dict[str, Any]] = {}
+    for p in props:
+        cf = (p.get("codice_fiscale") or "").upper().strip()
+        nome = p.get("proprietario", "").strip()
+        if not cf and not nome:
+            continue
+        key = cf or f"NOCF::{nome}"
+        if key not in groups:
+            groups[key] = {
+                "codice_fiscale": cf,
+                "proprietario": nome,
+                "properties": [],
+            }
+        groups[key]["properties"].append({
+            "property_id": p["property_id"],
+            "nome": p.get("nome", ""),
+            "comune": p.get("comune", ""),
+        })
+
+    # Count checkins/receipts per group
+    out = []
+    for key, g in groups.items():
+        pids = [pp["property_id"] for pp in g["properties"]]
+        checkins_n = await db.checkins.count_documents(
+            {"user_id": user["user_id"], "property_id": {"$in": pids}}
+        )
+        receipts_pipeline = [
+            {"$match": {"user_id": user["user_id"], "property_id": {"$in": pids}}},
+            {"$project": {"n": {"$size": {"$ifNull": ["$comune_receipts", []]}}}},
+            {"$group": {"_id": None, "tot": {"$sum": "$n"}}},
+        ]
+        rc = await db.checkins.aggregate(receipts_pipeline).to_list(1)
+        receipts_n = rc[0]["tot"] if rc else 0
+        out.append({
+            **g,
+            "id": key,
+            "checkins_count": checkins_n,
+            "receipts_count": receipts_n,
+        })
+    out.sort(key=lambda x: x["proprietario"] or x["codice_fiscale"] or "")
+    return out
+
+
+def _owner_property_ids(props_dict_list: List[dict]) -> List[str]:
+    return [p["property_id"] for p in props_dict_list]
+
+
+async def _get_owner_properties(user_id: str, owner_id: str) -> List[dict]:
+    """Find all properties belonging to a given owner key (CF or NOCF::name)."""
+    if owner_id.startswith("NOCF::"):
+        name = owner_id[len("NOCF::"):]
+        cursor = db.properties.find(
+            {"user_id": user_id, "proprietario": name, "$or": [
+                {"codice_fiscale": {"$exists": False}},
+                {"codice_fiscale": ""},
+            ]},
+            {"_id": 0},
+        )
+    else:
+        cursor = db.properties.find(
+            {"user_id": user_id, "codice_fiscale": owner_id},
+            {"_id": 0},
+        )
+    return await cursor.to_list(1000)
+
+
+@api_router.get("/owners/{owner_id}/archive")
+async def owner_archive(
+    owner_id: str,
+    date_from: Optional[str] = None,  # YYYY-MM-DD
+    date_to: Optional[str] = None,    # YYYY-MM-DD
+    user=Depends(get_current_user),
+):
+    """Return chronological archive (schedine + receipts) for an owner.
+    Filter by data_arrivo range. Each entry includes capogruppo (first guest)
+    name and minimal metadata."""
+    props = await _get_owner_properties(user["user_id"], owner_id)
+    if not props:
+        raise HTTPException(404, "Proprietario non trovato")
+
+    pids = [p["property_id"] for p in props]
+    prop_map = {p["property_id"]: p for p in props}
+
+    q: Dict[str, Any] = {"user_id": user["user_id"], "property_id": {"$in": pids}}
+    if date_from:
+        q.setdefault("data_arrivo", {})["$gte"] = date_from
+    if date_to:
+        q.setdefault("data_arrivo", {})["$lte"] = date_to
+
+    checkins = await db.checkins.find(
+        q, {"_id": 0, "comune_receipts.pdf_base64": 0, "alloggiati_ricevuta_pdf": 0}
+    ).sort("data_arrivo", -1).to_list(1000)
+
+    schedine = []
+    ricevute = []
+    for c in checkins:
+        guests = c.get("guests", [])
+        capo_nome = ""
+        if guests:
+            capo_nome = f"{guests[0].get('cognome','')} {guests[0].get('nome','')}".strip()
+        prop = prop_map.get(c["property_id"], {})
+        aw_ok = (c.get("results", {}).get("alloggiati_web", {}) or {}).get("success")
+        # Schedine entry — one per checkin (the schedina list is sent as a batch)
+        if aw_ok and c.get("mode") == "PROD":
+            schedine.append({
+                "checkin_id": c["checkin_id"],
+                "data_arrivo": c.get("data_arrivo"),
+                "data_partenza": c.get("data_partenza"),
+                "capogruppo": capo_nome,
+                "ospiti_count": len(guests),
+                "property_name": prop.get("nome", ""),
+                "property_id": c["property_id"],
+                "pdf_available": True,
+            })
+        # Ricevute imposta soggiorno
+        for idx, r in enumerate(c.get("comune_receipts", []) or []):
+            ospite_nome = r.get("ospite_nome") or capo_nome
+            ricevute.append({
+                "checkin_id": c["checkin_id"],
+                "receipt_index": idx,
+                "numero": r.get("numero"),
+                "data": r.get("data"),
+                "importo": r.get("importo"),
+                "ospite_nome": ospite_nome,
+                "capogruppo": capo_nome,
+                "property_name": prop.get("nome", ""),
+                "property_id": c["property_id"],
+                "data_arrivo": c.get("data_arrivo"),
+            })
+
+    return {
+        "owner_id": owner_id,
+        "schedine": schedine,
+        "ricevute": ricevute,
+        "properties": [{"property_id": p["property_id"], "nome": p.get("nome",""), "comune": p.get("comune","")} for p in props],
+    }
+
+
+@api_router.get("/owners/{owner_id}/archive/zip")
+async def owner_archive_zip(
+    owner_id: str,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    categoria: str = "all",  # all | schedine | ricevute
+    user=Depends(get_current_user),
+):
+    """Download a ZIP archive of all PDFs (schedine Alloggiati + ricevute Comune)
+    for an owner within an optional date range."""
+    import zipfile as _zip
+    props = await _get_owner_properties(user["user_id"], owner_id)
+    if not props:
+        raise HTTPException(404, "Proprietario non trovato")
+    pids = [p["property_id"] for p in props]
+    prop_map = {p["property_id"]: p for p in props}
+
+    q: Dict[str, Any] = {"user_id": user["user_id"], "property_id": {"$in": pids}}
+    if date_from:
+        q.setdefault("data_arrivo", {})["$gte"] = date_from
+    if date_to:
+        q.setdefault("data_arrivo", {})["$lte"] = date_to
+
+    checkins = await db.checkins.find(q, {"_id": 0}).sort("data_arrivo", 1).to_list(1000)
+
+    buf = io.BytesIO()
+    files_added = 0
+    with _zip.ZipFile(buf, "w", _zip.ZIP_DEFLATED) as zf:
+        for c in checkins:
+            guests = c.get("guests", [])
+            capo = ""
+            if guests:
+                capo = f"{guests[0].get('cognome','')}_{guests[0].get('nome','')}"
+            prop = prop_map.get(c["property_id"], {})
+            prop_name = (prop.get("nome", "") or "casa").replace(" ", "_")
+            arrivo = c.get("data_arrivo", "")
+
+            # Schedine Alloggiati Web PDF
+            if categoria in ("all", "schedine") and c.get("alloggiati_ricevuta_pdf"):
+                fname = f"schedine/{arrivo}_{prop_name}_{capo}_AW.pdf"
+                zf.writestr(fname, base64.b64decode(c["alloggiati_ricevuta_pdf"]))
+                files_added += 1
+
+            # Ricevute Comune
+            if categoria in ("all", "ricevute"):
+                for idx, r in enumerate(c.get("comune_receipts", []) or []):
+                    if not r.get("pdf_base64"):
+                        continue
+                    n_clean = (r.get("numero") or f"r{idx}").replace("/", "_")
+                    fname = f"ricevute_imposta/{r.get('data','')}_{prop_name}_{capo}_N{n_clean}.pdf"
+                    zf.writestr(fname, base64.b64decode(r["pdf_base64"]))
+                    files_added += 1
+
+    if files_added == 0:
+        raise HTTPException(404, "Nessun documento disponibile nel periodo selezionato")
+
+    buf.seek(0)
+    safe_owner = (owner_id.replace("/", "_") or "owner")[:30]
+    filename = f"archivio_{safe_owner}_{date_from or 'inizio'}_{date_to or 'oggi'}.zip"
+    return StreamingResponse(
+        buf,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @app.on_event("shutdown")

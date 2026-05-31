@@ -7,6 +7,8 @@ import Dashboard from "@/pages/Dashboard";
 import Checkin from "@/pages/Checkin";
 import Settings from "@/pages/Settings";
 import Archive from "@/pages/Archive";
+import Owners from "@/pages/Owners";
+import OwnerArchive from "@/pages/OwnerArchive";
 
 function AppRouter() {
   const location = useLocation();
@@ -22,6 +24,8 @@ function AppRouter() {
       <Route path="/dashboard" element={<Dashboard />} />
       <Route path="/checkin" element={<Checkin />} />
       <Route path="/archive" element={<Archive />} />
+      <Route path="/archive/owners" element={<Owners />} />
+      <Route path="/archive/owners/:ownerId" element={<OwnerArchive />} />
       <Route path="/settings" element={<Settings />} />
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>

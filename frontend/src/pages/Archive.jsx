@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import Layout from "@/components/Layout";
 import api from "@/lib/api";
 
@@ -37,6 +38,17 @@ export default function Archive() {
       >
         Archivio Invii
       </h2>
+
+      {/* Sub-nav */}
+      <div className="flex gap-2 flex-wrap">
+        <Link
+          to="/archive/owners"
+          data-testid="nav-archive-owners"
+          className="border border-[#1E1E28] hover:border-emerald-500/60 hover:text-emerald-400 text-zinc-300 px-4 py-2 uppercase tracking-[0.25em] text-[10px] cursor-pointer transition-colors"
+        >
+          → Archivio per Proprietario / Codice Fiscale
+        </Link>
+      </div>
 
       <RefreshReceiptsButton />
 
