@@ -821,10 +821,18 @@ function ComuneReceiptButton({ checkinId, guests, importo }) {
     setLoading(true); setError("");
     try {
       const r = await api.post(`/checkins/${checkinId}/comune-receipt`, { numero_ricevuta: numero, data_ricevuta: data, ospite_index: ospiteIdx });
-      const downloadUrl = `${process.env.REACT_APP_BACKEND_URL}${r.data.download_url}`;
-      // Open backend GET URL directly — uses session cookie, no blob: URL
-      // (ad-blockers don't block normal HTTP URLs on the same origin)
-      window.open(downloadUrl, "_blank");
+      // Fetch PDF via authenticated XHR (no inline navigation → not blocked by extensions)
+      const pdfRes = await api.get(`/checkins/${checkinId}/comune-receipts/${r.data.index}`, { responseType: "blob" });
+      const blob = new Blob([pdfRes.data], { type: "application/pdf" });
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = blobUrl;
+      a.download = `ricevuta_comune_${numero}.pdf`;
+      a.style.display = "none";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
       setOpen(false); setNumero("");
     } catch (e) {
       setError(e.response?.data?.detail || e.message || "Errore generazione ricevuta");

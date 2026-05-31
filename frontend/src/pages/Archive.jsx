@@ -122,17 +122,14 @@ export default function Archive() {
                           <div className="flex flex-col gap-1 border border-[#1E1E28] p-3">
                             <span className="text-[10px] tracking-[0.25em] uppercase text-zinc-500 mb-1">Ricevute Imposta di Soggiorno</span>
                             {c.comune_receipts.map((rc, idx) => (
-                              <a
+                              <DownloadReceiptBtn
                                 key={idx}
-                                href={`${api.defaults.baseURL}/checkins/${c.checkin_id}/comune-receipts/${idx}`}
-                                target="_blank"
-                                rel="noreferrer"
-                                data-testid={`comune-receipt-${c.checkin_id}-${idx}`}
-                                className="flex justify-between items-center text-[10px] font-mono text-zinc-300 hover:text-zinc-100 hover:bg-[#15151C] px-2 py-2 cursor-pointer"
-                              >
-                                <span>N. {rc.numero} — {rc.data}</span>
-                                <span className="text-emerald-500">€ {rc.importo?.toFixed(2)} ↓</span>
-                              </a>
+                                checkinId={c.checkin_id}
+                                index={idx}
+                                numero={rc.numero}
+                                data={rc.data}
+                                importo={rc.importo}
+                              />
                             ))}
                           </div>
                         )}
@@ -162,21 +159,13 @@ export default function Archive() {
                           </details>
                         )}
                         {c.mode === "PROD" && aw?.success && (
-                          <a
-                            href={`${api.defaults.baseURL}/checkins/${c.checkin_id}/alloggiati-ricevuta`}
-                            target="_blank"
-                            rel="noreferrer"
-                            data-testid={`aw-pdf-${c.checkin_id}`}
-                            className={`text-center border px-4 py-3 uppercase tracking-widest text-[10px] cursor-pointer transition-colors ${
-                              c.alloggiati_ricevuta_pdf
-                                ? "border-emerald-500/40 text-emerald-400 hover:border-emerald-400"
-                                : "border-[#1E1E28] text-zinc-500 hover:border-zinc-500"
-                            }`}
-                          >
-                            {c.alloggiati_ricevuta_pdf
-                              ? "✓ Ricevuta Alloggiati Web (PDF)"
-                              : "Ricevuta Alloggiati Web — Disponibile dopo 24h"}
-                          </a>
+                          c.alloggiati_ricevuta_pdf ? (
+                            <DownloadAlloggiatiBtn checkinId={c.checkin_id} />
+                          ) : (
+                            <span className="text-center border border-[#1E1E28] text-zinc-500 px-4 py-3 uppercase tracking-widest text-[10px]">
+                              Ricevuta Alloggiati Web — Disponibile dopo 24h
+                            </span>
+                          )
                         )}
                       </div>
                     </div>
@@ -200,6 +189,63 @@ function Tag({ ok, skipped, label }) {
   const tag = skipped ? "SKIP" : ok ? "OK" : "ERR";
   const color = skipped ? "text-zinc-500" : ok ? "text-emerald-500" : "text-red-500";
   return <span className={color}>{label} [{tag}]</span>;
+}
+
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.style.display = "none";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
+
+function DownloadReceiptBtn({ checkinId, index, numero, data, importo }) {
+  const [loading, setLoading] = useState(false);
+  const dl = async () => {
+    setLoading(true);
+    try {
+      const r = await api.get(`/checkins/${checkinId}/comune-receipts/${index}`, { responseType: "blob" });
+      downloadBlob(new Blob([r.data], { type: "application/pdf" }), `ricevuta_comune_${numero}.pdf`);
+    } finally { setLoading(false); }
+  };
+  return (
+    <button
+      type="button"
+      onClick={dl}
+      disabled={loading}
+      data-testid={`comune-receipt-${checkinId}-${index}`}
+      className="flex justify-between items-center text-[10px] font-mono text-zinc-300 hover:text-zinc-100 hover:bg-[#15151C] px-2 py-2 cursor-pointer disabled:opacity-50"
+    >
+      <span>N. {numero} — {data}</span>
+      <span className="text-emerald-500">€ {importo?.toFixed(2)} {loading ? "..." : "↓"}</span>
+    </button>
+  );
+}
+
+function DownloadAlloggiatiBtn({ checkinId }) {
+  const [loading, setLoading] = useState(false);
+  const dl = async () => {
+    setLoading(true);
+    try {
+      const r = await api.get(`/checkins/${checkinId}/alloggiati-ricevuta`, { responseType: "blob" });
+      downloadBlob(new Blob([r.data], { type: "application/pdf" }), `ricevuta_alloggiati_${checkinId}.pdf`);
+    } finally { setLoading(false); }
+  };
+  return (
+    <button
+      type="button"
+      onClick={dl}
+      disabled={loading}
+      data-testid={`aw-pdf-${checkinId}`}
+      className="text-center border border-emerald-500/40 text-emerald-400 hover:border-emerald-400 px-4 py-3 uppercase tracking-widest text-[10px] cursor-pointer disabled:opacity-50"
+    >
+      {loading ? "Download..." : "✓ Ricevuta Alloggiati Web (PDF)"}
+    </button>
+  );
 }
 
 function RefreshReceiptsButton() {
