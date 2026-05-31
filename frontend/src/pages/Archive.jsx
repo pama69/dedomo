@@ -220,24 +220,49 @@ function downloadBlob(blob, filename) {
 
 function DownloadReceiptBtn({ checkinId, index, numero, data, importo }) {
   const [loading, setLoading] = useState(false);
-  const dl = async () => {
+  const [dataUrl, setDataUrl] = useState("");
+
+  const load = async () => {
+    if (dataUrl) { setDataUrl(""); return; }  // toggle close
     setLoading(true);
     try {
       const r = await api.get(`/checkins/${checkinId}/comune-receipts/${index}`, { responseType: "blob" });
-      downloadBlob(new Blob([r.data], { type: "application/pdf" }), `ricevuta_comune_${numero}.pdf`);
+      const reader = new FileReader();
+      reader.onload = () => setDataUrl(reader.result);
+      reader.readAsDataURL(new Blob([r.data], { type: "application/pdf" }));
     } finally { setLoading(false); }
   };
+
   return (
-    <button
-      type="button"
-      onClick={dl}
-      disabled={loading}
-      data-testid={`comune-receipt-${checkinId}-${index}`}
-      className="flex justify-between items-center text-[10px] font-mono text-zinc-300 hover:text-zinc-100 hover:bg-[#15151C] px-2 py-2 cursor-pointer disabled:opacity-50"
-    >
-      <span>N. {numero} — {data}</span>
-      <span className="text-emerald-500">€ {importo?.toFixed(2)} {loading ? "..." : "↓"}</span>
-    </button>
+    <div className="flex flex-col gap-2">
+      <button
+        type="button"
+        onClick={load}
+        disabled={loading}
+        data-testid={`comune-receipt-${checkinId}-${index}`}
+        className="flex justify-between items-center text-[10px] font-mono text-zinc-300 hover:text-zinc-100 hover:bg-[#15151C] px-2 py-2 cursor-pointer disabled:opacity-50"
+      >
+        <span>N. {numero} — {data}</span>
+        <span className="text-emerald-500">€ {importo?.toFixed(2)} {loading ? "..." : dataUrl ? "▲" : "▼"}</span>
+      </button>
+      {dataUrl && (
+        <div className="flex flex-col gap-2">
+          <iframe
+            src={dataUrl}
+            title={`Ricevuta ${numero}`}
+            className="w-full h-[600px] border border-[#1E1E28] bg-white"
+            data-testid={`comune-receipt-viewer-${checkinId}-${index}`}
+          />
+          <a
+            href={dataUrl}
+            download={`ricevuta_comune_${numero}.pdf`}
+            className="text-center border border-emerald-500/40 hover:border-emerald-400 text-emerald-400 px-4 py-2 uppercase tracking-widest text-[10px] cursor-pointer"
+          >
+            ↓ Scarica PDF
+          </a>
+        </div>
+      )}
+    </div>
   );
 }
 
