@@ -1238,7 +1238,7 @@ async def download_comune_receipt(
         io.BytesIO(base64.b64decode(pdf_b64)),
         media_type="application/pdf",
         headers={
-            "Content-Disposition": f'attachment; filename="ricevuta_{receipts[index].get("numero","")}.pdf"'
+            "Content-Disposition": f'inline; filename="ricevuta_{receipts[index].get("numero","")}.pdf"'
         },
     )
 
