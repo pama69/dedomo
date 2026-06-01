@@ -9,6 +9,7 @@ import Settings from "@/pages/Settings";
 import Archive from "@/pages/Archive";
 import Owners from "@/pages/Owners";
 import OwnerArchive from "@/pages/OwnerArchive";
+import Admin from "@/pages/Admin";
 
 function AppRouter() {
   const location = useLocation();
@@ -26,6 +27,7 @@ function AppRouter() {
       <Route path="/archive" element={<Archive />} />
       <Route path="/archive/owners" element={<Owners />} />
       <Route path="/archive/owners/:ownerId" element={<OwnerArchive />} />
+      <Route path="/admin" element={<Admin />} />
       <Route path="/settings" element={<Settings />} />
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>

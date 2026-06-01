@@ -1,5 +1,6 @@
 import { useLocation, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import api from "@/lib/api";
 import BottomNav from "@/components/BottomNav";
 import NotificationsBell from "@/components/NotificationsBell";
@@ -38,6 +39,15 @@ export default function Layout({ children }) {
           OSPITALO
         </h1>
         <div className="flex items-center gap-2">
+          {user?.is_admin && (
+            <Link
+              to="/admin"
+              data-testid="header-admin-link"
+              className="text-[10px] tracking-[0.25em] uppercase text-amber-400 hover:text-amber-300 transition-colors cursor-pointer"
+            >
+              Admin
+            </Link>
+          )}
           <NotificationsBell />
           <button
             data-testid="logout-button"

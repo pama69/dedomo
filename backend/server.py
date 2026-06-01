@@ -114,6 +114,20 @@ async def get_current_user(request: Request) -> Dict[str, Any]:
     return user
 
 
+ADMIN_EMAILS = set(
+    e.strip().lower() for e in os.environ.get("ADMIN_EMAILS", "").split(",") if e.strip()
+)
+
+
+async def get_admin_user(user=Depends(get_current_user)) -> Dict[str, Any]:
+    """Same as get_current_user but enforces that the user's email is in the
+    ADMIN_EMAILS whitelist."""
+    email = (user.get("email") or "").lower()
+    if not ADMIN_EMAILS or email not in ADMIN_EMAILS:
+        raise HTTPException(status_code=403, detail="Accesso amministratore richiesto")
+    return user
+
+
 class SessionRequest(BaseModel):
     session_id: str
 
@@ -188,6 +202,7 @@ async def auth_me(user: Dict[str, Any] = Depends(get_current_user)):
         "email": user["email"],
         "name": user.get("name"),
         "picture": user.get("picture"),
+        "is_admin": (user.get("email") or "").lower() in ADMIN_EMAILS,
     }
 
 
@@ -1666,6 +1681,241 @@ async def shutdown_db_client():
     client.close()
     if scheduler and scheduler.running:
         scheduler.shutdown(wait=False)
+
+
+# ====================================================================
+# ADMIN PANEL
+# ====================================================================
+
+@api_router.get("/admin/overview")
+async def admin_overview(admin=Depends(get_admin_user)):
+    """Aggregate metrics across all users, properties, checkins."""
+    from datetime import date as _date
+
+    now = datetime.now(timezone.utc)
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    week_ago = now - timedelta(days=7)
+    month_ago = now - timedelta(days=30)
+    quarter_ago = now - timedelta(days=90)
+
+    total_users = await db.users.count_documents({})
+    new_week = await db.users.count_documents({"created_at": {"$gte": week_ago.isoformat()}})
+    total_props = await db.properties.count_documents({})
+
+    total_checkins = await db.checkins.count_documents({})
+    today_checkins = await db.checkins.count_documents({"created_at": {"$gte": today_start.isoformat()}})
+    week_checkins = await db.checkins.count_documents({"created_at": {"$gte": week_ago.isoformat()}})
+    month_checkins = await db.checkins.count_documents({"created_at": {"$gte": month_ago.isoformat()}})
+
+    # Active users last 30d (made at least 1 checkin)
+    pipeline = [
+        {"$match": {"created_at": {"$gte": month_ago.isoformat()}}},
+        {"$group": {"_id": "$user_id"}},
+        {"$count": "n"},
+    ]
+    res = await db.checkins.aggregate(pipeline).to_list(1)
+    active_users = res[0]["n"] if res else 0
+
+    # Foreign vs italian guests (last 30d)
+    pipeline = [
+        {"$match": {"created_at": {"$gte": month_ago.isoformat()}}},
+        {"$unwind": "$guests"},
+        {"$group": {"_id": "$guests.is_foreign", "n": {"$sum": 1}}},
+    ]
+    res = await db.checkins.aggregate(pipeline).to_list(10)
+    foreign_count = sum(r["n"] for r in res if r.get("_id"))
+    italian_count = sum(r["n"] for r in res if not r.get("_id"))
+    total_guests_30d = foreign_count + italian_count
+
+    # Success rate Alloggiati Web & Turismo5 (last 30d, PROD only)
+    aw_ok = await db.checkins.count_documents({
+        "created_at": {"$gte": month_ago.isoformat()},
+        "mode": "PROD",
+        "results.alloggiati_web.success": True,
+    })
+    aw_total = await db.checkins.count_documents({
+        "created_at": {"$gte": month_ago.isoformat()},
+        "mode": "PROD",
+        "results.alloggiati_web": {"$exists": True},
+    })
+    t5_ok = await db.checkins.count_documents({
+        "created_at": {"$gte": month_ago.isoformat()},
+        "mode": "PROD",
+        "results.ross1000.success": True,
+    })
+    t5_total = await db.checkins.count_documents({
+        "created_at": {"$gte": month_ago.isoformat()},
+        "mode": "PROD",
+        "results.ross1000": {"$exists": True},
+    })
+
+    # Total tourist tax collected (sum of all receipts importo)
+    pipeline = [
+        {"$unwind": "$comune_receipts"},
+        {"$group": {"_id": None, "tot": {"$sum": "$comune_receipts.importo"}, "n": {"$sum": 1}}},
+    ]
+    res = await db.checkins.aggregate(pipeline).to_list(1)
+    tax_total = res[0]["tot"] if res else 0
+    tax_count = res[0]["n"] if res else 0
+
+    # Daily checkin chart (last 90 days)
+    pipeline = [
+        {"$match": {"created_at": {"$gte": quarter_ago.isoformat()}}},
+        {"$group": {
+            "_id": {"$substr": ["$created_at", 0, 10]},
+            "n": {"$sum": 1},
+        }},
+        {"$sort": {"_id": 1}},
+    ]
+    daily = await db.checkins.aggregate(pipeline).to_list(100)
+    daily_chart = [{"date": d["_id"], "checkins": d["n"]} for d in daily]
+
+    # Daily signups (last 90 days)
+    pipeline = [
+        {"$match": {"created_at": {"$gte": quarter_ago.isoformat()}}},
+        {"$group": {
+            "_id": {"$substr": ["$created_at", 0, 10]},
+            "n": {"$sum": 1},
+        }},
+        {"$sort": {"_id": 1}},
+    ]
+    signups = await db.users.aggregate(pipeline).to_list(100)
+    signups_chart = [{"date": s["_id"], "signups": s["n"]} for s in signups]
+
+    # Retry queue snapshot
+    pending_retries = await db.checkins.count_documents({
+        "$or": [
+            {"retry_state.alloggiati.status": "pending"},
+            {"retry_state.turismo5.status": "pending"},
+        ],
+    })
+    exhausted_retries = await db.checkins.count_documents({
+        "$or": [
+            {"retry_state.alloggiati.status": "exhausted"},
+            {"retry_state.turismo5.status": "exhausted"},
+        ],
+    })
+
+    return {
+        "users": {
+            "total": total_users,
+            "new_this_week": new_week,
+            "active_30d": active_users,
+        },
+        "properties": {
+            "total": total_props,
+        },
+        "checkins": {
+            "total": total_checkins,
+            "today": today_checkins,
+            "this_week": week_checkins,
+            "this_month": month_checkins,
+        },
+        "guests_30d": {
+            "italian": italian_count,
+            "foreign": foreign_count,
+            "total": total_guests_30d,
+            "foreign_pct": round(foreign_count * 100 / total_guests_30d, 1) if total_guests_30d > 0 else 0,
+        },
+        "success_rate_30d": {
+            "alloggiati_web": round(aw_ok * 100 / aw_total, 1) if aw_total > 0 else None,
+            "alloggiati_web_ok": aw_ok,
+            "alloggiati_web_total": aw_total,
+            "turismo5": round(t5_ok * 100 / t5_total, 1) if t5_total > 0 else None,
+            "turismo5_ok": t5_ok,
+            "turismo5_total": t5_total,
+        },
+        "tourist_tax": {
+            "total_eur": round(tax_total, 2),
+            "receipts_count": tax_count,
+        },
+        "retries": {
+            "pending": pending_retries,
+            "exhausted": exhausted_retries,
+        },
+        "charts": {
+            "daily_checkins_90d": daily_chart,
+            "daily_signups_90d": signups_chart,
+        },
+    }
+
+
+@api_router.get("/admin/users")
+async def admin_list_users(
+    search: Optional[str] = None,
+    admin=Depends(get_admin_user),
+):
+    """List all users with stats (props count, checkins count, last activity)."""
+    q: Dict[str, Any] = {}
+    if search:
+        q = {
+            "$or": [
+                {"email": {"$regex": search, "$options": "i"}},
+                {"name": {"$regex": search, "$options": "i"}},
+            ]
+        }
+    users = await db.users.find(q, {"_id": 0}).sort("created_at", -1).to_list(500)
+
+    enriched = []
+    for u in users:
+        props_n = await db.properties.count_documents({"user_id": u["user_id"]})
+        checkins_n = await db.checkins.count_documents({"user_id": u["user_id"]})
+        # Last checkin date
+        last_ck = await db.checkins.find_one(
+            {"user_id": u["user_id"]},
+            {"_id": 0, "created_at": 1},
+            sort=[("created_at", -1)],
+        )
+        last_session = await db.user_sessions.find_one(
+            {"user_id": u["user_id"]},
+            {"_id": 0, "expires_at": 1, "created_at": 1},
+            sort=[("expires_at", -1)],
+        )
+        enriched.append({
+            "user_id": u["user_id"],
+            "email": u.get("email"),
+            "name": u.get("name"),
+            "picture": u.get("picture"),
+            "created_at": u.get("created_at"),
+            "properties_count": props_n,
+            "checkins_count": checkins_n,
+            "last_checkin_at": last_ck.get("created_at") if last_ck else None,
+            "last_login_at": (last_session.get("created_at") or last_session.get("expires_at"))
+                if last_session else None,
+        })
+    return {"users": enriched, "total": len(enriched)}
+
+
+@api_router.get("/admin/user/{user_id}")
+async def admin_user_detail(user_id: str, admin=Depends(get_admin_user)):
+    """Detail view for a single user: properties + recent checkins."""
+    u = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+    if not u:
+        raise HTTPException(404, "Utente non trovato")
+    props = await db.properties.find({"user_id": user_id}, {"_id": 0}).to_list(100)
+    recent_ck = await db.checkins.find(
+        {"user_id": user_id},
+        {"_id": 0, "checkin_id": 1, "data_arrivo": 1, "data_partenza": 1,
+         "mode": 1, "guests": 1, "results.alloggiati_web.success": 1,
+         "results.ross1000.success": 1, "created_at": 1, "property_id": 1},
+    ).sort("created_at", -1).limit(20).to_list(20)
+    # Strip guest detail for privacy — only counts and capogruppo
+    for c in recent_ck:
+        g = c.get("guests", [])
+        c["guests_count"] = len(g)
+        c["capogruppo"] = f"{g[0].get('cognome','')} {g[0].get('nome','')}".strip() if g else ""
+        c.pop("guests", None)
+    return {
+        "user": {
+            "user_id": u["user_id"],
+            "email": u.get("email"),
+            "name": u.get("name"),
+            "picture": u.get("picture"),
+            "created_at": u.get("created_at"),
+        },
+        "properties": props,
+        "recent_checkins": recent_ck,
+    }
 
 
 # ====================================================================
