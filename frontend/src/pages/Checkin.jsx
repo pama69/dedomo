@@ -779,93 +779,109 @@ function ComuneNascitaField({ luogoNascita, comuneCode, provSigla, notFound, pro
   const [query, setQuery] = useState(cleanQuery(luogoNascita));
   const [results, setResults] = useState([]);
   const [searching, setSearching] = useState(false);
-  const [showSearch, setShowSearch] = useState(!!notFound);
+  const [focused, setFocused] = useState(false);
+  const [highlighted, setHighlighted] = useState(-1);
+  const lastReqId = useRef(0);
 
   useEffect(() => {
-    setQuery(cleanQuery(luogoNascita));
+    const c = cleanQuery(luogoNascita);
+    if (c !== query) setQuery(c);
+    // eslint-disable-next-line
   }, [luogoNascita]);
 
   useEffect(() => {
-    if (notFound) setShowSearch(true);
-  }, [notFound]);
-
-  const doSearch = async () => {
-    if (!query.trim() || !propertyId) return;
+    if (!focused) return;
+    const q = (query || "").trim();
+    if (q.length < 2) { setResults([]); return; }
+    const reqId = ++lastReqId.current;
     setSearching(true);
-    try {
-      const r = await api.get(
-        `/properties/${propertyId}/alloggiati/comuni?q=${encodeURIComponent(query)}`
-      );
-      setResults(r.data?.results || []);
-    } catch {
-      setResults([]);
-    } finally {
-      setSearching(false);
-    }
-  };
+    const handle = setTimeout(async () => {
+      try {
+        const r = await api.get(
+          `/properties/${propertyId}/alloggiati/comuni-fast?q=${encodeURIComponent(q)}`,
+        );
+        if (reqId !== lastReqId.current) return;
+        setResults(r.data?.results || []);
+      } catch {
+        if (reqId === lastReqId.current) setResults([]);
+      } finally {
+        if (reqId === lastReqId.current) setSearching(false);
+      }
+    }, 250);
+    return () => clearTimeout(handle);
+    // eslint-disable-next-line
+  }, [query, focused, propertyId]);
 
   const pick = (c) => {
-    onChange(c.nome, c.codice, c.provincia);
-    setShowSearch(false);
+    setQuery(c.nome);
     setResults([]);
+    setFocused(false);
+    setHighlighted(-1);
+    onChange(c.nome, c.codice, c.provincia);
   };
 
-  const hasMatch = comuneCode && provSigla;
+  const onKey = (e) => {
+    if (!results.length) return;
+    if (e.key === "ArrowDown") { e.preventDefault(); setHighlighted((h) => Math.min(h + 1, results.length - 1)); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); setHighlighted((h) => Math.max(h - 1, 0)); }
+    else if (e.key === "Enter" && highlighted >= 0) { e.preventDefault(); pick(results[highlighted]); }
+    else if (e.key === "Escape") { setFocused(false); }
+  };
+
+  const hasMatch = !!comuneCode && !!provSigla;
+  const queryLong = query.trim().length >= 2;
+  const showDropdown = focused && queryLong;
 
   return (
-    <div className="flex flex-col gap-1">
+    <div className="flex flex-col gap-1 relative">
       <span className="text-[10px] tracking-[0.25em] uppercase text-zinc-500">Luogo Nascita</span>
       <input
         type="text"
         data-testid="guest-luogo"
-        value={luogoNascita || ""}
-        onChange={(e) => onChange(e.target.value, "", "")}
-        placeholder="Es. Pescara"
+        value={query}
+        onChange={(e) => { setQuery(e.target.value); setHighlighted(-1); }}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setTimeout(() => setFocused(false), 150)}
+        onKeyDown={onKey}
+        placeholder="Inizia a scrivere il comune..."
+        autoComplete="off"
         className="bg-transparent border border-[#1E1E28] px-4 py-3 text-zinc-100 placeholder:text-zinc-600 focus:border-zinc-300 outline-none w-full font-mono text-sm"
       />
-      {hasMatch ? (
+      {showDropdown && (
+        <div className="absolute top-full left-0 right-0 mt-1 border border-[#1E1E28] bg-[#0E0E14] z-20 max-h-60 overflow-y-auto shadow-lg">
+          {searching && results.length === 0 && (
+            <div className="px-3 py-2 text-zinc-500 text-[10px] font-mono">Ricerca...</div>
+          )}
+          {results.map((c, i) => (
+            <button
+              key={c.codice}
+              type="button"
+              onMouseDown={(e) => { e.preventDefault(); pick(c); }}
+              onMouseEnter={() => setHighlighted(i)}
+              data-testid={`comune-result-${c.codice}`}
+              className={`w-full text-left text-[11px] font-mono px-3 py-2 cursor-pointer ${
+                highlighted === i ? "bg-[#15151C] text-zinc-100" : "text-zinc-300 hover:bg-[#15151C]"
+              }`}
+            >
+              <span>{c.nome}</span>
+              {c.provincia && <span className="text-zinc-500 ml-1">({c.provincia})</span>}
+              <span className="text-zinc-600 ml-2">{c.codice}</span>
+            </button>
+          ))}
+          {!searching && results.length === 0 && queryLong && (
+            <div className="px-3 py-2 text-zinc-500 text-[10px] font-mono">Nessun comune trovato</div>
+          )}
+        </div>
+      )}
+      {hasMatch && !focused && (
         <div className="flex items-center gap-2 text-[10px] font-mono mt-1">
           <span className="text-emerald-500">✓ {provSigla}</span>
           <span className="text-zinc-500">[ {comuneCode} ]</span>
-          <button
-            type="button"
-            onClick={() => { setShowSearch(true); setQuery(luogoNascita || ""); }}
-            className="ml-auto text-zinc-500 hover:text-zinc-100 uppercase tracking-widest cursor-pointer"
-          >
-            Cambia
-          </button>
         </div>
-      ) : luogoNascita ? (
+      )}
+      {!hasMatch && luogoNascita && !focused && (
         <div className="text-amber-400 text-[10px] font-mono mt-1">
-          ⚠ Comune non riconosciuto. Cercalo manualmente:
-        </div>
-      ) : null}
-
-      {showSearch && (
-        <div className="border border-[#1E1E28] p-3 mt-2 flex flex-col gap-2 bg-[#0E0E14]">
-          <div className="flex gap-2">
-            <input
-              type="text"
-              data-testid="comune-search-input"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), doSearch())}
-              placeholder="Digita nome comune..."
-              className="flex-1 bg-transparent border border-[#1E1E28] px-3 py-2 text-zinc-100 placeholder:text-zinc-600 focus:border-zinc-300 outline-none text-sm font-mono"
-            />
-            <button type="button" onClick={doSearch} disabled={searching} className="border border-[#1E1E28] hover:border-zinc-500 px-3 py-2 text-zinc-300 uppercase tracking-widest text-[10px] cursor-pointer disabled:opacity-50">
-              {searching ? "..." : "Cerca"}
-            </button>
-          </div>
-          {results.length > 0 && (
-            <div className="max-h-40 overflow-y-auto flex flex-col gap-1">
-              {results.map((c) => (
-                <button key={c.codice} type="button" onClick={() => pick(c)} className="text-left text-[10px] font-mono text-zinc-300 hover:text-zinc-100 hover:bg-[#15151C] px-2 py-2 cursor-pointer">
-                  {c.nome} {c.provincia ? `(${c.provincia})` : ""} — {c.codice}
-                </button>
-              ))}
-            </div>
-          )}
+          ⚠ Comune non riconosciuto. Inizia a scrivere per cercarlo.
         </div>
       )}
     </div>

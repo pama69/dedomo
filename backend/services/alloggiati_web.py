@@ -473,6 +473,59 @@ def _get_luoghi_cached(utente: str, token: str):
     return rows
 
 
+def cerca_comuni_fast(utente: str, token: str, query: str, limit: int = 15) -> Dict[str, Any]:
+    """Fast autocomplete search for Italian municipalities only.
+    Uses the cached 'Luoghi' table. Italian comuni have codes NOT starting with '1'
+    (Italian ISTAT codes start with the region prefix, e.g. '058091' = Roma).
+    """
+    try:
+        rows = _get_luoghi_cached(utente, token)
+        if rows is None:
+            return {"success": False, "message": "Errore caricamento tabella"}
+
+        q = (query or "").strip().upper()
+        if not q:
+            return {"success": True, "results": []}
+
+        # Strip parens like "(RM)" and punctuation
+        import re as _re
+        q = _re.sub(r"\([^)]*\)", "", q).strip()
+        q = _re.sub(r"[^\w\s]", " ", q).strip()
+        if not q:
+            return {"success": True, "results": []}
+
+        matches = []
+        for row in rows:
+            codice = row["codice"]
+            # Italian comuni: code starts with "0" or single digit followed by 5 digits
+            # In practice: NOT starting with "1" (those are foreign countries)
+            if codice.startswith("1"):
+                continue
+            if q not in row["_upper"]:
+                continue
+            matches.append(row)
+
+        def _score(r):
+            name = r["_upper"]
+            if name == q:
+                return 0
+            if name.startswith(q):
+                return 1
+            return 2
+        matches.sort(key=lambda r: (_score(r), r["nome"]))
+
+        return {
+            "success": True,
+            "results": [
+                {"codice": r["codice"], "nome": r["nome"], "provincia": r["provincia"]}
+                for r in matches[:limit]
+            ],
+            "total": len(matches),
+        }
+    except Exception as e:
+        return {"success": False, "message": f"Errore: {str(e)}"}
+
+
 def cerca_paesi(utente: str, token: str, query: str, limit: int = 20) -> Dict[str, Any]:
     """Fast autocomplete search for foreign countries.
 

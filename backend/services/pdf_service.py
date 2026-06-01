@@ -124,40 +124,40 @@ def generate_comune_receipt(
     story.append(t)
     story.append(Spacer(1, 0.5 * cm))
 
-    # Importo
-    importo_style = ParagraphStyle(
-        "Importo", parent=body, fontSize=20, alignment=1,
-        textColor=accent, fontName="Helvetica-Bold",
-    )
-    imp_box = Table(
-        [[Paragraph(f"€ {importo:.2f}", importo_style)]],
-        colWidths=[16 * cm],
-    )
-    imp_box.setStyle(TableStyle([
-        ("BOX", (0, 0), (-1, -1), 1.5, primary),
-        ("LINEBELOW", (0, 0), (-1, 0), 0.5, primary),
-        ("TOPPADDING", (0, 0), (-1, -1), 12),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 12),
-    ]))
-    story.append(imp_box)
-    story.append(Spacer(1, 0.5 * cm))
-
-    # Soggiorno
+    # Soggiorno + Totale (totale come ultima riga, allineato a destra)
     arrivo_fmt = datetime.fromisoformat(data_arrivo).strftime("%d/%m/%Y")
     partenza_fmt = datetime.fromisoformat(data_partenza).strftime("%d/%m/%Y")
+    importo_label_style = ParagraphStyle(
+        "ImpLabel", parent=body, fontSize=11, alignment=0,
+        textColor=primary, fontName="Helvetica-Bold",
+    )
+    importo_value_style = ParagraphStyle(
+        "ImpValue", parent=body, fontSize=14, alignment=2,
+        textColor=accent, fontName="Helvetica-Bold",
+    )
     soggiorno_data = [
         ["Periodo di soggiorno:", f"Dal {arrivo_fmt} al {partenza_fmt}"],
         ["N. Adulti:", str(n_adulti)],
         ["N. Persone esenti autocertificate:", str(n_esenti)],
         ["N. pernottamenti:", str(pernottamenti)],
+        [
+            Paragraph("TOTALE IMPOSTA DI SOGGIORNO", importo_label_style),
+            Paragraph(f"€ {importo:.2f}", importo_value_style),
+        ],
     ]
-    t = Table(soggiorno_data, colWidths=[6 * cm, 10 * cm])
+    t = Table(soggiorno_data, colWidths=[8 * cm, 8 * cm])
     t.setStyle(TableStyle([
         ("BOX", (0, 0), (-1, -1), 0.75, primary),
-        ("INNERGRID", (0, 0), (-1, -1), 0.5, primary),
-        ("FONT", (0, 0), (0, -1), "Helvetica-Bold", 10),
+        ("INNERGRID", (0, 0), (-1, -2), 0.5, primary),
+        ("LINEABOVE", (0, -1), (-1, -1), 1.2, primary),
+        ("FONT", (0, 0), (0, -2), "Helvetica-Bold", 10),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
         ("TOPPADDING", (0, 0), (-1, -1), 6),
+        # Highlight total row
+        ("BACKGROUND", (0, -1), (-1, -1), colors.HexColor("#FAFAFA")),
+        ("TOPPADDING", (0, -1), (-1, -1), 10),
+        ("BOTTOMPADDING", (0, -1), (-1, -1), 10),
+        ("VALIGN", (0, -1), (-1, -1), "MIDDLE"),
     ]))
     story.append(t)
     story.append(Spacer(1, 0.5 * cm))
