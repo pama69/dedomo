@@ -176,10 +176,179 @@ function OverviewTab() {
   );
 }
 
+function UserDetailModal({ userId, onClose, onChanged }) {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [toggling, setToggling] = useState(false);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const r = await api.get(`/admin/user/${userId}`);
+      setData(r.data);
+    } finally { setLoading(false); }
+  };
+
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [userId]);
+
+  const toggleDisabled = async () => {
+    if (!data?.user) return;
+    const action = data.user.disabled ? "riattivare" : "disabilitare";
+    if (!window.confirm(`Vuoi davvero ${action} l'utente ${data.user.email}?`)) return;
+    setToggling(true);
+    try {
+      await api.post(`/admin/user/${userId}/toggle-disabled`);
+      await load();
+      onChanged && onChanged();
+    } catch (e) {
+      alert(e.response?.data?.detail || "Errore");
+    } finally { setToggling(false); }
+  };
+
+  const fmtDate = (iso) => {
+    if (!iso) return "—";
+    try { return new Date(iso).toLocaleDateString("it-IT"); } catch { return iso; }
+  };
+
+  return (
+    <div
+      className="fixed inset-0 bg-black/70 z-50 flex items-start justify-center p-4 overflow-y-auto"
+      onClick={onClose}
+      data-testid="admin-user-detail-modal"
+    >
+      <div
+        className="bg-[#0E0E14] border border-[#1E1E28] max-w-3xl w-full my-8 flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="px-4 py-3 border-b border-[#1E1E28] flex items-center justify-between">
+          <span className="text-[10px] tracking-[0.25em] uppercase text-zinc-400">Dettaglio Utente</span>
+          <button onClick={onClose} className="text-zinc-500 hover:text-zinc-100 cursor-pointer text-lg">✕</button>
+        </div>
+        {loading ? (
+          <div className="p-6 text-zinc-500 text-sm font-mono">Caricamento...</div>
+        ) : !data ? (
+          <div className="p-6 text-red-500 text-sm font-mono">Errore</div>
+        ) : (
+          <div className="p-4 flex flex-col gap-4">
+            {/* Header */}
+            <div className="flex items-baseline justify-between flex-wrap gap-2">
+              <div className="flex flex-col">
+                <span className="text-zinc-100 text-lg font-bold">{data.user.name || data.user.email}</span>
+                <span className="text-zinc-500 text-[11px] font-mono">{data.user.email}</span>
+                <span className="text-zinc-600 text-[10px] font-mono">Registrato {fmtDate(data.user.created_at)}</span>
+              </div>
+              <div className="flex items-center gap-3">
+                {data.user.disabled && (
+                  <span className="text-red-400 text-[10px] font-mono uppercase tracking-widest">
+                    Disabilitato {data.user.disabled_at ? `il ${fmtDate(data.user.disabled_at)}` : ""}
+                  </span>
+                )}
+                <button
+                  onClick={toggleDisabled}
+                  disabled={toggling}
+                  data-testid="admin-user-toggle-disabled"
+                  className={`flex items-center gap-2 px-3 py-2 border text-[10px] uppercase tracking-[0.25em] cursor-pointer transition-colors disabled:opacity-50 ${
+                    data.user.disabled
+                      ? "border-emerald-500/60 hover:bg-emerald-500/10 text-emerald-400"
+                      : "border-red-500/60 hover:bg-red-500/10 text-red-400"
+                  }`}
+                >
+                  <div className={`w-8 h-4 rounded-full relative transition-colors ${data.user.disabled ? "bg-red-500/30" : "bg-emerald-500/30"}`}>
+                    <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-zinc-100 transition-all ${data.user.disabled ? "left-0.5" : "right-0.5"}`} />
+                  </div>
+                  {toggling ? "..." : (data.user.disabled ? "Riattiva" : "Disabilita")}
+                </button>
+              </div>
+            </div>
+
+            {/* Stats grid */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+              <div className="border border-[#1E1E28] p-3">
+                <div className="text-[9px] tracking-[0.2em] uppercase text-zinc-500">Strutture</div>
+                <div className="text-xl font-bold text-zinc-100 font-mono">{data.stats.properties_count}</div>
+              </div>
+              <div className="border border-[#1E1E28] p-3">
+                <div className="text-[9px] tracking-[0.2em] uppercase text-zinc-500">Check-in Totali</div>
+                <div className="text-xl font-bold text-zinc-100 font-mono">{data.stats.checkins_total}</div>
+                <div className="text-[9px] font-mono text-zinc-500">{data.stats.checkins_month} ultimo mese</div>
+              </div>
+              <div className="border border-[#1E1E28] p-3">
+                <div className="text-[9px] tracking-[0.2em] uppercase text-zinc-500">Imposta Riscossa</div>
+                <div className="text-xl font-bold text-emerald-500 font-mono">€ {data.stats.tax_total_eur.toFixed(2)}</div>
+                <div className="text-[9px] font-mono text-zinc-500">{data.stats.tax_receipts_count} ricevute</div>
+              </div>
+              <div className="border border-[#1E1E28] p-3">
+                <div className="text-[9px] tracking-[0.2em] uppercase text-zinc-500">Ospiti</div>
+                <div className="text-xl font-bold text-zinc-100 font-mono">{data.stats.guests_italian + data.stats.guests_foreign}</div>
+                <div className="text-[9px] font-mono text-zinc-500">{data.stats.guests_italian} IT · {data.stats.guests_foreign} EE</div>
+              </div>
+            </div>
+
+            {/* Success rates */}
+            <div className="border border-[#1E1E28] p-3 flex flex-col gap-3">
+              <div className="text-[10px] tracking-[0.25em] uppercase text-zinc-500">Tassi Successo Invii (PROD)</div>
+              <div className="flex flex-col gap-1">
+                <div className="flex justify-between text-[10px] font-mono">
+                  <span className="text-zinc-400">Alloggiati Web</span>
+                  <span className="text-emerald-500">{data.stats.alloggiati_success_pct !== null ? `${data.stats.alloggiati_success_pct}%` : "—"} ({data.stats.alloggiati_ok}/{data.stats.alloggiati_total})</span>
+                </div>
+                <div className="h-2 bg-[#1E1E28]"><div className="h-full bg-emerald-500" style={{ width: `${data.stats.alloggiati_success_pct || 0}%` }} /></div>
+              </div>
+              <div className="flex flex-col gap-1">
+                <div className="flex justify-between text-[10px] font-mono">
+                  <span className="text-zinc-400">Turismo 5</span>
+                  <span className="text-emerald-500">{data.stats.turismo5_success_pct !== null ? `${data.stats.turismo5_success_pct}%` : "—"} ({data.stats.turismo5_ok}/{data.stats.turismo5_total})</span>
+                </div>
+                <div className="h-2 bg-[#1E1E28]"><div className="h-full bg-emerald-500" style={{ width: `${data.stats.turismo5_success_pct || 0}%` }} /></div>
+              </div>
+            </div>
+
+            {/* Properties */}
+            <div className="border border-[#1E1E28] p-3 flex flex-col gap-2">
+              <div className="text-[10px] tracking-[0.25em] uppercase text-zinc-500">Strutture ({data.properties.length})</div>
+              {data.properties.length === 0 ? (
+                <p className="text-zinc-500 text-[11px] font-mono">Nessuna struttura configurata.</p>
+              ) : (
+                <div className="flex flex-col gap-1">
+                  {data.properties.map((p) => (
+                    <div key={p.property_id} className="text-[10px] font-mono text-zinc-300 flex justify-between border border-[#1E1E28] px-2 py-1">
+                      <span>{p.nome || "(senza nome)"}</span>
+                      <span className="text-zinc-600">{p.comune} · {p.mode}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Recent checkins */}
+            <div className="border border-[#1E1E28] p-3 flex flex-col gap-2">
+              <div className="text-[10px] tracking-[0.25em] uppercase text-zinc-500">Ultimi 20 Check-in</div>
+              {data.recent_checkins.length === 0 ? (
+                <p className="text-zinc-500 text-[11px] font-mono">Nessun check-in.</p>
+              ) : (
+                <div className="flex flex-col gap-1 max-h-60 overflow-y-auto">
+                  {data.recent_checkins.map((c) => (
+                    <div key={c.checkin_id} className="text-[10px] font-mono text-zinc-300 flex justify-between border border-[#1E1E28] px-2 py-1">
+                      <span>{c.data_arrivo} → {c.data_partenza} · {c.guests_count} ospiti</span>
+                      <span className="text-zinc-500">{c.capogruppo}</span>
+                      <span className={c.results?.alloggiati_web?.success ? "text-emerald-500" : "text-zinc-600"}>{c.mode}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function UsersTab() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [detailId, setDetailId] = useState(null);
 
   const reload = async () => {
     setLoading(true);
@@ -229,13 +398,18 @@ function UsersTab() {
                 <th className="text-left px-3 py-2 text-zinc-500 uppercase tracking-widest">Utente</th>
                 <th className="text-center px-2 py-2 text-zinc-500 uppercase tracking-widest">Strutture</th>
                 <th className="text-center px-2 py-2 text-zinc-500 uppercase tracking-widest">Check-in</th>
-                <th className="text-left px-2 py-2 text-zinc-500 uppercase tracking-widest">Ultimo Check-in</th>
-                <th className="text-left px-2 py-2 text-zinc-500 uppercase tracking-widest">Registrato</th>
+                <th className="text-left px-2 py-2 text-zinc-500 uppercase tracking-widest">Ultimo</th>
+                <th className="text-left px-2 py-2 text-zinc-500 uppercase tracking-widest">Stato</th>
               </tr>
             </thead>
             <tbody>
               {users.map((u) => (
-                <tr key={u.user_id} className="border-b border-[#1E1E28] hover:bg-[#0E0E14]" data-testid={`admin-user-${u.user_id}`}>
+                <tr
+                  key={u.user_id}
+                  className={`border-b border-[#1E1E28] hover:bg-[#0E0E14] cursor-pointer ${u.disabled ? "opacity-50" : ""}`}
+                  onClick={() => setDetailId(u.user_id)}
+                  data-testid={`admin-user-${u.user_id}`}
+                >
                   <td className="px-3 py-2 text-zinc-100">
                     <div className="flex flex-col">
                       <span>{u.email}</span>
@@ -245,12 +419,26 @@ function UsersTab() {
                   <td className="px-2 py-2 text-center text-zinc-300">{u.properties_count}</td>
                   <td className="px-2 py-2 text-center text-emerald-500">{u.checkins_count}</td>
                   <td className="px-2 py-2 text-zinc-500">{fmtDate(u.last_checkin_at)}</td>
-                  <td className="px-2 py-2 text-zinc-500">{fmtDate(u.created_at)}</td>
+                  <td className="px-2 py-2">
+                    {u.disabled ? (
+                      <span className="text-red-400 text-[9px] uppercase tracking-widest">[ DIS ]</span>
+                    ) : (
+                      <span className="text-emerald-500 text-[9px] uppercase tracking-widest">[ ATT ]</span>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
+      )}
+
+      {detailId && (
+        <UserDetailModal
+          userId={detailId}
+          onClose={() => setDetailId(null)}
+          onChanged={reload}
+        />
       )}
     </div>
   );

@@ -111,6 +111,8 @@ async def get_current_user(request: Request) -> Dict[str, Any]:
     user = await db.users.find_one({"user_id": session["user_id"]}, {"_id": 0})
     if not user:
         raise HTTPException(status_code=401, detail="Utente non trovato")
+    if user.get("disabled"):
+        raise HTTPException(status_code=403, detail="Account disabilitato")
     return user
 
 
@@ -1877,6 +1879,7 @@ async def admin_list_users(
             "name": u.get("name"),
             "picture": u.get("picture"),
             "created_at": u.get("created_at"),
+            "disabled": bool(u.get("disabled", False)),
             "properties_count": props_n,
             "checkins_count": checkins_n,
             "last_checkin_at": last_ck.get("created_at") if last_ck else None,
@@ -1888,7 +1891,7 @@ async def admin_list_users(
 
 @api_router.get("/admin/user/{user_id}")
 async def admin_user_detail(user_id: str, admin=Depends(get_admin_user)):
-    """Detail view for a single user: properties + recent checkins."""
+    """Detail view for a single user: properties + recent checkins + per-portal stats."""
     u = await db.users.find_one({"user_id": user_id}, {"_id": 0})
     if not u:
         raise HTTPException(404, "Utente non trovato")
@@ -1905,6 +1908,47 @@ async def admin_user_detail(user_id: str, admin=Depends(get_admin_user)):
         c["guests_count"] = len(g)
         c["capogruppo"] = f"{g[0].get('cognome','')} {g[0].get('nome','')}".strip() if g else ""
         c.pop("guests", None)
+
+    # Aggregate stats
+    month_ago = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
+    ck_total = await db.checkins.count_documents({"user_id": user_id})
+    ck_month = await db.checkins.count_documents({"user_id": user_id, "created_at": {"$gte": month_ago}})
+    # Total receipts
+    pipeline = [
+        {"$match": {"user_id": user_id}},
+        {"$unwind": "$comune_receipts"},
+        {"$group": {"_id": None, "tot": {"$sum": "$comune_receipts.importo"}, "n": {"$sum": 1}}},
+    ]
+    rc = await db.checkins.aggregate(pipeline).to_list(1)
+    tax_total = rc[0]["tot"] if rc else 0
+    tax_count = rc[0]["n"] if rc else 0
+    # Success rate AW
+    aw_ok = await db.checkins.count_documents({
+        "user_id": user_id, "mode": "PROD",
+        "results.alloggiati_web.success": True,
+    })
+    aw_total = await db.checkins.count_documents({
+        "user_id": user_id, "mode": "PROD",
+        "results.alloggiati_web": {"$exists": True},
+    })
+    t5_ok = await db.checkins.count_documents({
+        "user_id": user_id, "mode": "PROD",
+        "results.ross1000.success": True,
+    })
+    t5_total = await db.checkins.count_documents({
+        "user_id": user_id, "mode": "PROD",
+        "results.ross1000": {"$exists": True},
+    })
+    # Foreign / italian guests
+    pipeline = [
+        {"$match": {"user_id": user_id}},
+        {"$unwind": "$guests"},
+        {"$group": {"_id": "$guests.is_foreign", "n": {"$sum": 1}}},
+    ]
+    res = await db.checkins.aggregate(pipeline).to_list(10)
+    foreign = sum(r["n"] for r in res if r.get("_id"))
+    italian = sum(r["n"] for r in res if not r.get("_id"))
+
     return {
         "user": {
             "user_id": u["user_id"],
@@ -1912,10 +1956,47 @@ async def admin_user_detail(user_id: str, admin=Depends(get_admin_user)):
             "name": u.get("name"),
             "picture": u.get("picture"),
             "created_at": u.get("created_at"),
+            "disabled": bool(u.get("disabled", False)),
+            "disabled_at": u.get("disabled_at"),
+        },
+        "stats": {
+            "checkins_total": ck_total,
+            "checkins_month": ck_month,
+            "properties_count": len(props),
+            "tax_total_eur": round(tax_total, 2),
+            "tax_receipts_count": tax_count,
+            "alloggiati_success_pct": round(aw_ok * 100 / aw_total, 1) if aw_total > 0 else None,
+            "alloggiati_ok": aw_ok,
+            "alloggiati_total": aw_total,
+            "turismo5_success_pct": round(t5_ok * 100 / t5_total, 1) if t5_total > 0 else None,
+            "turismo5_ok": t5_ok,
+            "turismo5_total": t5_total,
+            "guests_italian": italian,
+            "guests_foreign": foreign,
         },
         "properties": props,
         "recent_checkins": recent_ck,
     }
+
+
+@api_router.post("/admin/user/{user_id}/toggle-disabled")
+async def admin_toggle_user_disabled(user_id: str, admin=Depends(get_admin_user)):
+    """Toggle disabled state of a user. Disabled users can't log in or make calls."""
+    if user_id == admin["user_id"]:
+        raise HTTPException(400, "Non puoi disabilitare il tuo stesso account")
+    u = await db.users.find_one({"user_id": user_id}, {"_id": 0, "disabled": 1})
+    if not u:
+        raise HTTPException(404, "Utente non trovato")
+    new_state = not bool(u.get("disabled", False))
+    update = {"disabled": new_state}
+    if new_state:
+        update["disabled_at"] = datetime.now(timezone.utc).isoformat()
+        # Revoke all active sessions
+        await db.user_sessions.delete_many({"user_id": user_id})
+    else:
+        update["disabled_at"] = None
+    await db.users.update_one({"user_id": user_id}, {"$set": update})
+    return {"ok": True, "disabled": new_state}
 
 
 # ====================================================================
