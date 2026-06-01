@@ -130,6 +130,14 @@ export default function Archive() {
                         </div>
                       )}
                       <div className="flex flex-col gap-2 mt-2">
+                        {is_?.calculation && (
+                          <GenerateReceiptButton
+                            checkinId={c.checkin_id}
+                            guests={c.guests}
+                            importo={is_.calculation.totale_imposta}
+                            onGenerated={() => window.location.reload()}
+                          />
+                        )}
                         {c.comune_receipts && c.comune_receipts.length > 0 && (
                           <div className="flex flex-col gap-1 border border-[#1E1E28] p-3">
                             <span className="text-[10px] tracking-[0.25em] uppercase text-zinc-500 mb-1">Ricevute Imposta di Soggiorno</span>
@@ -141,14 +149,10 @@ export default function Archive() {
                                 numero={rc.numero}
                                 data={rc.data}
                                 importo={rc.importo}
+                                onDeleted={() => window.location.reload()}
                               />
                             ))}
                           </div>
-                        )}
-                        {is_?.calculation && (!c.comune_receipts || c.comune_receipts.length === 0) && (
-                          <p className="text-zinc-600 text-[10px] font-mono border border-dashed border-[#1E1E28] p-3 text-center">
-                            Nessuna ricevuta generata. Genera dalla schermata Check-in.
-                          </p>
                         )}
                         {r1k?.xml_preview && (
                           <details className="border border-[#1E1E28] p-3 text-[10px]">
@@ -230,14 +234,14 @@ function downloadBlob(blob, filename) {
   reader.readAsDataURL(blob);
 }
 
-function DownloadReceiptBtn({ checkinId, index, numero, data, importo }) {
+function DownloadReceiptBtn({ checkinId, index, numero, data, importo, onDeleted }) {
   const [open, setOpen] = useState(false);
   const [pdfDataUrl, setPdfDataUrl] = useState("");
+  const [deleting, setDeleting] = useState(false);
 
   const toggle = async () => {
     if (open) { setOpen(false); return; }
     setOpen(true);
-    // Lazy-load the PDF as data URL (for download button)
     if (!pdfDataUrl) {
       try {
         const r = await api.get(`/checkins/${checkinId}/comune-receipts/${index}`, { responseType: "blob" });
@@ -245,6 +249,19 @@ function DownloadReceiptBtn({ checkinId, index, numero, data, importo }) {
         reader.onload = () => setPdfDataUrl(reader.result);
         reader.readAsDataURL(new Blob([r.data], { type: "application/pdf" }));
       } catch (_) { /* image fallback below still works */ }
+    }
+  };
+
+  const remove = async () => {
+    if (!window.confirm(`Eliminare la ricevuta N. ${numero}? Potrai poi generarne una nuova con dati corretti.`)) return;
+    setDeleting(true);
+    try {
+      await api.delete(`/checkins/${checkinId}/comune-receipts/${index}`);
+      onDeleted && onDeleted();
+    } catch (e) {
+      alert(e.response?.data?.detail || "Errore eliminazione");
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -292,9 +309,121 @@ function DownloadReceiptBtn({ checkinId, index, numero, data, importo }) {
                 ↓ PDF
               </a>
             )}
+            <button
+              type="button"
+              onClick={remove}
+              disabled={deleting}
+              data-testid={`comune-receipt-delete-${checkinId}-${index}`}
+              className="text-center border border-red-500/40 hover:border-red-400 text-red-400 px-4 py-2 uppercase tracking-widest text-[10px] cursor-pointer disabled:opacity-50"
+            >
+              {deleting ? "..." : "Elimina/Rigenera"}
+            </button>
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+
+function GenerateReceiptButton({ checkinId, guests, importo, onGenerated }) {
+  const [open, setOpen] = useState(false);
+  const [numero, setNumero] = useState("");
+  const [data, setData] = useState(new Date().toISOString().slice(0, 10));
+  const [ospiteIdx, setOspiteIdx] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const submit = async () => {
+    if (!numero.trim()) { setError("Numero ricevuta obbligatorio"); return; }
+    setLoading(true); setError("");
+    try {
+      await api.post(`/checkins/${checkinId}/comune-receipt`, {
+        numero_ricevuta: numero,
+        data_ricevuta: data,
+        ospite_index: ospiteIdx,
+      });
+      setOpen(false); setNumero("");
+      onGenerated && onGenerated();
+    } catch (e) {
+      setError(e.response?.data?.detail || e.message || "Errore generazione ricevuta");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        data-testid={`gen-receipt-${checkinId}`}
+        className="text-center border border-amber-500/40 hover:bg-amber-500/10 hover:border-amber-400 text-amber-400 px-4 py-3 uppercase tracking-widest text-[10px] cursor-pointer transition-colors"
+      >
+        + Genera Ricevuta Imposta (€ {importo?.toFixed(2)})
+      </button>
+    );
+  }
+
+  return (
+    <div className="border border-amber-500/40 p-4 flex flex-col gap-3 bg-[#0E0E14]">
+      <span className="text-[10px] tracking-[0.25em] uppercase text-amber-400">Genera Ricevuta Imposta di Soggiorno</span>
+      <label className="flex flex-col gap-1">
+        <span className="text-[10px] tracking-[0.25em] uppercase text-zinc-500">Numero Ricevuta</span>
+        <input
+          type="text"
+          value={numero}
+          onChange={(e) => setNumero(e.target.value)}
+          placeholder="Es. 2026/001"
+          autoFocus
+          data-testid={`gen-receipt-numero-${checkinId}`}
+          className="bg-transparent border border-[#1E1E28] px-3 py-2 text-zinc-100 placeholder:text-zinc-600 focus:border-zinc-300 outline-none text-sm font-mono"
+        />
+      </label>
+      <label className="flex flex-col gap-1">
+        <span className="text-[10px] tracking-[0.25em] uppercase text-zinc-500">Data Ricevuta</span>
+        <input
+          type="date"
+          value={data}
+          onChange={(e) => setData(e.target.value)}
+          data-testid={`gen-receipt-data-${checkinId}`}
+          className="bg-transparent border border-[#1E1E28] px-3 py-2 text-zinc-100 focus:border-zinc-300 outline-none text-sm font-mono"
+        />
+      </label>
+      <label className="flex flex-col gap-1">
+        <span className="text-[10px] tracking-[0.25em] uppercase text-zinc-500">Intestatario</span>
+        <select
+          value={ospiteIdx}
+          onChange={(e) => setOspiteIdx(Number(e.target.value))}
+          data-testid={`gen-receipt-ospite-${checkinId}`}
+          className="bg-transparent border border-[#1E1E28] px-3 py-2 text-zinc-100 focus:border-zinc-300 outline-none text-sm font-mono"
+        >
+          {(guests || []).map((g, i) => (
+            <option key={i} value={i} className="bg-[#0E0E14] text-zinc-100">
+              #{i + 1} {g.cognome} {g.nome}
+            </option>
+          ))}
+        </select>
+      </label>
+      {error && <p className="text-red-400 text-[10px] font-mono">[ ERR ] {error}</p>}
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={submit}
+          disabled={loading}
+          data-testid={`gen-receipt-submit-${checkinId}`}
+          className="flex-1 border border-emerald-500/60 hover:bg-emerald-500/10 text-emerald-400 px-4 py-2 uppercase tracking-widest text-[10px] cursor-pointer disabled:opacity-50"
+        >
+          {loading ? "..." : "Genera"}
+        </button>
+        <button
+          type="button"
+          onClick={() => { setOpen(false); setError(""); }}
+          className="border border-[#1E1E28] hover:border-zinc-500 text-zinc-400 px-4 py-2 uppercase tracking-widest text-[10px] cursor-pointer"
+        >
+          Annulla
+        </button>
+      </div>
     </div>
   );
 }

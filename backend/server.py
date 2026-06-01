@@ -1338,6 +1338,28 @@ async def download_comune_receipt(
     )
 
 
+@api_router.delete("/checkins/{checkin_id}/comune-receipts/{index}")
+async def delete_comune_receipt(
+    checkin_id: str, index: int, user=Depends(get_current_user)
+):
+    """Delete a single municipal receipt by index."""
+    c = await db.checkins.find_one(
+        {"checkin_id": checkin_id, "user_id": user["user_id"]}, {"_id": 0}
+    )
+    if not c:
+        raise HTTPException(404, "Check-in non trovato")
+    receipts = c.get("comune_receipts", [])
+    if index < 0 or index >= len(receipts):
+        raise HTTPException(404, "Ricevuta non trovata")
+    # Remove the item at index
+    new_receipts = receipts[:index] + receipts[index + 1:]
+    await db.checkins.update_one(
+        {"checkin_id": checkin_id},
+        {"$set": {"comune_receipts": new_receipts}},
+    )
+    return {"ok": True, "remaining": len(new_receipts)}
+
+
 @api_router.get("/checkins/{checkin_id}/comune-receipts/{index}/preview")
 async def preview_comune_receipt(
     checkin_id: str, index: int, download: int = 0, user=Depends(get_current_user)
