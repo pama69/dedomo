@@ -860,7 +860,7 @@ async def checkin_submit(body: CheckinSubmit, user=Depends(get_current_user)):
                 tipo_alloggiato = "17"  # capofamiglia
                 idcapo_field = ""
             else:
-                tipo_alloggiato = "18"  # familiare
+                tipo_alloggiato = "19"  # familiare (codice Ross 1000 / Alloggiati Web)
                 idcapo_field = idcapo
 
             arrivi_list.append({

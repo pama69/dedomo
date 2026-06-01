@@ -24,8 +24,8 @@ WSDL_URL = "https://alloggiatiweb.poliziadistato.it/service/service.asmx?wsdl"
 # Tipo Alloggiato codes
 TIPO_OSPITE_SINGOLO = "16"
 TIPO_CAPO_FAMIGLIA = "17"
-TIPO_FAMILIARE = "18"
-TIPO_CAPO_GRUPPO = "19"
+TIPO_CAPO_GRUPPO = "18"
+TIPO_FAMILIARE = "19"
 TIPO_MEMBRO_GRUPPO = "20"
 
 # Tipo Documento codes per official tabella Tipi_Documento
