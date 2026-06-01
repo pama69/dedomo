@@ -143,10 +143,10 @@ export default function Checkin() {
       });
     } catch {}
     try {
-      const b64 = await fileToBase64(file);
+      const { base64: b64, mime } = await compressImage(file);
       const r = await api.post("/ocr/document", {
         image_base64: b64,
-        mime_type: file.type || "image/jpeg",
+        mime_type: mime,
       });
       const data = r.data;
 
@@ -764,6 +764,51 @@ function ResultRow({ label, ok, skipped, message }) {
     </div>
   );
 }
+
+// Compress an image File to JPEG with max 1600px side and ~75% quality.
+// gpt-4o-mini Vision works well at this resolution. Reduces token cost ~5x
+// without losing MRZ/document text legibility.
+const compressImage = (file, maxSide = 1600, quality = 0.78) =>
+  new Promise((resolve, reject) => {
+    // Skip compression for non-images (shouldn't happen but defensive)
+    if (!file.type || !file.type.startsWith("image/")) {
+      const reader = new FileReader();
+      reader.onload = () => resolve({
+        base64: reader.result.split(",")[1],
+        mime: file.type || "image/jpeg",
+      });
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > maxSide || height > maxSide) {
+          if (width > height) { height = Math.round(height * maxSide / width); width = maxSide; }
+          else { width = Math.round(width * maxSide / height); height = maxSide; }
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        // White background (in case of transparent PNG)
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, width, height);
+        ctx.drawImage(img, 0, 0, width, height);
+        const dataUrl = canvas.toDataURL("image/jpeg", quality);
+        const base64 = dataUrl.split(",")[1];
+        resolve({ base64, mime: "image/jpeg" });
+      };
+      img.onerror = reject;
+      img.src = reader.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
 
 const fileToBase64 = (file) =>
   new Promise((res, rej) => {

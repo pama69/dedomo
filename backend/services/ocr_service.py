@@ -1,6 +1,7 @@
 """
-OCR service - extracts guest data from photos of Italian ID documents.
-Uses GPT-5.2 vision via Emergent LLM Key. Handles MRZ codes natively.
+OCR service - extracts guest data from photos of Italian/foreign ID documents.
+Uses gpt-4o-mini vision via Emergent LLM Key. Handles MRZ codes natively.
+gpt-4o-mini is ~5x cheaper than gpt-5.2 with comparable accuracy on documents.
 """
 
 import os
@@ -61,7 +62,7 @@ async def extract_document_data(image_base64: str, mime_type: str = "image/jpeg"
         api_key=api_key,
         session_id=f"ocr-{base64.b64encode(os.urandom(6)).decode()}",
         system_message=SYSTEM_PROMPT,
-    ).with_model("openai", "gpt-5.2")
+    ).with_model("openai", "gpt-4o-mini")
 
     image_content = ImageContent(image_base64=image_base64)
 
