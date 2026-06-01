@@ -2,6 +2,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import api from "@/lib/api";
 import BottomNav from "@/components/BottomNav";
+import NotificationsBell from "@/components/NotificationsBell";
 import { useAuth } from "@/contexts/AuthContext";
 
 export default function Layout({ children }) {
@@ -36,13 +37,16 @@ export default function Layout({ children }) {
         >
           OSPITALO
         </h1>
-        <button
-          data-testid="logout-button"
-          onClick={async () => { await logout(); navigate("/login", { replace: true }); }}
-          className="text-[10px] tracking-[0.25em] uppercase text-zinc-500 hover:text-zinc-100 transition-colors cursor-pointer"
-        >
-          Esci
-        </button>
+        <div className="flex items-center gap-2">
+          <NotificationsBell />
+          <button
+            data-testid="logout-button"
+            onClick={async () => { await logout(); navigate("/login", { replace: true }); }}
+            className="text-[10px] tracking-[0.25em] uppercase text-zinc-500 hover:text-zinc-100 transition-colors cursor-pointer"
+          >
+            Esci
+          </button>
+        </div>
       </header>
       <main className="w-full max-w-3xl mx-auto pb-24 pt-8 px-4 sm:px-6 flex flex-col gap-8">
         {children}

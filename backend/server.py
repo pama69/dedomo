@@ -53,6 +53,12 @@ from services.turismo5 import (
 )
 from services.imposta_soggiorno import calcola_imposta
 from services.pdf_service import generate_tax_receipt, generate_comune_receipt
+from services.retry_service import (
+    classify_error,
+    build_retry_entry,
+    is_due_for_retry,
+    MAX_ATTEMPTS,
+)
 
 
 ROOT_DIR = Path(__file__).parent
@@ -1005,6 +1011,19 @@ async def checkin_submit(body: CheckinSubmit, user=Depends(get_current_user)):
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     await db.checkins.insert_one(record)
+
+    # Classify results & schedule retries / notifications
+    aw_res = results.get("alloggiati_web", {})
+    if aw_res and not aw_res.get("skipped"):
+        await _process_submit_result(
+            checkin_id, user["user_id"], "alloggiati", "Alloggiati Web", aw_res
+        )
+    t5_res = results.get("ross1000", {})
+    if t5_res and not t5_res.get("skipped"):
+        await _process_submit_result(
+            checkin_id, user["user_id"], "turismo5", "Turismo 5", t5_res
+        )
+
     results["checkin_id"] = checkin_id
     return results
 
@@ -1650,6 +1669,333 @@ async def shutdown_db_client():
 
 
 # ====================================================================
+# RETRY & NOTIFICATIONS
+# ====================================================================
+
+async def _add_notification(
+    user_id: str,
+    level: str,  # 'info' | 'success' | 'warning' | 'error'
+    title: str,
+    body: str,
+    checkin_id: Optional[str] = None,
+    portal: Optional[str] = None,
+) -> None:
+    """Append a user-facing notification."""
+    await db.notifications.insert_one({
+        "notification_id": f"ntf_{uuid.uuid4().hex[:12]}",
+        "user_id": user_id,
+        "level": level,
+        "title": title,
+        "body": body,
+        "checkin_id": checkin_id,
+        "portal": portal,
+        "read": False,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+
+
+async def _process_submit_result(
+    checkin_id: str,
+    user_id: str,
+    portal: str,  # 'alloggiati' | 'turismo5'
+    portal_label: str,  # 'Alloggiati Web' | 'Turismo 5'
+    result: Dict[str, Any],
+) -> None:
+    """After a submit, classify result and schedule retry if transient.
+
+    Updates retry_state.{portal} on the checkin doc and creates a notification
+    when state changes meaningfully (transient failure, success after retry, exhausted).
+    """
+    msg = result.get("message", "")
+    success = bool(result.get("success"))
+    kind = classify_error(msg, success=success)
+
+    # Load current retry state (if any)
+    c = await db.checkins.find_one({"checkin_id": checkin_id}, {"_id": 0, "retry_state": 1})
+    prev = (c.get("retry_state", {}) or {}).get(portal) or {}
+    prev_attempts = int(prev.get("attempts", 0))
+    was_pending = prev.get("status") == "pending"
+
+    if kind == "success":
+        if was_pending:
+            await _add_notification(
+                user_id, "success",
+                f"{portal_label}: recuperato",
+                f"Invio finalmente accettato dopo {prev_attempts} tentativi automatici.",
+                checkin_id=checkin_id, portal=portal,
+            )
+        # Clear retry entry
+        await db.checkins.update_one(
+            {"checkin_id": checkin_id},
+            {"$unset": {f"retry_state.{portal}": ""}},
+        )
+        return
+
+    if kind == "definitive":
+        # Definitive: never retry. Save final state, notify if first time.
+        if not was_pending or prev.get("last_error") != msg:
+            await _add_notification(
+                user_id, "error",
+                f"{portal_label}: invio rifiutato",
+                f"Errore non recuperabile: {msg[:200]}. Modifica i dati e ripeti l'invio manualmente.",
+                checkin_id=checkin_id, portal=portal,
+            )
+        await db.checkins.update_one(
+            {"checkin_id": checkin_id},
+            {"$set": {f"retry_state.{portal}": {
+                "portal": portal,
+                "status": "definitive",
+                "attempts": prev_attempts + 1,
+                "last_error": msg,
+                "last_attempt": datetime.now(timezone.utc).isoformat(),
+                "next_attempt": None,
+            }}},
+        )
+        return
+
+    # transient: build next retry entry
+    entry = build_retry_entry(portal, msg, prev_attempts)
+    if entry is None or entry.get("status") == "exhausted":
+        # Should not happen with current build_retry_entry, but defensive
+        await _add_notification(
+            user_id, "error",
+            f"{portal_label}: tentativi esauriti",
+            f"Dopo {MAX_ATTEMPTS} tentativi automatici l'invio continua a fallire. Ultimo errore: {msg[:200]}",
+            checkin_id=checkin_id, portal=portal,
+        )
+    else:
+        if not was_pending:
+            await _add_notification(
+                user_id, "warning",
+                f"{portal_label}: invio non riuscito",
+                f"Errore temporaneo: {msg[:200]}. Riproveremo automaticamente.",
+                checkin_id=checkin_id, portal=portal,
+            )
+    await db.checkins.update_one(
+        {"checkin_id": checkin_id},
+        {"$set": {f"retry_state.{portal}": entry}},
+    )
+
+
+# ----- Notifications API -----
+
+@api_router.get("/notifications")
+async def list_notifications(
+    only_unread: bool = False, user=Depends(get_current_user)
+):
+    q: Dict[str, Any] = {"user_id": user["user_id"]}
+    if only_unread:
+        q["read"] = False
+    items = await db.notifications.find(
+        q, {"_id": 0}
+    ).sort("created_at", -1).limit(50).to_list(50)
+    unread_count = await db.notifications.count_documents(
+        {"user_id": user["user_id"], "read": False}
+    )
+    return {"items": items, "unread_count": unread_count}
+
+
+@api_router.post("/notifications/{notification_id}/read")
+async def mark_notification_read(
+    notification_id: str, user=Depends(get_current_user)
+):
+    r = await db.notifications.update_one(
+        {"notification_id": notification_id, "user_id": user["user_id"]},
+        {"$set": {"read": True}},
+    )
+    return {"ok": r.modified_count > 0}
+
+
+@api_router.post("/notifications/read-all")
+async def mark_all_notifications_read(user=Depends(get_current_user)):
+    r = await db.notifications.update_many(
+        {"user_id": user["user_id"], "read": False},
+        {"$set": {"read": True}},
+    )
+    return {"ok": True, "marked": r.modified_count}
+
+
+# ----- Manual retry trigger -----
+
+@api_router.post("/checkins/{checkin_id}/retry/{portal}")
+async def manual_retry(
+    checkin_id: str, portal: str, user=Depends(get_current_user)
+):
+    """Force an immediate retry of a failed portal submission."""
+    if portal not in ("alloggiati", "turismo5"):
+        raise HTTPException(400, "Portal non valido (use 'alloggiati' or 'turismo5')")
+    c = await db.checkins.find_one(
+        {"checkin_id": checkin_id, "user_id": user["user_id"]}, {"_id": 0}
+    )
+    if not c:
+        raise HTTPException(404, "Check-in non trovato")
+    await _retry_single_checkin(c, portal)
+    return {"ok": True}
+
+
+# ====================================================================
+# BACKGROUND JOB: Retry failed submissions
+# ====================================================================
+
+async def _retry_single_checkin(c: Dict[str, Any], portal: str) -> None:
+    """Retry a single (checkin, portal) pair: re-execute the submission."""
+    user_id = c["user_id"]
+    prop = await db.properties.find_one(
+        {"property_id": c["property_id"], "user_id": user_id}, {"_id": 0}
+    )
+    if not prop:
+        return
+
+    if portal == "alloggiati":
+        await _retry_alloggiati(c, prop)
+    elif portal == "turismo5":
+        await _retry_turismo5(c, prop)
+
+
+async def _retry_alloggiati(c: Dict[str, Any], prop: Dict[str, Any]) -> None:
+    """Reissue Alloggiati Web send_schedine."""
+    cfg = prop.get("alloggiati", {})
+    if not cfg.get("enabled") or not cfg.get("utente"):
+        return
+
+    # Rebuild schedine from stored guests
+    guests = [GuestData(**g) for g in c.get("guests", [])]
+    arr = datetime.fromisoformat(c["data_arrivo"])
+    part = datetime.fromisoformat(c["data_partenza"])
+    giorni = max(1, (part - arr).days)
+    n = len(guests)
+    tipos = [TIPO_OSPITE_SINGOLO] if n == 1 else [TIPO_CAPO_FAMIGLIA] + [TIPO_FAMILIARE] * (n - 1)
+
+    tipo_account = cfg.get("tipo_account", "standard")
+    id_app_raw = cfg.get("id_appartamento")
+    id_app = int(id_app_raw) if id_app_raw is not None else None
+    id_for_schedina = str(id_app) if (tipo_account == "appartamenti_file_unico" and id_app is not None) else ""
+    schedine = [_guest_to_schedina(g, tipos[i], c["data_arrivo"], giorni, id_for_schedina) for i, g in enumerate(guests)]
+
+    tok = generate_token(cfg["utente"], cfg["password"], cfg["ws_key"])
+    if not tok["success"]:
+        result = {"success": False, "message": tok.get("message", "Auth fallita"), "schedine_preview": schedine}
+    else:
+        test_mode = c.get("mode") == "TEST"
+        if test_mode:
+            result = test_schedine(cfg["utente"], tok["token"], schedine, tipo_account=tipo_account, id_appartamento=id_app or 0)
+        else:
+            result = send_schedine(cfg["utente"], tok["token"], schedine, tipo_account=tipo_account, id_appartamento=id_app or 0)
+        result["schedine_preview"] = schedine
+        result["mode"] = "PROD (invio definitivo)" if not test_mode else "TEST (validazione, nessun invio reale)"
+
+    await db.checkins.update_one(
+        {"checkin_id": c["checkin_id"]},
+        {"$set": {"results.alloggiati_web": result}},
+    )
+    await _process_submit_result(
+        c["checkin_id"], c["user_id"], "alloggiati", "Alloggiati Web", result
+    )
+
+
+async def _retry_turismo5(c: Dict[str, Any], prop: Dict[str, Any]) -> None:
+    """Reissue Turismo 5 movimentazione."""
+    ross_cfg = prop.get("ross1000", {})
+    if not ross_cfg.get("enabled"):
+        return
+
+    regione = ross_cfg.get("regione", "Abruzzo")
+    endpoint_url = ross_cfg.get("endpoint_url") or REGIONAL_ENDPOINTS.get(regione, "")
+    codice_struttura = ross_cfg.get("codice_struttura", "")
+    test_mode = c.get("mode") == "TEST"
+    guests = [GuestData(**g) for g in c.get("guests", [])]
+
+    idcapo = f"{c['property_id'][:8]}-{c['data_arrivo']}"
+    arrivi_list = []
+    partenze_list = []
+    for i, g in enumerate(guests):
+        if len(guests) == 1:
+            tipo_alloggiato = "16"
+            idcapo_field = ""
+        elif i == 0:
+            tipo_alloggiato = "17"
+            idcapo_field = ""
+        else:
+            tipo_alloggiato = "19"
+            idcapo_field = idcapo
+        item = {
+            "idswh": f"{c['property_id'][:8]}-{c['data_arrivo']}-{i+1}",
+            "tipoalloggiato": tipo_alloggiato,
+            "idcapo": idcapo_field,
+            "sesso": g.sesso,
+            "cittadinanza": g.cittadinanza or ITALIA_CODE,
+            "statoresidenza": g.cittadinanza or ITALIA_CODE,
+            "luogoresidenza": "" if g.is_foreign else (g.codice_comune_nascita or ""),
+            "datanascita": g.data_nascita,
+            "statonascita": g.stato_nascita or ITALIA_CODE,
+            "comunenascita": "" if g.is_foreign else (g.codice_comune_nascita or ""),
+            "tipoturismo": "", "mezzotrasporto": "", "canaleprenotazione": "",
+        }
+        arrivi_list.append(item)
+        partenze_list.append({"idswh": item["idswh"], "tipoalloggiato": tipo_alloggiato})
+
+    n_camere = int(ross_cfg.get("n_camere", 1))
+    n_letti = int(ross_cfg.get("n_letti", 2))
+    movimenti = [
+        {"data": c["data_arrivo"], "struttura": {"apertura": "SI", "camereoccupate": n_camere, "cameredisponibili": n_camere, "lettidisponibili": n_letti}, "arrivi": arrivi_list},
+        {"data": c["data_partenza"], "struttura": {"apertura": "SI", "camereoccupate": 0, "cameredisponibili": n_camere, "lettidisponibili": n_letti}, "partenze": partenze_list},
+    ]
+    result = send_movimentazione(
+        endpoint_url=endpoint_url,
+        username=ross_cfg.get("utente", ""),
+        password=ross_cfg.get("password", ""),
+        codice_struttura=codice_struttura,
+        movimenti=movimenti,
+        prodotto=ross_cfg.get("nome_prodotto", "Ospitalo"),
+        test_mode=test_mode,
+    )
+    result["mode"] = "TEST" if test_mode else "PROD"
+
+    await db.checkins.update_one(
+        {"checkin_id": c["checkin_id"]},
+        {"$set": {"results.ross1000": result}},
+    )
+    await _process_submit_result(
+        c["checkin_id"], c["user_id"], "turismo5", "Turismo 5", result
+    )
+
+
+async def retry_failed_submissions():
+    """Periodic job: find checkins with pending retries due now and re-attempt them."""
+    now_iso = datetime.now(timezone.utc).isoformat()
+    pending = await db.checkins.find(
+        {
+            "$or": [
+                {"retry_state.alloggiati.status": "pending", "retry_state.alloggiati.next_attempt": {"$lte": now_iso}},
+                {"retry_state.turismo5.status": "pending", "retry_state.turismo5.next_attempt": {"$lte": now_iso}},
+            ]
+        },
+        {"_id": 0},
+    ).to_list(200)
+
+    if not pending:
+        return
+    logger.info(f"[retry-job] {len(pending)} retries dovuti")
+
+    for c in pending:
+        rs = c.get("retry_state", {}) or {}
+        for portal in ("alloggiati", "turismo5"):
+            entry = rs.get(portal) or {}
+            if is_due_for_retry(entry):
+                try:
+                    await _retry_single_checkin(c, portal)
+                except Exception as e:
+                    logger.error(f"[retry-job] error retrying {c['checkin_id']}/{portal}: {e}")
+                    # Schedule the next attempt even on exception
+                    new_entry = build_retry_entry(portal, f"Eccezione: {str(e)[:200]}", int(entry.get("attempts", 0)))
+                    if new_entry:
+                        await db.checkins.update_one(
+                            {"checkin_id": c["checkin_id"]},
+                            {"$set": {f"retry_state.{portal}": new_entry}},
+                        )
+
+
+# ====================================================================
 # BACKGROUND JOB: Auto-download Alloggiati Web receipts after 24h
 # ====================================================================
 
@@ -1740,6 +2086,13 @@ async def startup_scheduler():
         fetch_alloggiati_receipts, "date",
         run_date=datetime.now(timezone.utc) + timedelta(seconds=60),
         id="aw_receipts_initial",
+    )
+    # Retry failed submissions every 15 minutes (picks up due retries within 15min granularity)
+    scheduler.add_job(retry_failed_submissions, "interval", minutes=15, id="retry_failed")
+    scheduler.add_job(
+        retry_failed_submissions, "date",
+        run_date=datetime.now(timezone.utc) + timedelta(seconds=30),
+        id="retry_failed_initial",
     )
     scheduler.start()
     logger.info("[scheduler] started")
