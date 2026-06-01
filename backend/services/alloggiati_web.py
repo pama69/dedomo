@@ -282,7 +282,28 @@ def send_schedine(
         outcome = result.get(outcome_key) or {}
         details = result.get("result") or {}
 
-        success = bool(outcome.get("esito"))
+        # The envelope `esito` is True if the SOAP call succeeded, but individual
+        # schedine may still have been rejected. The real success requires:
+        #   - envelope OK (esito=True)
+        #   - SchedineValide > 0 (at least one accepted)
+        envelope_ok = bool(outcome.get("esito"))
+        schedine_valide = details.get("SchedineValide", 0) if isinstance(details, dict) else 0
+        total_schedine = len(schedine)
+        success = envelope_ok and schedine_valide == total_schedine
+
+        # Collect per-schedina errors from EsitoOperazioneServizio list
+        per_schedina_errors = []
+        dettaglio = details.get("Dettaglio") if isinstance(details, dict) else None
+        if isinstance(dettaglio, dict):
+            esiti = dettaglio.get("EsitoOperazioneServizio") or []
+            if not isinstance(esiti, list):
+                esiti = [esiti]
+            for i, ex in enumerate(esiti):
+                if isinstance(ex, dict) and not ex.get("esito"):
+                    per_schedina_errors.append(
+                        f"#{i+1}: Cod.{ex.get('ErroreCod')} {ex.get('ErroreDes','')} — {ex.get('ErroreDettaglio','')}".strip()
+                    )
+
         err_des = outcome.get("ErroreDes") or ""
         err_det = outcome.get("ErroreDettaglio") or ""
         err_cod = outcome.get("ErroreCod")
@@ -293,11 +314,29 @@ def send_schedine(
             msg_parts.append(err_des)
         if err_det and err_det != err_des:
             msg_parts.append(err_det)
-        message = " · ".join(msg_parts) if not success else "Invio OK"
+        # Add the per-schedina rejections to the user-facing message
+        if per_schedina_errors:
+            msg_parts.append(
+                f"{total_schedine - schedine_valide}/{total_schedine} schedine rifiutate"
+            )
+            msg_parts.extend(per_schedina_errors[:3])  # show first 3
+        elif not envelope_ok:
+            pass
+        else:
+            # envelope OK
+            if schedine_valide == total_schedine:
+                msg_parts = [f"Invio OK ({schedine_valide}/{total_schedine})"]
+            else:
+                msg_parts.append(f"Schedine valide: {schedine_valide}/{total_schedine}")
+
+        message = " · ".join(msg_parts) if msg_parts else ("Invio OK" if success else "Errore sconosciuto")
 
         return {
             "success": success,
             "message": message,
+            "schedine_valide": schedine_valide,
+            "schedine_inviate": total_schedine,
+            "per_schedina_errors": per_schedina_errors,
             "details": details,
             "raw": result,
         }
@@ -693,10 +732,29 @@ def get_ricevuta_pdf(utente: str, token: str, data: str) -> Dict[str, Any]:
         data_str = dt.strftime("%d/%m/%Y")
         resp = client.service.Ricevuta(Utente=utente, token=token, Data=data_str)
         result = zeep.helpers.serialize_object(resp)
-        outcome = result.get("RicevutaResult") or {}
-        pdf_b64 = result.get("PDF")
+        # The SOAP service returns the PDF inside an envelope. The schema may
+        # nest the result differently ("Ricevuta", "RicevutaResponse", "PDF", etc.)
+        # Try multiple known shapes.
+        outcome = result.get("RicevutaResult") or result.get("EsitoOperazioneServizio") or {}
+        pdf_b64 = (
+            result.get("PDF")
+            or result.get("pdf")
+            or result.get("Pdf")
+            or (result.get("body") or {}).get("PDF") if isinstance(result.get("body"), dict) else None
+        )
+        # Last resort: scan all values for a long base64-looking string
+        if not pdf_b64:
+            import re as _re
+            for v in result.values() if isinstance(result, dict) else []:
+                if isinstance(v, str) and len(v) > 100 and _re.match(r"^[A-Za-z0-9+/=]+$", v[:60]):
+                    pdf_b64 = v
+                    break
+
         return {
             "success": bool(outcome.get("esito")) and bool(pdf_b64),
+            "esito": outcome.get("esito"),
+            "errore_cod": outcome.get("ErroreCod"),
+            "errore_des": outcome.get("ErroreDes"),
             "pdf_base64": pdf_b64,
             "raw": result,
         }

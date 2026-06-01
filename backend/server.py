@@ -1643,8 +1643,15 @@ async def fetch_alloggiati_receipts():
         {
             "mode": "PROD",
             "results.alloggiati_web.success": True,
+            # Skip checkins where all schedine were rejected (SchedineValide=0)
+            "results.alloggiati_web.schedine_valide": {"$gt": 0},
             "alloggiati_ricevuta_pdf": {"$in": [None, ""]},
             "created_at": {"$lte": cutoff},
+            # Skip checkins we already tried 7+ times (likely no receipt will ever appear)
+            "$or": [
+                {"alloggiati_ricevuta_attempts": {"$exists": False}},
+                {"alloggiati_ricevuta_attempts": {"$lt": 14}},
+            ],
         },
         {"_id": 0},
     ).to_list(200)
@@ -1684,6 +1691,19 @@ async def fetch_alloggiati_receipts():
                     },
                 )
                 logger.info(f"[receipts-job] saved receipt for {c['checkin_id']}")
+            else:
+                raw = ric.get("raw") or {}
+                outcome = raw.get("RicevutaResult") or {}
+                logger.warning(
+                    f"[receipts-job] no receipt for {c['checkin_id']} (date={send_date}): "
+                    f"esito={outcome.get('esito')} ErroreCod={outcome.get('ErroreCod')} "
+                    f"ErroreDes={outcome.get('ErroreDes')} has_pdf={bool(ric.get('pdf_base64'))}"
+                )
+                # Increment attempt counter so we eventually give up
+                await db.checkins.update_one(
+                    {"checkin_id": c["checkin_id"]},
+                    {"$inc": {"alloggiati_ricevuta_attempts": 1}},
+                )
         except Exception as e:
             logger.error(f"[receipts-job] error on {c.get('checkin_id')}: {e}")
 
