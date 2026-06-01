@@ -935,7 +935,8 @@ function PaeseField({ paeseNome, statoCode, propertyId, onChange }) {
   };
 
   const hasMatch = !!statoCode && statoCode !== "100000100" && !!paeseNome;
-  const showDropdown = focused && (results.length > 0 || searching);
+  const queryLong = query.trim().length >= 2;
+  const showDropdown = focused && queryLong;
 
   return (
     <div className="flex flex-col gap-1 relative">

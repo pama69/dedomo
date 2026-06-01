@@ -474,10 +474,11 @@ def _get_luoghi_cached(utente: str, token: str):
 
 
 def cerca_paesi(utente: str, token: str, query: str, limit: int = 20) -> Dict[str, Any]:
-    """Fast autocomplete search for foreign countries only (no Italian comuni).
+    """Fast autocomplete search for foreign countries.
 
-    Foreign countries in 'Luoghi' have provincia='' (or 'EE'/'Z'-prefix codes).
-    Italian comuni always have a 2-letter provincia code.
+    Foreign country codes in 'Luoghi' typically start with '1000001' (e.g.
+    100000100 = ITALIA, 100000113 = ALBANIA, 100000200 = STATI UNITI etc.).
+    Italian comuni codes start with other digits (e.g. '058091' = Rome).
     """
     try:
         rows = _get_luoghi_cached(utente, token)
@@ -488,16 +489,18 @@ def cerca_paesi(utente: str, token: str, query: str, limit: int = 20) -> Dict[st
         if not q:
             return {"success": True, "results": []}
 
-        # Translate ISO3 if needed
+        # Translate ISO3 to Italian name if provided as 3-letter code
         if len(q) == 3 and q.isalpha():
             translated = ISO3_TO_ITALIAN_NAME.get(q)
             if translated:
                 q = translated
 
-        # Filter: foreign-only (no provincia) AND name contains query
+        # Filter: country codes start with "1000" (foreign states convention in
+        # Alloggiati Web Luoghi table). Italian comuni codes don't start with "1".
         matches = []
         for row in rows:
-            if row["provincia"]:  # Italian comune → skip
+            codice = row["codice"]
+            if not codice.startswith("1"):
                 continue
             if q not in row["_upper"]:
                 continue
@@ -519,6 +522,7 @@ def cerca_paesi(utente: str, token: str, query: str, limit: int = 20) -> Dict[st
                 {"codice": r["codice"], "nome": r["nome"]}
                 for r in matches[:limit]
             ],
+            "total": len(matches),
         }
     except Exception as e:
         return {"success": False, "message": f"Errore: {str(e)}"}
