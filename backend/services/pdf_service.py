@@ -33,6 +33,8 @@ def generate_comune_receipt(
     pernottamenti: int,
     proprietario: str = "",
     codice_fiscale: str = "",
+    n_adulti: int = 0,
+    n_esenti: int = 0,
     causale_extra: str = "",
     comune_pec: str = "",
     comune_piva: str = "",
@@ -145,9 +147,11 @@ def generate_comune_receipt(
     partenza_fmt = datetime.fromisoformat(data_partenza).strftime("%d/%m/%Y")
     soggiorno_data = [
         ["Periodo di soggiorno:", f"Dal {arrivo_fmt} al {partenza_fmt}"],
+        ["N. Adulti:", str(n_adulti)],
+        ["N. Persone esenti autocertificate:", str(n_esenti)],
         ["N. pernottamenti:", str(pernottamenti)],
     ]
-    t = Table(soggiorno_data, colWidths=[5 * cm, 11 * cm])
+    t = Table(soggiorno_data, colWidths=[6 * cm, 10 * cm])
     t.setStyle(TableStyle([
         ("BOX", (0, 0), (-1, -1), 0.75, primary),
         ("INNERGRID", (0, 0), (-1, -1), 0.5, primary),

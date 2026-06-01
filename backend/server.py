@@ -1196,6 +1196,15 @@ async def create_comune_receipt(
 
     nights = calc.get("nights", 1)
     totale = calc.get("totale_imposta", 0.0)
+    breakdown = calc.get("breakdown", []) or []
+    n_adulti_paganti = sum(1 for b in breakdown if not b.get("esente"))
+    n_esenti = sum(1 for b in breakdown if b.get("esente"))
+    # Total taxed nights = sum of "notti_tassabili" for paying guests
+    n_pernottamenti = sum(int(b.get("notti_tassabili", 0)) for b in breakdown if not b.get("esente"))
+    # If no breakdown (degenerate case), fallback to len(guests) × nights
+    if not breakdown and guests:
+        n_adulti_paganti = len(guests)
+        n_pernottamenti = n_adulti_paganti * nights
 
     pdf_bytes = generate_comune_receipt(
         numero_ricevuta=body.numero_ricevuta,
@@ -1211,7 +1220,9 @@ async def create_comune_receipt(
         importo=totale,
         data_arrivo=c["data_arrivo"],
         data_partenza=c["data_partenza"],
-        pernottamenti=nights,
+        pernottamenti=n_pernottamenti,
+        n_adulti=n_adulti_paganti,
+        n_esenti=n_esenti,
         comune_piva=body.comune_piva,
         comune_pec=body.comune_pec,
     )
