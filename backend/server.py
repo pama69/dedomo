@@ -34,6 +34,7 @@ from services.alloggiati_web import (
     aggiungi_appartamento,
     cerca_comuni,
     cerca_stato,
+    cerca_paesi,
     ISO3_TO_ITALIAN_NAME,
     TIPO_OSPITE_SINGOLO,
     TIPO_CAPO_FAMIGLIA,
@@ -380,6 +381,27 @@ async def search_alloggiati_comuni(
     if not tok["success"]:
         return {"success": False, "message": tok.get("message")}
     return cerca_comuni(cfg["utente"], tok["token"], q)
+
+
+@api_router.get("/properties/{property_id}/alloggiati/paesi")
+async def search_alloggiati_paesi(
+    property_id: str, q: str = "", user=Depends(get_current_user)
+):
+    """Fast autocomplete for foreign countries (uses cached 'Luoghi' table).
+    Returns only foreign countries (no Italian comuni)."""
+    p = await db.properties.find_one(
+        {"property_id": property_id, "user_id": user["user_id"]}, {"_id": 0}
+    )
+    if not p:
+        raise HTTPException(404, "Proprietà non trovata")
+    cfg = p.get("alloggiati", {})
+    if not cfg.get("utente") or not cfg.get("password") or not cfg.get("ws_key"):
+        raise HTTPException(400, "Credenziali Alloggiati Web mancanti")
+
+    tok = generate_token(cfg["utente"], cfg["password"], cfg["ws_key"])
+    if not tok["success"]:
+        return {"success": False, "message": tok.get("message")}
+    return cerca_paesi(cfg["utente"], tok["token"], q, limit=15)
 
 
 class GuessLocationRequest(BaseModel):

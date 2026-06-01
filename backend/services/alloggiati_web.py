@@ -399,48 +399,127 @@ def cerca_comuni(utente: str, token: str, query: str) -> Dict[str, Any]:
     in a CSV with columns: Codice;Descrizione;...
     """
     try:
-        client = _get_client()
-        resp = client.service.Tabella(
-            Utente=utente, token=token, tipo="Luoghi"
-        )
-        result = zeep.helpers.serialize_object(resp)
-        outcome = result.get("TabellaResult") or {}
-        csv_data = result.get("CSV") or ""
-        if not outcome.get("esito"):
-            return {
-                "success": False,
-                "message": outcome.get("ErroreDes") or "Errore",
-            }
+        rows = _get_luoghi_cached(utente, token)
+        if rows is None:
+            return {"success": False, "message": "Errore caricamento tabella Luoghi"}
 
-        # Normalize query: strip parens, punctuation, common suffixes
+        # Normalize query: strip parens, punctuation
         import re as _re
         q_raw = (query or "").strip()
-        q_clean = _re.sub(r"\([^)]*\)", "", q_raw)  # remove (xx)
-        q_clean = _re.sub(r"[^\w\s]", " ", q_clean)  # punctuation -> space
+        q_clean = _re.sub(r"\([^)]*\)", "", q_raw)
+        q_clean = _re.sub(r"[^\w\s]", " ", q_clean)
         q_tokens = [t for t in q_clean.upper().split() if len(t) > 1]
 
         results = []
-        for line in csv_data.splitlines():
-            parts = [p.strip() for p in line.split(";")]
-            if len(parts) < 2:
+        for row in rows:
+            if q_tokens and not all(t in row["_upper"] for t in q_tokens):
                 continue
-            codice = parts[0]
-            descrizione = parts[1]
-            if not codice or codice.upper() == "CODICE":
-                continue
-            desc_upper = descrizione.upper()
-            # Match if ALL tokens are substrings of the description
-            if q_tokens and not all(t in desc_upper for t in q_tokens):
-                continue
-            provincia = parts[2] if len(parts) > 2 else ""
             results.append({
-                "codice": codice,
-                "nome": descrizione,
-                "provincia": provincia,
+                "codice": row["codice"],
+                "nome": row["nome"],
+                "provincia": row["provincia"],
             })
             if len(results) >= 50:
                 break
         return {"success": True, "results": results}
+    except Exception as e:
+        return {"success": False, "message": f"Errore: {str(e)}"}
+
+
+# ============================================================
+# IN-MEMORY CACHE for the 'Luoghi' table (Italian comuni + countries)
+# TTL: 24h. The reference table changes rarely.
+# Shared globally — all users hit the same parsed list.
+# ============================================================
+import time as _time
+_LUOGHI_CACHE = {"rows": None, "fetched_at": 0}
+_LUOGHI_TTL_SEC = 60 * 60 * 24  # 24h
+
+
+def _get_luoghi_cached(utente: str, token: str):
+    """Return parsed Luoghi rows from cache, fetching from SOAP if expired.
+    Each row: {codice, nome, provincia, _upper}."""
+    now = _time.time()
+    if (_LUOGHI_CACHE["rows"] is not None
+            and (now - _LUOGHI_CACHE["fetched_at"]) < _LUOGHI_TTL_SEC):
+        return _LUOGHI_CACHE["rows"]
+
+    client = _get_client()
+    resp = client.service.Tabella(Utente=utente, token=token, tipo="Luoghi")
+    result = zeep.helpers.serialize_object(resp)
+    outcome = result.get("TabellaResult") or {}
+    csv_data = result.get("CSV") or ""
+    if not outcome.get("esito"):
+        return None
+
+    rows = []
+    for line in csv_data.splitlines():
+        parts = [p.strip() for p in line.split(";")]
+        if len(parts) < 2:
+            continue
+        codice = parts[0]
+        descrizione = parts[1]
+        if not codice or codice.upper() == "CODICE":
+            continue
+        provincia = parts[2] if len(parts) > 2 else ""
+        rows.append({
+            "codice": codice,
+            "nome": descrizione,
+            "provincia": provincia,
+            "_upper": descrizione.upper(),
+        })
+    _LUOGHI_CACHE["rows"] = rows
+    _LUOGHI_CACHE["fetched_at"] = now
+    return rows
+
+
+def cerca_paesi(utente: str, token: str, query: str, limit: int = 20) -> Dict[str, Any]:
+    """Fast autocomplete search for foreign countries only (no Italian comuni).
+
+    Foreign countries in 'Luoghi' have provincia='' (or 'EE'/'Z'-prefix codes).
+    Italian comuni always have a 2-letter provincia code.
+    """
+    try:
+        rows = _get_luoghi_cached(utente, token)
+        if rows is None:
+            return {"success": False, "message": "Errore caricamento tabella"}
+
+        q = (query or "").strip().upper()
+        if not q:
+            return {"success": True, "results": []}
+
+        # Translate ISO3 if needed
+        if len(q) == 3 and q.isalpha():
+            translated = ISO3_TO_ITALIAN_NAME.get(q)
+            if translated:
+                q = translated
+
+        # Filter: foreign-only (no provincia) AND name contains query
+        matches = []
+        for row in rows:
+            if row["provincia"]:  # Italian comune → skip
+                continue
+            if q not in row["_upper"]:
+                continue
+            matches.append(row)
+
+        # Rank: exact match first, then startswith, then contains
+        def _score(r):
+            name = r["_upper"]
+            if name == q:
+                return 0
+            if name.startswith(q):
+                return 1
+            return 2
+        matches.sort(key=lambda r: (_score(r), r["nome"]))
+
+        return {
+            "success": True,
+            "results": [
+                {"codice": r["codice"], "nome": r["nome"]}
+                for r in matches[:limit]
+            ],
+        }
     except Exception as e:
         return {"success": False, "message": f"Errore: {str(e)}"}
 

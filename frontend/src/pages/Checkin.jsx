@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import Layout from "@/components/Layout";
 import api from "@/lib/api";
@@ -876,117 +876,118 @@ function PaeseField({ paeseNome, statoCode, propertyId, onChange }) {
   const [query, setQuery] = useState(paeseNome || "");
   const [results, setResults] = useState([]);
   const [searching, setSearching] = useState(false);
-  const [showSearch, setShowSearch] = useState(false);
-  const [searched, setSearched] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const [highlighted, setHighlighted] = useState(-1);
+  const lastReqId = useRef(0);
 
+  // Sync external value (e.g. from OCR) into local query when paeseNome changes
   useEffect(() => {
-    setQuery(paeseNome || "");
+    if (paeseNome && paeseNome !== query) setQuery(paeseNome);
+    // eslint-disable-next-line
   }, [paeseNome]);
 
-  const doSearch = async () => {
-    if (!query.trim() || !propertyId) return;
+  // Debounced live search
+  useEffect(() => {
+    if (!focused) return;
+    const q = (query || "").trim();
+    if (q.length < 2) { setResults([]); return; }
+    const reqId = ++lastReqId.current;
     setSearching(true);
-    setSearched(true);
-    try {
-      const r = await api.post(
-        `/properties/${propertyId}/alloggiati/guess-codici`,
-        { stato_nascita: query, is_foreign: true }
-      );
-      // Use candidates list (multiple matches) from cerca_stato
-      // We need the full list; the endpoint returns top match only for now,
-      // so fall back to searching via the comuni search which also returns countries.
-      const top = r.data?.stato_match;
-      if (top) setResults([top]);
-      else setResults([]);
-      // Also do a wider search to show candidates
+    const handle = setTimeout(async () => {
       try {
-        const r2 = await api.get(
-          `/properties/${propertyId}/alloggiati/comuni?q=${encodeURIComponent(query)}`
+        const r = await api.get(
+          `/properties/${propertyId}/alloggiati/paesi?q=${encodeURIComponent(q)}`,
         );
-        // Filter only entries that look like foreign states (no provincia + uppercase only letters/spaces)
-        const all = r2.data?.results || [];
-        const foreign = all.filter((x) => !x.provincia);
-        setResults(foreign.length > 0 ? foreign : all);
-      } catch {/* keep top match */}
-    } catch {
-      setResults([]);
-    } finally {
-      setSearching(false);
+        if (reqId !== lastReqId.current) return;
+        setResults(r.data?.results || []);
+      } catch {
+        if (reqId === lastReqId.current) setResults([]);
+      } finally {
+        if (reqId === lastReqId.current) setSearching(false);
+      }
+    }, 250);
+    return () => clearTimeout(handle);
+    // eslint-disable-next-line
+  }, [query, focused, propertyId]);
+
+  const pick = (c) => {
+    setQuery(c.nome);
+    setResults([]);
+    setFocused(false);
+    setHighlighted(-1);
+    onChange(c.nome, c.codice);
+  };
+
+  const onKey = (e) => {
+    if (!results.length) return;
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setHighlighted((h) => Math.min(h + 1, results.length - 1));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setHighlighted((h) => Math.max(h - 1, 0));
+    } else if (e.key === "Enter" && highlighted >= 0) {
+      e.preventDefault();
+      pick(results[highlighted]);
+    } else if (e.key === "Escape") {
+      setFocused(false);
     }
   };
 
-  const pick = (c) => {
-    onChange(c.nome, c.codice);
-    setShowSearch(false);
-    setResults([]);
-  };
-
   const hasMatch = !!statoCode && statoCode !== "100000100" && !!paeseNome;
+  const showDropdown = focused && (results.length > 0 || searching);
 
   return (
-    <div className="flex flex-col gap-1">
+    <div className="flex flex-col gap-1 relative">
       <span className="text-[10px] tracking-[0.25em] uppercase text-zinc-500">Paese (Cittadinanza)</span>
       <input
         type="text"
         data-testid="guest-paese"
-        value={paeseNome || ""}
-        onChange={(e) => onChange(e.target.value.toUpperCase(), "")}
-        placeholder="Es. ALBANIA, GERMANIA, STATI UNITI..."
+        value={query}
+        onChange={(e) => { setQuery(e.target.value.toUpperCase()); setHighlighted(-1); }}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setTimeout(() => setFocused(false), 150)}
+        onKeyDown={onKey}
+        placeholder="Inizia a scrivere il paese..."
+        autoComplete="off"
         className="bg-transparent border border-[#1E1E28] px-4 py-3 text-zinc-100 placeholder:text-zinc-600 focus:border-zinc-300 outline-none w-full font-mono text-sm"
       />
-      {hasMatch ? (
+      {showDropdown && (
+        <div className="absolute top-full left-0 right-0 mt-1 border border-[#1E1E28] bg-[#0E0E14] z-20 max-h-60 overflow-y-auto shadow-lg">
+          {searching && results.length === 0 && (
+            <div className="px-3 py-2 text-zinc-500 text-[10px] font-mono">Ricerca...</div>
+          )}
+          {results.map((c, i) => (
+            <button
+              key={c.codice}
+              type="button"
+              onMouseDown={(e) => { e.preventDefault(); pick(c); }}
+              onMouseEnter={() => setHighlighted(i)}
+              data-testid={`paese-result-${c.codice}`}
+              className={`w-full text-left text-[11px] font-mono px-3 py-2 cursor-pointer ${
+                highlighted === i
+                  ? "bg-[#15151C] text-zinc-100"
+                  : "text-zinc-300 hover:bg-[#15151C]"
+              }`}
+            >
+              <span>{c.nome}</span>
+              <span className="text-zinc-600 ml-2">{c.codice}</span>
+            </button>
+          ))}
+          {!searching && results.length === 0 && query.trim().length >= 2 && (
+            <div className="px-3 py-2 text-zinc-500 text-[10px] font-mono">Nessun paese trovato</div>
+          )}
+        </div>
+      )}
+      {hasMatch && !focused && (
         <div className="flex items-center gap-2 text-[10px] font-mono mt-1">
           <span className="text-emerald-500">✓ {paeseNome}</span>
           <span className="text-zinc-500">[ {statoCode} ]</span>
-          <button
-            type="button"
-            onClick={() => { setShowSearch(true); setQuery(paeseNome || ""); }}
-            className="ml-auto text-zinc-500 hover:text-zinc-100 uppercase tracking-widest cursor-pointer"
-          >
-            Cambia
-          </button>
         </div>
-      ) : paeseNome ? (
+      )}
+      {!hasMatch && paeseNome && !focused && (
         <div className="text-amber-400 text-[10px] font-mono mt-1">
-          ⚠ Paese non risolto. Cercalo manualmente:
-          <button
-            type="button"
-            onClick={() => { setShowSearch(true); setQuery(paeseNome || ""); doSearch(); }}
-            className="ml-2 text-amber-300 hover:text-amber-100 uppercase tracking-widest cursor-pointer"
-          >
-            Cerca
-          </button>
-        </div>
-      ) : null}
-
-      {showSearch && (
-        <div className="border border-[#1E1E28] p-3 mt-2 flex flex-col gap-2 bg-[#0E0E14]">
-          <div className="flex gap-2">
-            <input
-              type="text"
-              data-testid="paese-search-input"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), doSearch())}
-              placeholder="Digita nome paese..."
-              className="flex-1 bg-transparent border border-[#1E1E28] px-3 py-2 text-zinc-100 placeholder:text-zinc-600 focus:border-zinc-300 outline-none text-sm font-mono"
-            />
-            <button type="button" onClick={doSearch} disabled={searching} data-testid="paese-search-btn" className="border border-[#1E1E28] hover:border-zinc-500 px-3 py-2 text-zinc-300 uppercase tracking-widest text-[10px] cursor-pointer disabled:opacity-50">
-              {searching ? "..." : "Cerca"}
-            </button>
-          </div>
-          {results.length > 0 && (
-            <div className="max-h-40 overflow-y-auto flex flex-col gap-1">
-              {results.map((c) => (
-                <button key={c.codice} type="button" onClick={() => pick(c)} data-testid={`paese-result-${c.codice}`} className="text-left text-[10px] font-mono text-zinc-300 hover:text-zinc-100 hover:bg-[#15151C] px-2 py-2 cursor-pointer">
-                  {c.nome} — {c.codice}
-                </button>
-              ))}
-            </div>
-          )}
-          {searched && !searching && results.length === 0 && (
-            <p className="text-zinc-500 text-[10px] font-mono">Nessun paese trovato.</p>
-          )}
+          ⚠ Paese non risolto. Inizia a scrivere per cercarlo.
         </div>
       )}
     </div>
