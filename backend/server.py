@@ -2337,7 +2337,11 @@ async def fetch_alloggiati_receipts():
     """Periodic job: for every PROD checkin older than 24h without a cached
     Alloggiati Web receipt, try to download it via Ricevuta API and store it.
     """
-    cutoff = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
+    # Polling window: try receipts from anywhere between 1h and 14d after creation.
+    # Receipts are normally generated 24h after sending, but can sometimes appear earlier.
+    # We poll hourly so the first few attempts before 24h are essentially free.
+    cutoff_recent = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
+    cutoff_oldest = (datetime.now(timezone.utc) - timedelta(days=14)).isoformat()
     pending = await db.checkins.find(
         {
             "mode": "PROD",
@@ -2345,8 +2349,8 @@ async def fetch_alloggiati_receipts():
             # Skip checkins where all schedine were rejected (SchedineValide=0)
             "results.alloggiati_web.schedine_valide": {"$gt": 0},
             "alloggiati_ricevuta_pdf": {"$in": [None, ""]},
-            "created_at": {"$lte": cutoff},
-            # Skip checkins we already tried 7+ times (likely no receipt will ever appear)
+            "created_at": {"$lte": cutoff_recent, "$gte": cutoff_oldest},
+            # Skip checkins we already tried 14+ times (likely no receipt will ever appear)
             "$or": [
                 {"alloggiati_ricevuta_attempts": {"$exists": False}},
                 {"alloggiati_ricevuta_attempts": {"$lt": 14}},

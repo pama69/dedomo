@@ -14,6 +14,7 @@ Each "schedina" is a fixed-width text line (168 chars) per guest.
 
 from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
+import base64
 import zeep
 from zeep import Client
 from zeep.transports import Transport
@@ -724,31 +725,27 @@ def get_ricevuta_pdf(utente: str, token: str, data: str) -> Dict[str, Any]:
 
     Response shape:
       RicevutaResult: EsitoOperazioneServizio
-      PDF: base64 string
+      PDF: raw bytes (Zeep deserializes xsd:base64Binary to bytes)
     """
     try:
         client = _get_client()
         dt = datetime.fromisoformat(data)
-        data_str = dt.strftime("%d/%m/%Y")
+        data_str = dt.strftime("%Y-%m-%d")  # ISO date — the SOAP service rejects dd/MM/yyyy
         resp = client.service.Ricevuta(Utente=utente, token=token, Data=data_str)
         result = zeep.helpers.serialize_object(resp)
-        # The SOAP service returns the PDF inside an envelope. The schema may
-        # nest the result differently ("Ricevuta", "RicevutaResponse", "PDF", etc.)
-        # Try multiple known shapes.
         outcome = result.get("RicevutaResult") or result.get("EsitoOperazioneServizio") or {}
-        pdf_b64 = (
-            result.get("PDF")
-            or result.get("pdf")
-            or result.get("Pdf")
-            or (result.get("body") or {}).get("PDF") if isinstance(result.get("body"), dict) else None
-        )
-        # Last resort: scan all values for a long base64-looking string
-        if not pdf_b64:
-            import re as _re
-            for v in result.values() if isinstance(result, dict) else []:
-                if isinstance(v, str) and len(v) > 100 and _re.match(r"^[A-Za-z0-9+/=]+$", v[:60]):
-                    pdf_b64 = v
-                    break
+
+        raw_pdf = result.get("PDF") or result.get("pdf") or result.get("Pdf")
+        pdf_b64 = None
+        if raw_pdf:
+            if isinstance(raw_pdf, bytes):
+                pdf_b64 = base64.b64encode(raw_pdf).decode("ascii")
+            elif isinstance(raw_pdf, str):
+                if raw_pdf.startswith("%PDF"):
+                    pdf_b64 = base64.b64encode(raw_pdf.encode("latin-1")).decode("ascii")
+                else:
+                    # Already base64
+                    pdf_b64 = raw_pdf
 
         return {
             "success": bool(outcome.get("esito")) and bool(pdf_b64),
@@ -756,7 +753,11 @@ def get_ricevuta_pdf(utente: str, token: str, data: str) -> Dict[str, Any]:
             "errore_cod": outcome.get("ErroreCod"),
             "errore_des": outcome.get("ErroreDes"),
             "pdf_base64": pdf_b64,
-            "raw": result,
+            "raw": {
+                "RicevutaResult": outcome,
+                "PDF_present": bool(raw_pdf),
+                "PDF_size": len(raw_pdf) if raw_pdf else 0,
+            },
         }
     except Exception as e:
         return {"success": False, "message": str(e)}
