@@ -10,6 +10,7 @@ import Archive from "@/pages/Archive";
 import Owners from "@/pages/Owners";
 import OwnerArchive from "@/pages/OwnerArchive";
 import Admin from "@/pages/Admin";
+import CalendarPage from "@/pages/Calendar";
 
 function AppRouter() {
   const location = useLocation();
@@ -28,6 +29,7 @@ function AppRouter() {
       <Route path="/archive/owners" element={<Owners />} />
       <Route path="/archive/owners/:ownerId" element={<OwnerArchive />} />
       <Route path="/admin" element={<Admin />} />
+      <Route path="/calendar" element={<CalendarPage />} />
       <Route path="/settings" element={<Settings />} />
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>

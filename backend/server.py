@@ -19,7 +19,7 @@ import requests
 from pathlib import Path
 from pydantic import BaseModel, Field, ConfigDict
 from typing import List, Optional, Dict, Any
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone, timedelta, date
 
 # Service imports
 from services.ocr_service import extract_document_data
@@ -251,6 +251,17 @@ class ImpostaSoggiornoConfig(BaseModel):
     enabled: bool = True
 
 
+class CalendarConfig(BaseModel):
+    """External iCal URLs to import bookings from."""
+    booking_ical_url: str = ""
+    airbnb_ical_url: str = ""
+    vrbo_ical_url: str = ""
+    # Color (hex) chosen by user for visualization on the calendar.
+    color: str = "#10b981"  # default emerald
+    # Token for the personal export URL (unguessable).
+    export_token: str = Field(default_factory=lambda: uuid.uuid4().hex)
+
+
 class PropertyCreate(BaseModel):
     nome: str
     indirizzo: str = ""
@@ -265,6 +276,7 @@ class PropertyCreate(BaseModel):
     alloggiati: AlloggiatiCredentials = AlloggiatiCredentials()
     ross1000: Ross1000Credentials = Ross1000Credentials()
     imposta_soggiorno: ImpostaSoggiornoConfig = ImpostaSoggiornoConfig()
+    calendar: CalendarConfig = CalendarConfig()
 
 
 class Property(PropertyCreate):
@@ -2000,6 +2012,253 @@ async def admin_toggle_user_disabled(user_id: str, admin=Depends(get_admin_user)
 
 
 # ====================================================================
+# CALENDAR  —  external iCal sync (in) + personal export (out) + manual bookings
+# ====================================================================
+from services.calendar_service import fetch_ical_events, build_personal_ical
+
+
+class ManualBookingCreate(BaseModel):
+    property_id: str
+    start: str  # YYYY-MM-DD
+    end: str    # YYYY-MM-DD
+    notes: str = ""
+
+
+class ManualBookingUpdate(BaseModel):
+    start: Optional[str] = None
+    end: Optional[str] = None
+    notes: Optional[str] = None
+
+
+@api_router.get("/calendar/events")
+async def calendar_events(
+    date_from: str,
+    date_to: str,
+    user=Depends(get_current_user),
+):
+    """Return all calendar events (external + manual + checkins) in [date_from, date_to].
+    Each event: {property_id, source: 'B'|'A'|'V'|'P'|'C', start, end, summary, notes,
+                 color, property_name, booking_id (if manual or external uid)}.
+    """
+    props = await db.properties.find(
+        {"user_id": user["user_id"]}, {"_id": 0}
+    ).to_list(1000)
+
+    events = []
+    for p in props:
+        pid = p["property_id"]
+        cal_cfg = p.get("calendar", {}) or {}
+        color = cal_cfg.get("color") or "#10b981"
+        name = p.get("nome", "")
+
+        # External feeds (from cache; refreshed by background job)
+        cache = await db.ical_cache.find_one(
+            {"property_id": pid}, {"_id": 0}
+        )
+        cache = cache or {}
+        for src_letter, src_key in [("B", "booking"), ("A", "airbnb"), ("V", "vrbo")]:
+            for ev in cache.get(src_key, []) or []:
+                if ev["start"] <= date_to and ev["end"] >= date_from:
+                    events.append({
+                        "id": f"{pid}-{src_key}-{ev['uid']}",
+                        "property_id": pid,
+                        "property_name": name,
+                        "source": src_letter,
+                        "start": ev["start"],
+                        "end": ev["end"],
+                        "summary": ev.get("summary", ""),
+                        "notes": ev.get("description", ""),
+                        "color": color,
+                        "editable": False,
+                    })
+
+    # Manual bookings (P) from db
+    manual = await db.manual_bookings.find(
+        {
+            "user_id": user["user_id"],
+            "start": {"$lte": date_to},
+            "end": {"$gte": date_from},
+        },
+        {"_id": 0},
+    ).to_list(1000)
+    prop_map = {p["property_id"]: p for p in props}
+    for m in manual:
+        p = prop_map.get(m["property_id"], {})
+        events.append({
+            "id": f"manual-{m['booking_id']}",
+            "booking_id": m["booking_id"],
+            "property_id": m["property_id"],
+            "property_name": p.get("nome", ""),
+            "source": "P",
+            "start": m["start"],
+            "end": m["end"],
+            "summary": "Prenotazione manuale",
+            "notes": m.get("notes", ""),
+            "color": (p.get("calendar") or {}).get("color", "#10b981"),
+            "editable": True,
+        })
+
+    return {
+        "events": events,
+        "properties": [
+            {
+                "property_id": p["property_id"],
+                "nome": p.get("nome", ""),
+                "color": (p.get("calendar") or {}).get("color", "#10b981"),
+            }
+            for p in props
+        ],
+    }
+
+
+@api_router.post("/calendar/manual")
+async def create_manual_booking(
+    body: ManualBookingCreate, user=Depends(get_current_user)
+):
+    # Verify the property belongs to the user
+    p = await db.properties.find_one(
+        {"property_id": body.property_id, "user_id": user["user_id"]}, {"_id": 0, "property_id": 1}
+    )
+    if not p:
+        raise HTTPException(404, "Struttura non trovata")
+    # Validate dates
+    try:
+        s = date.fromisoformat(body.start)
+        e = date.fromisoformat(body.end)
+        if e < s:
+            raise HTTPException(400, "Data di fine prima della data di inizio")
+    except ValueError:
+        raise HTTPException(400, "Formato data non valido (YYYY-MM-DD)")
+
+    record = {
+        "booking_id": f"mbk_{uuid.uuid4().hex[:12]}",
+        "user_id": user["user_id"],
+        "property_id": body.property_id,
+        "start": body.start,
+        "end": body.end,
+        "notes": body.notes,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.manual_bookings.insert_one(record)
+    record.pop("_id", None)
+    return record
+
+
+@api_router.patch("/calendar/manual/{booking_id}")
+async def update_manual_booking(
+    booking_id: str, body: ManualBookingUpdate, user=Depends(get_current_user)
+):
+    update = {k: v for k, v in body.model_dump(exclude_none=True).items()}
+    if not update:
+        return {"ok": True}
+    if "start" in update or "end" in update:
+        # Validate
+        try:
+            existing = await db.manual_bookings.find_one(
+                {"booking_id": booking_id, "user_id": user["user_id"]}, {"_id": 0}
+            )
+            if not existing:
+                raise HTTPException(404, "Prenotazione non trovata")
+            s = date.fromisoformat(update.get("start", existing["start"]))
+            e = date.fromisoformat(update.get("end", existing["end"]))
+            if e < s:
+                raise HTTPException(400, "Data di fine prima della data di inizio")
+        except ValueError:
+            raise HTTPException(400, "Formato data non valido")
+    r = await db.manual_bookings.update_one(
+        {"booking_id": booking_id, "user_id": user["user_id"]},
+        {"$set": update},
+    )
+    if r.matched_count == 0:
+        raise HTTPException(404, "Prenotazione non trovata")
+    return {"ok": True}
+
+
+@api_router.delete("/calendar/manual/{booking_id}")
+async def delete_manual_booking(booking_id: str, user=Depends(get_current_user)):
+    r = await db.manual_bookings.delete_one(
+        {"booking_id": booking_id, "user_id": user["user_id"]}
+    )
+    if r.deleted_count == 0:
+        raise HTTPException(404, "Prenotazione non trovata")
+    return {"ok": True}
+
+
+@api_router.get("/calendar/personal-url/{property_id}")
+async def calendar_personal_url(property_id: str, user=Depends(get_current_user)):
+    """Return the public iCal URL for this property's manual bookings."""
+    p = await db.properties.find_one(
+        {"property_id": property_id, "user_id": user["user_id"]}, {"_id": 0}
+    )
+    if not p:
+        raise HTTPException(404, "Struttura non trovata")
+    cal_cfg = p.get("calendar") or {}
+    token = cal_cfg.get("export_token")
+    if not token:
+        token = uuid.uuid4().hex
+        await db.properties.update_one(
+            {"property_id": property_id},
+            {"$set": {"calendar.export_token": token}},
+        )
+    base = os.environ.get("PUBLIC_BACKEND_URL", "")
+    path = f"/api/calendar/export/{property_id}/{token}.ics"
+    return {
+        "url": (base + path) if base else path,
+        "path": path,
+        "token": token,
+    }
+
+
+# Public (no auth) endpoint — protected by token in URL
+@api_router.get("/calendar/export/{property_id}/{token}.ics")
+async def calendar_export_ics(property_id: str, token: str):
+    p = await db.properties.find_one(
+        {"property_id": property_id}, {"_id": 0}
+    )
+    if not p:
+        raise HTTPException(404, "Struttura non trovata")
+    cfg = p.get("calendar") or {}
+    if not cfg.get("export_token") or cfg["export_token"] != token:
+        raise HTTPException(403, "Token non valido")
+    bookings = await db.manual_bookings.find(
+        {"property_id": property_id}, {"_id": 0}
+    ).to_list(2000)
+    ical_text = build_personal_ical(
+        property_name=p.get("nome", "Ospitalo"),
+        bookings=bookings,
+    )
+    return Response(
+        content=ical_text,
+        media_type="text/calendar; charset=utf-8",
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+async def refresh_ical_caches():
+    """Background job: refresh external iCal feeds every 4 hours."""
+    props = await db.properties.find(
+        {}, {"_id": 0, "property_id": 1, "calendar": 1}
+    ).to_list(5000)
+
+    n = 0
+    for p in props:
+        cal = p.get("calendar") or {}
+        pid = p["property_id"]
+        update = {"property_id": pid, "refreshed_at": datetime.now(timezone.utc).isoformat()}
+        for key, url_key in [("booking", "booking_ical_url"), ("airbnb", "airbnb_ical_url"), ("vrbo", "vrbo_ical_url")]:
+            url = cal.get(url_key) or ""
+            update[key] = fetch_ical_events(url) if url else []
+        await db.ical_cache.update_one(
+            {"property_id": pid},
+            {"$set": update},
+            upsert=True,
+        )
+        n += 1
+    if n:
+        logger.info(f"[ical-cache] refreshed {n} properties")
+
+
+# ====================================================================
 # RETRY & NOTIFICATIONS
 # ====================================================================
 
@@ -2428,6 +2687,13 @@ async def startup_scheduler():
         retry_failed_submissions, "date",
         run_date=datetime.now(timezone.utc) + timedelta(seconds=30),
         id="retry_failed_initial",
+    )
+    # Refresh external iCal feeds every 4 hours
+    scheduler.add_job(refresh_ical_caches, "interval", hours=4, id="ical_refresh")
+    scheduler.add_job(
+        refresh_ical_caches, "date",
+        run_date=datetime.now(timezone.utc) + timedelta(seconds=45),
+        id="ical_refresh_initial",
     )
     scheduler.start()
     logger.info("[scheduler] started")

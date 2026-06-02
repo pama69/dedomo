@@ -44,6 +44,12 @@ const newProperty = () => ({
   alloggiati: { ...emptyAlloggiati },
   ross1000: { ...emptyRoss },
   imposta_soggiorno: { ...emptyImposta },
+  calendar: {
+    booking_ical_url: "",
+    airbnb_ical_url: "",
+    vrbo_ical_url: "",
+    color: "#10b981",
+  },
 });
 
 export default function Settings() {
@@ -359,6 +365,46 @@ function PropertyEditor({ p, setP, save, cancel, saving, error }) {
         </div>
         <Field label="Esenti sotto i (anni)" type="number" value={p.imposta_soggiorno.esenti_under_anni ?? ""} onChange={(v) => upd("imposta_soggiorno.esenti_under_anni", v === "" ? "" : parseInt(v))} testid="is-esenti" />
         <Field label="Endpoint Comune (opzionale)" value={p.imposta_soggiorno.endpoint_comune} onChange={(v) => upd("imposta_soggiorno.endpoint_comune", v)} testid="is-endpoint" placeholder="https://..." />
+      </Section>
+
+      <Section title="Calendario / Sincronizzazione iCal">
+        <Field
+          label="Booking · URL iCal (entrata)"
+          value={p.calendar?.booking_ical_url || ""}
+          onChange={(v) => upd("calendar.booking_ical_url", v)}
+          testid="cal-booking-url"
+          placeholder="https://admin.booking.com/.../calendar.ics"
+        />
+        <Field
+          label="Airbnb · URL iCal (entrata)"
+          value={p.calendar?.airbnb_ical_url || ""}
+          onChange={(v) => upd("calendar.airbnb_ical_url", v)}
+          testid="cal-airbnb-url"
+          placeholder="https://www.airbnb.it/calendar/ical/..."
+        />
+        <Field
+          label="Vrbo · URL iCal (entrata)"
+          value={p.calendar?.vrbo_ical_url || ""}
+          onChange={(v) => upd("calendar.vrbo_ical_url", v)}
+          testid="cal-vrbo-url"
+          placeholder="https://www.vrbo.com/icalendar/..."
+        />
+        <div className="flex flex-col gap-1">
+          <span className="text-[10px] tracking-[0.25em] uppercase text-zinc-500">Colore Appartamento</span>
+          <div className="flex items-center gap-2">
+            <input
+              type="color"
+              value={p.calendar?.color || "#10b981"}
+              onChange={(e) => upd("calendar.color", e.target.value)}
+              data-testid="cal-color"
+              className="w-12 h-10 bg-transparent border border-[#1E1E28] cursor-pointer"
+            />
+            <span className="text-zinc-400 text-[11px] font-mono">{p.calendar?.color || "#10b981"}</span>
+          </div>
+        </div>
+        {p.property_id && (
+          <PersonalIcalField propertyId={p.property_id} />
+        )}
       </Section>
 
       {error && <p className="text-red-500 text-xs font-mono uppercase tracking-wider">[ ERRORE ] {error}</p>}
@@ -841,3 +887,55 @@ function AddApartmentForm({ propertyId, onAdded, onCancel }) {
     </div>
   );
 }
+
+
+function PersonalIcalField({ propertyId }) {
+  const [data, setData] = useState(null);
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (!propertyId) return;
+    api.get(`/calendar/personal-url/${propertyId}`)
+      .then((r) => setData(r.data))
+      .catch(() => setData(null));
+  }, [propertyId]);
+
+  if (!data) return null;
+  const fullUrl = `${process.env.REACT_APP_BACKEND_URL}${data.path}`;
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(fullUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch { /* */ }
+  };
+
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="text-[10px] tracking-[0.25em] uppercase text-zinc-500">Calendario Personale · URL iCal (uscita)</span>
+      <div className="flex gap-2">
+        <input
+          type="text"
+          readOnly
+          value={fullUrl}
+          data-testid="cal-personal-url"
+          onClick={(e) => e.target.select()}
+          className="flex-1 bg-[#0E0E14] border border-[#1E1E28] px-3 py-2 text-zinc-100 text-[10px] font-mono outline-none"
+        />
+        <button
+          type="button"
+          onClick={copy}
+          data-testid="cal-personal-copy"
+          className="border border-[#1E1E28] hover:border-emerald-500 text-zinc-300 hover:text-emerald-400 px-3 py-2 uppercase tracking-widest text-[10px] cursor-pointer"
+        >
+          {copied ? "Copiato ✓" : "Copia"}
+        </button>
+      </div>
+      <span className="text-zinc-600 text-[10px] font-mono">
+        Incolla questo URL nei tuoi profili Booking/Airbnb/Vrbo per esportare le tue prenotazioni manuali.
+      </span>
+    </div>
+  );
+}
+

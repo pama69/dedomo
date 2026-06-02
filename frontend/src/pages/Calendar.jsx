@@ -1,0 +1,317 @@
+import { useEffect, useMemo, useState } from "react";
+import Layout from "@/components/Layout";
+import api from "@/lib/api";
+
+function startOfMonth(d) { const x = new Date(d); x.setDate(1); x.setHours(0,0,0,0); return x; }
+function addMonths(d, n) { const x = new Date(d); x.setMonth(x.getMonth() + n); return x; }
+function fmtISO(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+function fmtMonthName(d) {
+  return d.toLocaleDateString("it-IT", { month: "long", year: "numeric" });
+}
+function getCalendarGrid(monthStart) {
+  // Returns a 6×7 grid (42 days) starting from Monday before/on the 1st
+  const first = new Date(monthStart);
+  const dayOfWeek = (first.getDay() + 6) % 7; // 0=Mon
+  const gridStart = new Date(first);
+  gridStart.setDate(first.getDate() - dayOfWeek);
+  const cells = [];
+  for (let i = 0; i < 42; i++) {
+    const d = new Date(gridStart);
+    d.setDate(gridStart.getDate() + i);
+    cells.push(d);
+  }
+  return cells;
+}
+
+export default function Calendar() {
+  const [monthStart, setMonthStart] = useState(startOfMonth(new Date()));
+  const [events, setEvents] = useState([]);
+  const [properties, setProperties] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [addOpen, setAddOpen] = useState(false);
+  const [editEvent, setEditEvent] = useState(null);
+
+  const cells = useMemo(() => getCalendarGrid(monthStart), [monthStart]);
+  const rangeFrom = fmtISO(cells[0]);
+  const rangeTo = fmtISO(cells[41]);
+
+  const reload = async () => {
+    setLoading(true);
+    try {
+      const r = await api.get(`/calendar/events?date_from=${rangeFrom}&date_to=${rangeTo}`);
+      setEvents(r.data?.events || []);
+      setProperties(r.data?.properties || []);
+    } catch { /* */ } finally { setLoading(false); }
+  };
+
+  useEffect(() => { reload(); /* eslint-disable-next-line */ }, [rangeFrom, rangeTo]);
+
+  const eventsByDay = useMemo(() => {
+    const map = {};
+    for (const ev of events) {
+      // Normalize: iCal end is exclusive — span includes start, excludes end
+      const s = new Date(ev.start);
+      const e = new Date(ev.end);
+      for (let d = new Date(s); d < e; d.setDate(d.getDate() + 1)) {
+        const k = fmtISO(d);
+        if (!map[k]) map[k] = [];
+        map[k].push(ev);
+      }
+      // If event is single-day (start == end), include the start
+      if (s.getTime() === e.getTime()) {
+        const k = fmtISO(s);
+        if (!map[k]) map[k] = [];
+        map[k].push(ev);
+      }
+    }
+    return map;
+  }, [events]);
+
+  const today = fmtISO(new Date());
+
+  return (
+    <Layout>
+      <div className="flex items-baseline justify-between flex-wrap gap-2">
+        <h2 className="text-2xl font-bold uppercase tracking-tight text-zinc-100" style={{ fontFamily: "'Cabinet Grotesk', sans-serif" }}>
+          Calendario
+        </h2>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setMonthStart(addMonths(monthStart, -1))}
+            data-testid="cal-prev-month"
+            className="border border-[#1E1E28] hover:border-zinc-500 text-zinc-300 px-3 py-2 text-[10px] uppercase tracking-widest cursor-pointer"
+          >←</button>
+          <span className="text-zinc-100 text-sm uppercase tracking-widest min-w-[140px] text-center font-mono">
+            {fmtMonthName(monthStart)}
+          </span>
+          <button
+            onClick={() => setMonthStart(addMonths(monthStart, 1))}
+            data-testid="cal-next-month"
+            className="border border-[#1E1E28] hover:border-zinc-500 text-zinc-300 px-3 py-2 text-[10px] uppercase tracking-widest cursor-pointer"
+          >→</button>
+          <button
+            onClick={() => setAddOpen(true)}
+            data-testid="cal-add"
+            className="ml-2 border border-emerald-500/60 hover:bg-emerald-500/10 text-emerald-400 px-3 py-2 text-base uppercase tracking-widest cursor-pointer leading-none"
+          >+</button>
+        </div>
+      </div>
+
+      {/* Legend */}
+      <div className="flex flex-wrap gap-3 border border-[#1E1E28] p-3" data-testid="cal-legend">
+        {properties.length === 0 ? (
+          <span className="text-zinc-500 text-[11px] font-mono">Nessuna struttura configurata.</span>
+        ) : (
+          properties.map((p) => (
+            <div key={p.property_id} className="flex items-center gap-2 text-[10px] font-mono text-zinc-300">
+              <span className="inline-block w-4 h-4" style={{ backgroundColor: p.color }} />
+              <span>{p.nome}</span>
+            </div>
+          ))
+        )}
+        <div className="ml-auto flex gap-3 text-[9px] font-mono text-zinc-500">
+          <span>B Booking</span><span>A Airbnb</span><span>V Vrbo</span><span>P Personale</span>
+        </div>
+      </div>
+
+      {loading && <p className="text-zinc-500 text-[11px] font-mono">Caricamento...</p>}
+
+      {/* Calendar grid */}
+      <div className="border border-[#1E1E28]">
+        <div className="grid grid-cols-7 border-b border-[#1E1E28]">
+          {["Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom"].map((d) => (
+            <div key={d} className="px-2 py-2 text-[9px] tracking-widest uppercase text-zinc-500 text-center font-mono border-r border-[#1E1E28] last:border-r-0">{d}</div>
+          ))}
+        </div>
+        <div className="grid grid-cols-7" style={{ gridAutoRows: "minmax(96px, auto)" }}>
+          {cells.map((d, i) => {
+            const k = fmtISO(d);
+            const inMonth = d.getMonth() === monthStart.getMonth();
+            const dayEvents = eventsByDay[k] || [];
+            const isToday = k === today;
+            return (
+              <div
+                key={i}
+                data-testid={`cal-day-${k}`}
+                className={`border-r border-b border-[#1E1E28] last:border-r-0 p-1 flex flex-col gap-0.5 ${!inMonth ? "bg-[#0a0a0e]" : ""}`}
+              >
+                <span className={`text-[10px] font-mono ${isToday ? "text-emerald-500 font-bold" : inMonth ? "text-zinc-400" : "text-zinc-700"}`}>
+                  {d.getDate()}
+                </span>
+                <div className="flex flex-col gap-0.5">
+                  {dayEvents.slice(0, 3).map((ev) => (
+                    <button
+                      key={ev.id}
+                      type="button"
+                      onClick={() => ev.editable && setEditEvent(ev)}
+                      data-testid={`cal-event-${ev.id}`}
+                      style={{ backgroundColor: ev.color }}
+                      className={`text-left text-[9px] font-mono text-white truncate px-1.5 py-0.5 ${ev.editable ? "cursor-pointer hover:opacity-80" : "cursor-default"}`}
+                      title={`${ev.property_name} · ${ev.source}${ev.notes ? ` · ${ev.notes}` : ""}`}
+                    >
+                      <span className="font-bold mr-1">{ev.source}</span>
+                      <span className="opacity-80">{ev.property_name?.slice(0, 12)}</span>
+                    </button>
+                  ))}
+                  {dayEvents.length > 3 && (
+                    <span className="text-[9px] font-mono text-zinc-500 px-1.5">+{dayEvents.length - 3}</span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {addOpen && (
+        <BookingModal
+          properties={properties}
+          onClose={() => setAddOpen(false)}
+          onSaved={() => { setAddOpen(false); reload(); }}
+        />
+      )}
+      {editEvent && (
+        <BookingModal
+          properties={properties}
+          booking={editEvent}
+          onClose={() => setEditEvent(null)}
+          onSaved={() => { setEditEvent(null); reload(); }}
+          onDeleted={() => { setEditEvent(null); reload(); }}
+        />
+      )}
+    </Layout>
+  );
+}
+
+function BookingModal({ properties, booking, onClose, onSaved, onDeleted }) {
+  const isEdit = !!booking;
+  const [propertyId, setPropertyId] = useState(booking?.property_id || properties[0]?.property_id || "");
+  const [start, setStart] = useState(booking?.start || fmtISO(new Date()));
+  const [end, setEnd] = useState(booking?.end || fmtISO(new Date()));
+  const [notes, setNotes] = useState(booking?.notes || "");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  const save = async () => {
+    if (!propertyId) { setError("Seleziona una struttura"); return; }
+    if (!start || !end) { setError("Date obbligatorie"); return; }
+    if (end < start) { setError("Data fine prima della data inizio"); return; }
+    setSaving(true); setError("");
+    try {
+      if (isEdit) {
+        await api.patch(`/calendar/manual/${booking.booking_id}`, { start, end, notes });
+      } else {
+        await api.post("/calendar/manual", { property_id: propertyId, start, end, notes });
+      }
+      onSaved && onSaved();
+    } catch (e) {
+      setError(e.response?.data?.detail || "Errore");
+    } finally { setSaving(false); }
+  };
+
+  const remove = async () => {
+    if (!window.confirm("Eliminare questa prenotazione?")) return;
+    setSaving(true);
+    try {
+      await api.delete(`/calendar/manual/${booking.booking_id}`);
+      onDeleted && onDeleted();
+    } catch (e) { setError(e.response?.data?.detail || "Errore"); }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/70 z-50 flex items-start justify-center p-4 overflow-y-auto" onClick={onClose} data-testid="cal-booking-modal">
+      <div className="bg-[#0E0E14] border border-[#1E1E28] max-w-md w-full my-8 flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <div className="px-4 py-3 border-b border-[#1E1E28] flex items-center justify-between">
+          <span className="text-[10px] tracking-[0.25em] uppercase text-zinc-400">
+            {isEdit ? "Modifica Prenotazione" : "Nuova Prenotazione"}
+          </span>
+          <button onClick={onClose} className="text-zinc-500 hover:text-zinc-100 cursor-pointer text-lg">✕</button>
+        </div>
+        <div className="p-4 flex flex-col gap-3">
+          <label className="flex flex-col gap-1">
+            <span className="text-[10px] tracking-[0.25em] uppercase text-zinc-500">Struttura</span>
+            <select
+              value={propertyId}
+              onChange={(e) => setPropertyId(e.target.value)}
+              disabled={isEdit}
+              data-testid="cal-booking-property"
+              className="bg-transparent border border-[#1E1E28] px-3 py-2 text-zinc-100 focus:border-zinc-300 outline-none text-sm font-mono disabled:opacity-50"
+            >
+              {properties.map((p) => (
+                <option key={p.property_id} value={p.property_id} className="bg-[#0E0E14]">
+                  {p.nome}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="grid grid-cols-2 gap-2">
+            <label className="flex flex-col gap-1">
+              <span className="text-[10px] tracking-[0.25em] uppercase text-zinc-500">Data Arrivo</span>
+              <input
+                type="date"
+                value={start}
+                onChange={(e) => setStart(e.target.value)}
+                data-testid="cal-booking-start"
+                className="bg-transparent border border-[#1E1E28] px-3 py-2 text-zinc-100 focus:border-zinc-300 outline-none text-sm font-mono"
+              />
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="text-[10px] tracking-[0.25em] uppercase text-zinc-500">Data Partenza</span>
+              <input
+                type="date"
+                value={end}
+                onChange={(e) => setEnd(e.target.value)}
+                data-testid="cal-booking-end"
+                className="bg-transparent border border-[#1E1E28] px-3 py-2 text-zinc-100 focus:border-zinc-300 outline-none text-sm font-mono"
+              />
+            </label>
+          </div>
+          <label className="flex flex-col gap-1">
+            <span className="text-[10px] tracking-[0.25em] uppercase text-zinc-500">Note</span>
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              rows={3}
+              data-testid="cal-booking-notes"
+              placeholder="Note libere..."
+              className="bg-transparent border border-[#1E1E28] px-3 py-2 text-zinc-100 placeholder:text-zinc-600 focus:border-zinc-300 outline-none text-sm font-mono resize-none"
+            />
+          </label>
+          {error && <p className="text-red-400 text-[10px] font-mono">[ ERR ] {error}</p>}
+          <div className="flex gap-2 mt-2">
+            <button
+              onClick={save}
+              disabled={saving}
+              data-testid="cal-booking-save"
+              className="flex-1 border border-emerald-500/60 hover:bg-emerald-500/10 text-emerald-400 px-4 py-2 uppercase tracking-widest text-[10px] cursor-pointer disabled:opacity-50"
+            >
+              {saving ? "..." : isEdit ? "Salva" : "Crea"}
+            </button>
+            {isEdit && (
+              <button
+                onClick={remove}
+                disabled={saving}
+                data-testid="cal-booking-delete"
+                className="border border-red-500/60 hover:bg-red-500/10 text-red-400 px-4 py-2 uppercase tracking-widest text-[10px] cursor-pointer disabled:opacity-50"
+              >
+                Elimina
+              </button>
+            )}
+            <button
+              onClick={onClose}
+              className="border border-[#1E1E28] hover:border-zinc-500 text-zinc-400 px-4 py-2 uppercase tracking-widest text-[10px] cursor-pointer"
+            >
+              Annulla
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
