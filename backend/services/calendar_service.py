@@ -58,14 +58,14 @@ def build_personal_ical(
     Each booking dict expected: {booking_id, start, end, notes}.
     """
     cal = Calendar()
-    cal.add("prodid", "-//Ospitalo//Personal Calendar//IT")
+    cal.add("prodid", "-//Dedomo//Personal Calendar//IT")
     cal.add("version", "2.0")
-    cal.add("name", f"Ospitalo · {property_name}")
-    cal.add("x-wr-calname", f"Ospitalo · {property_name}")
+    cal.add("name", f"Dedomo · {property_name}")
+    cal.add("x-wr-calname", f"Dedomo · {property_name}")
     cal.add("calscale", "GREGORIAN")
     for b in bookings:
         ev = Event()
-        ev.add("uid", f"{b['booking_id']}@ospitalo")
+        ev.add("uid", f"{b['booking_id']}@dedomo")
         try:
             start = date.fromisoformat(b["start"])
             end = date.fromisoformat(b["end"])
@@ -73,7 +73,7 @@ def build_personal_ical(
             continue
         ev.add("dtstart", start)
         ev.add("dtend", end)
-        ev.add("summary", f"Ospitalo · {property_name}")
+        ev.add("summary", f"Dedomo · {property_name}")
         if b.get("notes"):
             ev.add("description", b["notes"])
         ev.add("dtstamp", datetime.now(timezone.utc))

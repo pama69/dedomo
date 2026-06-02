@@ -1,5 +1,5 @@
 """
-Ospitalo - Main FastAPI app.
+Dedomo - Main FastAPI app.
 Backend per invio dati ospiti case vacanza ai portali Alloggiati Web,
 Ross 1000 e Imposta di Soggiorno comunale.
 """
@@ -68,7 +68,7 @@ mongo_url = os.environ["MONGO_URL"]
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ["DB_NAME"]]
 
-app = FastAPI(title="Ospitalo API")
+app = FastAPI(title="Dedomo API")
 api_router = APIRouter(prefix="/api")
 
 
@@ -240,7 +240,7 @@ class Ross1000Credentials(BaseModel):
     endpoint_url: str = ""  # auto-filled from REGIONAL_ENDPOINTS if blank
     format: str = "soap_v2"  # soap_v2 | csv_manual
     codice_struttura: str = ""
-    nome_prodotto: str = "Ospitalo"
+    nome_prodotto: str = "Dedomo"
     n_camere: int = 1
     n_letti: int = 2
     enabled: bool = True
@@ -595,7 +595,7 @@ async def test_turismo5_credentials(
         password=cfg["password"],
         codice_struttura=cfg["codice_struttura"],
         movimenti=test_movimento,
-        prodotto=cfg.get("nome_prodotto", "Ospitalo"),
+        prodotto=cfg.get("nome_prodotto", "Dedomo"),
         test_mode=False,
     )
     logger.info(f"[T5-TEST] response: status={resp.get('status_code')} ok={resp.get('success')}")
@@ -963,7 +963,7 @@ async def checkin_submit(body: CheckinSubmit, user=Depends(get_current_user)):
                 password=ross_cfg.get("password", ""),
                 codice_struttura=codice_struttura,
                 movimenti=movimenti,
-                prodotto=ross_cfg.get("nome_prodotto", "Ospitalo"),
+                prodotto=ross_cfg.get("nome_prodotto", "Dedomo"),
                 test_mode=test_mode,
             )
             t5_resp["mode"] = (
@@ -1225,7 +1225,7 @@ async def trigger_receipts_refresh(user=Depends(get_current_user)):
 
 @api_router.get("/")
 async def root():
-    return {"app": "Ospitalo", "status": "ok"}
+    return {"app": "Dedomo", "status": "ok"}
 
 
 app.add_middleware(
@@ -2227,7 +2227,7 @@ async def calendar_export_ics(property_id: str, token: str):
         {"property_id": property_id}, {"_id": 0}
     ).to_list(2000)
     ical_text = build_personal_ical(
-        property_name=p.get("nome", "Ospitalo"),
+        property_name=p.get("nome", "Dedomo"),
         bookings=bookings,
     )
     return Response(
@@ -2573,7 +2573,7 @@ async def _retry_turismo5(c: Dict[str, Any], prop: Dict[str, Any]) -> None:
         password=ross_cfg.get("password", ""),
         codice_struttura=codice_struttura,
         movimenti=movimenti,
-        prodotto=ross_cfg.get("nome_prodotto", "Ospitalo"),
+        prodotto=ross_cfg.get("nome_prodotto", "Dedomo"),
         test_mode=test_mode,
     )
     result["mode"] = "TEST" if test_mode else "PROD"

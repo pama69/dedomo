@@ -36,7 +36,7 @@ export default function Layout({ children }) {
           className="text-2xl font-bold uppercase tracking-tighter text-zinc-100"
           style={{ fontFamily: "'Cabinet Grotesk', sans-serif" }}
         >
-          OSPITALO
+          DEDOMO
         </h1>
         <div className="flex items-center gap-2">
           {user?.is_admin && (

@@ -46,7 +46,7 @@ def _fmt_date(iso_date: str) -> str:
 def build_movimentazione_xml(
     codice_struttura: str,
     movimenti: List[Dict[str, Any]],
-    prodotto: str = "Ospitalo",
+    prodotto: str = "Dedomo",
 ) -> str:
     """Build the SOAP envelope XML for inviaMovimentazione.
 
@@ -120,7 +120,7 @@ def send_movimentazione(
     password: str,
     codice_struttura: str,
     movimenti: List[Dict[str, Any]],
-    prodotto: str = "Ospitalo",
+    prodotto: str = "Dedomo",
     test_mode: bool = False,
 ) -> Dict[str, Any]:
     """Send via SOAP POST with Basic Auth.

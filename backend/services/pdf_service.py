@@ -335,7 +335,7 @@ def generate_tax_receipt(
         textColor=colors.HexColor("#999999"),
     )
     story.append(Paragraph(
-        "Documento generato automaticamente da Ospitalo. Conservare per riferimento fiscale.",
+        "Documento generato automaticamente da Dedomo. Conservare per riferimento fiscale.",
         footer_style,
     ))
 

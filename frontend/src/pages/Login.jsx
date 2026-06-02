@@ -16,11 +16,11 @@ export default function Login() {
       <div className="w-full max-w-lg flex flex-col items-center gap-16">
         <div className="text-center">
           <h1
-            data-testid="ospitalo-logotype"
+            data-testid="dedomo-logotype"
             className="text-7xl md:text-8xl font-bold uppercase tracking-tighter text-zinc-100 leading-none"
             style={{ fontFamily: "'Cabinet Grotesk', sans-serif" }}
           >
-            OSPITALO
+            DEDOMO
           </h1>
           <p className="mt-6 text-xs tracking-[0.3em] uppercase text-zinc-500">
             Comunicazione Ospiti / Case Vacanza

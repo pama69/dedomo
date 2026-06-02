@@ -17,7 +17,7 @@ const emptyRoss = {
   endpoint_url: "",
   format: "soap_v2",
   codice_struttura: "",
-  nome_prodotto: "Ospitalo",
+  nome_prodotto: "Dedomo",
   n_camere: 1,
   n_letti: 2,
   enabled: true,

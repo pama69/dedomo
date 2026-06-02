@@ -1,4 +1,4 @@
-# PRD — Ospitalo
+# PRD — Dedomo
 
 > **MVP completato in data:** 2026-01-30
 
