@@ -228,6 +228,7 @@ function BookingModal({ properties, booking, onClose, onSaved, onDeleted }) {
   const [notes, setNotes] = useState(booking?.notes || "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const save = async () => {
     if (!propertyId) { setError("Seleziona una struttura"); return; }
@@ -251,16 +252,16 @@ function BookingModal({ properties, booking, onClose, onSaved, onDeleted }) {
       setError("ID prenotazione mancante");
       return;
     }
-    if (!window.confirm("Eliminare questa prenotazione?")) return;
     setSaving(true); setError("");
     try {
       await api.delete(`/calendar/manual/${booking.booking_id}`);
       onDeleted && onDeleted();
     } catch (e) {
-      const msg = e.response?.data?.detail || e.message || "Errore eliminazione";
-      setError(msg);
-      console.error("[cal-delete]", e);
-    } finally { setSaving(false); }
+      setError(e.response?.data?.detail || e.message || "Errore eliminazione");
+    } finally {
+      setSaving(false);
+      setConfirmDelete(false);
+    }
   };
 
   return (
@@ -332,9 +333,9 @@ function BookingModal({ properties, booking, onClose, onSaved, onDeleted }) {
             >
               {saving ? "..." : isEdit ? "Salva" : "Crea"}
             </button>
-            {isEdit && (
+            {isEdit && !confirmDelete && (
               <button
-                onClick={remove}
+                onClick={() => setConfirmDelete(true)}
                 disabled={saving}
                 data-testid="cal-booking-delete"
                 className="border border-red-500/60 hover:bg-red-500/10 text-red-400 px-4 py-2 uppercase tracking-widest text-[10px] cursor-pointer disabled:opacity-50"
@@ -349,6 +350,30 @@ function BookingModal({ properties, booking, onClose, onSaved, onDeleted }) {
               Annulla
             </button>
           </div>
+          {isEdit && confirmDelete && (
+            <div className="border border-red-500/40 p-3 flex flex-col gap-2 bg-red-500/5 mt-2">
+              <span className="text-[10px] font-mono text-red-300">
+                Eliminare definitivamente questa prenotazione? L'azione non può essere annullata.
+              </span>
+              <div className="flex gap-2">
+                <button
+                  onClick={remove}
+                  disabled={saving}
+                  data-testid="cal-booking-delete-confirm"
+                  className="flex-1 border border-red-500 hover:bg-red-500 hover:text-white text-red-400 px-4 py-2 uppercase tracking-widest text-[10px] cursor-pointer disabled:opacity-50"
+                >
+                  {saving ? "Eliminazione..." : "Sì, elimina"}
+                </button>
+                <button
+                  onClick={() => setConfirmDelete(false)}
+                  disabled={saving}
+                  className="flex-1 border border-[#1E1E28] hover:border-zinc-500 text-zinc-400 px-4 py-2 uppercase tracking-widest text-[10px] cursor-pointer"
+                >
+                  Annulla
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
