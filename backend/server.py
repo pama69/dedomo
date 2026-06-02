@@ -1999,8 +1999,8 @@ async def admin_toggle_user_disabled(user_id: str, admin=Depends(get_admin_user)
     """Toggle disabled state of a user. Disabled users can't log in or make calls."""
     if user_id == admin["user_id"]:
         raise HTTPException(400, "Non puoi disabilitare il tuo stesso account")
-    u = await db.users.find_one({"user_id": user_id}, {"_id": 0, "disabled": 1})
-    if not u:
+    u = await db.users.find_one({"user_id": user_id})
+    if u is None:
         raise HTTPException(404, "Utente non trovato")
     new_state = not bool(u.get("disabled", False))
     update = {"disabled": new_state}
