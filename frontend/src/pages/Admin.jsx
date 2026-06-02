@@ -197,8 +197,16 @@ function UserDetailModal({ userId, onClose, onChanged }) {
     setToggling(true);
     setError("");
     try {
-      await api.post(`/admin/user/${userId}/toggle-disabled`);
-      await load();
+      const r = await api.post(`/admin/user/${userId}/toggle-disabled`);
+      // Optimistic + authoritative update
+      setData((prev) => prev ? ({
+        ...prev,
+        user: {
+          ...prev.user,
+          disabled: !!r.data?.disabled,
+          disabled_at: r.data?.disabled ? new Date().toISOString() : null,
+        },
+      }) : prev);
       onChanged && onChanged();
     } catch (e) {
       setError(e.response?.data?.detail || e.message || "Errore");

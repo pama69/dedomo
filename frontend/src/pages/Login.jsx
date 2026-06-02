@@ -1,6 +1,10 @@
-import { useAuth } from "@/contexts/AuthContext";
+import { useSearchParams } from "react-router-dom";
 
 export default function Login() {
+  const [params] = useSearchParams();
+  const error = params.get("error");
+  const isDisabled = error === "disabled";
+
   const handleLogin = () => {
     // REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
     const redirectUrl = window.location.origin + "/auth/callback";
@@ -22,6 +26,20 @@ export default function Login() {
             Comunicazione Ospiti / Case Vacanza
           </p>
         </div>
+
+        {isDisabled && (
+          <div
+            data-testid="login-error-disabled"
+            className="w-full border border-red-500/60 bg-red-500/10 px-4 py-3 flex flex-col gap-1"
+          >
+            <span className="text-red-400 text-xs tracking-[0.3em] uppercase font-bold">
+              UTENTE DISABILITATO
+            </span>
+            <span className="text-red-300/80 text-[10px] font-mono">
+              Il tuo account è stato disabilitato dall'amministratore. Contatta il supporto per riattivarlo.
+            </span>
+          </div>
+        )}
 
         <div className="w-full flex flex-col gap-4">
           <button

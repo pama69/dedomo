@@ -28,8 +28,13 @@ export default function AuthCallback() {
         window.history.replaceState(null, "", "/dashboard");
         navigate("/dashboard", { replace: true, state: { user: res.data } });
       })
-      .catch(() => {
-        navigate("/login", { replace: true });
+      .catch((e) => {
+        const detail = e.response?.data?.detail || "";
+        const isDisabled = e.response?.status === 403 && detail.toUpperCase().includes("DISABILITATO");
+        navigate(
+          isDisabled ? "/login?error=disabled" : "/login",
+          { replace: true },
+        );
       });
   }, [navigate, setUser]);
 

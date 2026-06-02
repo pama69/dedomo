@@ -151,6 +151,8 @@ async def auth_session(req: SessionRequest, response: Response):
 
     email = data["email"]
     existing = await db.users.find_one({"email": email}, {"_id": 0})
+    if existing and existing.get("disabled"):
+        raise HTTPException(status_code=403, detail="UTENTE DISABILITATO")
     if existing:
         user_id = existing["user_id"]
         await db.users.update_one(
