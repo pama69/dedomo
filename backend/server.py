@@ -2258,6 +2258,40 @@ async def refresh_ical_caches():
         logger.info(f"[ical-cache] refreshed {n} properties")
 
 
+@api_router.post("/calendar/refresh")
+async def calendar_force_refresh(user=Depends(get_current_user)):
+    """Force-refresh the iCal cache for all properties owned by the current user."""
+    props = await db.properties.find(
+        {"user_id": user["user_id"]}, {"_id": 0, "property_id": 1, "calendar": 1, "nome": 1}
+    ).to_list(1000)
+
+    refreshed = []
+    total_events = 0
+    for p in props:
+        cal = p.get("calendar") or {}
+        pid = p["property_id"]
+        update = {"property_id": pid, "refreshed_at": datetime.now(timezone.utc).isoformat()}
+        prop_events = 0
+        for key, url_key in [("booking", "booking_ical_url"), ("airbnb", "airbnb_ical_url"), ("vrbo", "vrbo_ical_url")]:
+            url = cal.get(url_key) or ""
+            events = fetch_ical_events(url) if url else []
+            update[key] = events
+            prop_events += len(events)
+        await db.ical_cache.update_one(
+            {"property_id": pid},
+            {"$set": update},
+            upsert=True,
+        )
+        refreshed.append({"property_id": pid, "nome": p.get("nome", ""), "events": prop_events})
+        total_events += prop_events
+    return {
+        "ok": True,
+        "properties_refreshed": len(refreshed),
+        "total_events": total_events,
+        "details": refreshed,
+    }
+
+
 # ====================================================================
 # RETRY & NOTIFICATIONS
 # ====================================================================

@@ -35,6 +35,8 @@ export default function Calendar() {
   const [loading, setLoading] = useState(true);
   const [addOpen, setAddOpen] = useState(false);
   const [editEvent, setEditEvent] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshMsg, setRefreshMsg] = useState("");
 
   const cells = useMemo(() => getCalendarGrid(monthStart), [monthStart]);
   const rangeFrom = fmtISO(cells[0]);
@@ -50,6 +52,22 @@ export default function Calendar() {
   };
 
   useEffect(() => { reload(); /* eslint-disable-next-line */ }, [rangeFrom, rangeTo]);
+
+  const forceRefresh = async () => {
+    setRefreshing(true);
+    setRefreshMsg("");
+    try {
+      const r = await api.post("/calendar/refresh");
+      setRefreshMsg(`✓ ${r.data.properties_refreshed} strutture aggiornate · ${r.data.total_events} eventi importati`);
+      await reload();
+      setTimeout(() => setRefreshMsg(""), 5000);
+    } catch (e) {
+      setRefreshMsg(e.response?.data?.detail || "Errore aggiornamento");
+      setTimeout(() => setRefreshMsg(""), 5000);
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   const eventsByDay = useMemo(() => {
     const map = {};
@@ -80,7 +98,15 @@ export default function Calendar() {
         <h2 className="text-2xl font-bold uppercase tracking-tight text-zinc-100" style={{ fontFamily: "'Cabinet Grotesk', sans-serif" }}>
           Calendario
         </h2>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={forceRefresh}
+            disabled={refreshing}
+            data-testid="cal-force-refresh"
+            className="border border-blue-500/60 hover:bg-blue-500/10 text-blue-400 px-3 py-2 text-[10px] uppercase tracking-widest cursor-pointer disabled:opacity-50"
+          >
+            {refreshing ? "Aggiornamento..." : "↻ Forza Aggiornamento"}
+          </button>
           <button
             onClick={() => setMonthStart(addMonths(monthStart, -1))}
             data-testid="cal-prev-month"
@@ -101,6 +127,12 @@ export default function Calendar() {
           >+</button>
         </div>
       </div>
+
+      {refreshMsg && (
+        <div data-testid="cal-refresh-msg" className="text-[10px] font-mono text-emerald-400 border border-emerald-500/40 px-3 py-2 bg-emerald-500/5">
+          {refreshMsg}
+        </div>
+      )}
 
       {/* Legend */}
       <div className="flex flex-wrap gap-3 border border-[#1E1E28] p-3" data-testid="cal-legend">
@@ -215,13 +247,20 @@ function BookingModal({ properties, booking, onClose, onSaved, onDeleted }) {
   };
 
   const remove = async () => {
+    if (!booking?.booking_id) {
+      setError("ID prenotazione mancante");
+      return;
+    }
     if (!window.confirm("Eliminare questa prenotazione?")) return;
-    setSaving(true);
+    setSaving(true); setError("");
     try {
       await api.delete(`/calendar/manual/${booking.booking_id}`);
       onDeleted && onDeleted();
-    } catch (e) { setError(e.response?.data?.detail || "Errore"); }
-    finally { setSaving(false); }
+    } catch (e) {
+      const msg = e.response?.data?.detail || e.message || "Errore eliminazione";
+      setError(msg);
+      console.error("[cal-delete]", e);
+    } finally { setSaving(false); }
   };
 
   return (
