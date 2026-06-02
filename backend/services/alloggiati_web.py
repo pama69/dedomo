@@ -478,11 +478,16 @@ _LUOGHI_TTL_SEC = 60 * 60 * 24  # 24h
 
 def _get_luoghi_cached(utente: str, token: str):
     """Return parsed Luoghi rows from cache, fetching from SOAP if expired.
-    Each row: {codice, nome, provincia, _upper}."""
+    Each row: {codice, nome, provincia, _upper}.
+    If credentials are empty AND cache is empty, returns None (caller decides)."""
     now = _time.time()
     if (_LUOGHI_CACHE["rows"] is not None
             and (now - _LUOGHI_CACHE["fetched_at"]) < _LUOGHI_TTL_SEC):
         return _LUOGHI_CACHE["rows"]
+
+    # No credentials → can't refresh. Return whatever we have (possibly None).
+    if not utente or not token:
+        return _LUOGHI_CACHE.get("rows")
 
     client = _get_client()
     resp = client.service.Tabella(Utente=utente, token=token, tipo="Luoghi")

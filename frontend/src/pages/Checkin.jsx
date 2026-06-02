@@ -63,6 +63,19 @@ export default function Checkin() {
   );
 
   // ============ STEP 2: property ============
+  const selectedProperty = properties.find((p) => p.property_id === propertyId);
+  const missingAW = selectedProperty && (
+    !selectedProperty.alloggiati?.utente ||
+    !selectedProperty.alloggiati?.password ||
+    !selectedProperty.alloggiati?.ws_key
+  );
+  const missingRoss = selectedProperty && (
+    !selectedProperty.ross1000?.utente ||
+    !selectedProperty.ross1000?.password ||
+    !selectedProperty.ross1000?.codice_struttura
+  );
+  const propertyHasMissingCreds = !!(missingAW || missingRoss);
+
   const renderStep2 = () => (
     <>
       <StepHeader n="02" label="Seleziona Proprietà" />
@@ -96,9 +109,35 @@ export default function Checkin() {
           ))
         )}
       </div>
+      {selectedProperty && propertyHasMissingCreds && (
+        <div
+          data-testid="missing-creds-warning"
+          className="border border-amber-500/60 bg-amber-500/10 px-4 py-3 flex flex-col gap-2"
+        >
+          <span className="text-amber-300 text-[11px] font-mono uppercase tracking-widest font-bold">
+            ⚠ Credenziali Incomplete
+          </span>
+          <ul className="text-amber-200 text-[10px] font-mono leading-relaxed list-disc list-inside">
+            {missingAW && <li>Alloggiati Web — utente, password, WSKey</li>}
+            {missingRoss && <li>Ross 1000 / Turismo 5 — utente, password, codice struttura</li>}
+          </ul>
+          <button
+            type="button"
+            onClick={() => navigate("/settings")}
+            data-testid="missing-creds-go-settings"
+            className="self-start border border-amber-500 hover:bg-amber-500 hover:text-black text-amber-300 px-3 py-2 uppercase tracking-widest text-[10px] cursor-pointer transition-colors"
+          >
+            → Vai alle Impostazioni
+          </button>
+        </div>
+      )}
       <div className="flex gap-3 mt-4">
         <BackBtn onClick={() => setStep(1)} />
-        <NextBtn disabled={!propertyId} onClick={() => { setGuests([emptyGuest()]); setStep(3); }} testid="next-step-2" />
+        <NextBtn
+          disabled={!propertyId || propertyHasMissingCreds}
+          onClick={() => { setGuests([emptyGuest()]); setStep(3); }}
+          testid="next-step-2"
+        />
       </div>
     </>
   );
