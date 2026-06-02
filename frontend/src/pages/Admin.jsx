@@ -180,6 +180,8 @@ function UserDetailModal({ userId, onClose, onChanged }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [toggling, setToggling] = useState(false);
+  const [confirmToggle, setConfirmToggle] = useState(false);
+  const [error, setError] = useState("");
 
   const load = async () => {
     setLoading(true);
@@ -192,17 +194,18 @@ function UserDetailModal({ userId, onClose, onChanged }) {
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [userId]);
 
   const toggleDisabled = async () => {
-    if (!data?.user) return;
-    const action = data.user.disabled ? "riattivare" : "disabilitare";
-    if (!window.confirm(`Vuoi davvero ${action} l'utente ${data.user.email}?`)) return;
     setToggling(true);
+    setError("");
     try {
       await api.post(`/admin/user/${userId}/toggle-disabled`);
       await load();
       onChanged && onChanged();
     } catch (e) {
-      alert(e.response?.data?.detail || "Errore");
-    } finally { setToggling(false); }
+      setError(e.response?.data?.detail || e.message || "Errore");
+    } finally {
+      setToggling(false);
+      setConfirmToggle(false);
+    }
   };
 
   const fmtDate = (iso) => {
@@ -244,8 +247,8 @@ function UserDetailModal({ userId, onClose, onChanged }) {
                   </span>
                 )}
                 <button
-                  onClick={toggleDisabled}
-                  disabled={toggling}
+                  onClick={() => setConfirmToggle(true)}
+                  disabled={toggling || confirmToggle}
                   data-testid="admin-user-toggle-disabled"
                   className={`flex items-center gap-2 px-3 py-2 border text-[10px] uppercase tracking-[0.25em] cursor-pointer transition-colors disabled:opacity-50 ${
                     data.user.disabled
@@ -260,6 +263,38 @@ function UserDetailModal({ userId, onClose, onChanged }) {
                 </button>
               </div>
             </div>
+
+            {confirmToggle && (
+              <div className={`border p-3 flex flex-col gap-2 ${data.user.disabled ? "border-emerald-500/40 bg-emerald-500/5" : "border-red-500/40 bg-red-500/5"}`}>
+                <span className={`text-[11px] font-mono ${data.user.disabled ? "text-emerald-300" : "text-red-300"}`}>
+                  {data.user.disabled
+                    ? `Riattivare l'utente ${data.user.email}? Potrà di nuovo accedere all'app.`
+                    : `Disabilitare l'utente ${data.user.email}? Tutte le sue sessioni saranno revocate immediatamente e non potrà più accedere finché non lo riattivi.`}
+                </span>
+                {error && <span className="text-red-400 text-[10px] font-mono">[ ERR ] {error}</span>}
+                <div className="flex gap-2">
+                  <button
+                    onClick={toggleDisabled}
+                    disabled={toggling}
+                    data-testid="admin-user-toggle-confirm"
+                    className={`flex-1 border px-4 py-2 uppercase tracking-widest text-[10px] cursor-pointer disabled:opacity-50 ${
+                      data.user.disabled
+                        ? "border-emerald-500 hover:bg-emerald-500 hover:text-black text-emerald-400"
+                        : "border-red-500 hover:bg-red-500 hover:text-white text-red-400"
+                    }`}
+                  >
+                    {toggling ? "..." : data.user.disabled ? "Sì, riattiva" : "Sì, disabilita"}
+                  </button>
+                  <button
+                    onClick={() => { setConfirmToggle(false); setError(""); }}
+                    disabled={toggling}
+                    className="flex-1 border border-[#1E1E28] hover:border-zinc-500 text-zinc-400 px-4 py-2 uppercase tracking-widest text-[10px] cursor-pointer"
+                  >
+                    Annulla
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Stats grid */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
