@@ -198,18 +198,24 @@ function UserDetailModal({ userId, onClose, onChanged }) {
     setError("");
     try {
       const r = await api.post(`/admin/user/${userId}/toggle-disabled`);
-      // Optimistic + authoritative update
+      // Optimistic update
+      const newDisabled = !!r.data?.disabled;
       setData((prev) => prev ? ({
         ...prev,
         user: {
           ...prev.user,
-          disabled: !!r.data?.disabled,
-          disabled_at: r.data?.disabled ? new Date().toISOString() : null,
+          disabled: newDisabled,
+          disabled_at: newDisabled ? new Date().toISOString() : null,
         },
       }) : prev);
+      // Authoritative refresh
+      await load();
       onChanged && onChanged();
+      setError(newDisabled ? "✓ Utente disabilitato" : "✓ Utente riattivato");
+      setTimeout(() => setError(""), 3000);
     } catch (e) {
-      setError(e.response?.data?.detail || e.message || "Errore");
+      const msg = e.response?.data?.detail || e.message || `HTTP ${e.response?.status || "?"}`;
+      setError(`Errore: ${msg}`);
     } finally {
       setToggling(false);
       setConfirmToggle(false);
@@ -241,6 +247,18 @@ function UserDetailModal({ userId, onClose, onChanged }) {
           <div className="p-6 text-red-500 text-sm font-mono">Errore</div>
         ) : (
           <div className="p-4 flex flex-col gap-4">
+            {error && (
+              <div
+                data-testid="admin-user-status-msg"
+                className={`text-[11px] font-mono px-3 py-2 border ${
+                  error.startsWith("✓")
+                    ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-300"
+                    : "border-red-500/40 bg-red-500/10 text-red-300"
+                }`}
+              >
+                {error}
+              </div>
+            )}
             {/* Header */}
             <div className="flex items-baseline justify-between flex-wrap gap-2">
               <div className="flex flex-col">
@@ -279,7 +297,6 @@ function UserDetailModal({ userId, onClose, onChanged }) {
                     ? `Riattivare l'utente ${data.user.email}? Potrà di nuovo accedere all'app.`
                     : `Disabilitare l'utente ${data.user.email}? Tutte le sue sessioni saranno revocate immediatamente e non potrà più accedere finché non lo riattivi.`}
                 </span>
-                {error && <span className="text-red-400 text-[10px] font-mono">[ ERR ] {error}</span>}
                 <div className="flex gap-2">
                   <button
                     onClick={toggleDisabled}
