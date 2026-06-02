@@ -194,6 +194,7 @@ async def auth_session(req: SessionRequest, response: Response):
         "email": email,
         "name": data.get("name"),
         "picture": data.get("picture"),
+        "is_admin": (email or "").lower() in ADMIN_EMAILS,
     }
 
 
