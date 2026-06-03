@@ -236,19 +236,58 @@ function downloadBlob(blob, filename) {
 
 function DownloadReceiptBtn({ checkinId, index, numero, data, importo, onDeleted }) {
   const [open, setOpen] = useState(false);
-  const [pdfDataUrl, setPdfDataUrl] = useState("");
+  const [pdfBlob, setPdfBlob] = useState(null);
+  const [pngBlob, setPngBlob] = useState(null);
   const [deleting, setDeleting] = useState(false);
+  const [downloading, setDownloading] = useState("");
 
   const toggle = async () => {
     if (open) { setOpen(false); return; }
     setOpen(true);
-    if (!pdfDataUrl) {
+    if (!pdfBlob) {
       try {
         const r = await api.get(`/checkins/${checkinId}/comune-receipts/${index}`, { responseType: "blob" });
-        const reader = new FileReader();
-        reader.onload = () => setPdfDataUrl(reader.result);
-        reader.readAsDataURL(new Blob([r.data], { type: "application/pdf" }));
+        setPdfBlob(new Blob([r.data], { type: "application/pdf" }));
       } catch (_) { /* image fallback below still works */ }
+    }
+  };
+
+  const downloadPdf = async () => {
+    if (downloading) return;
+    setDownloading("pdf");
+    try {
+      let blob = pdfBlob;
+      if (!blob) {
+        const r = await api.get(`/checkins/${checkinId}/comune-receipts/${index}`, { responseType: "blob" });
+        blob = new Blob([r.data], { type: "application/pdf" });
+        setPdfBlob(blob);
+      }
+      downloadBlob(blob, `ricevuta_comune_${numero}.pdf`);
+    } catch (e) {
+      alert(e.response?.data?.detail || "Errore scaricamento PDF");
+    } finally {
+      setDownloading("");
+    }
+  };
+
+  const downloadPng = async () => {
+    if (downloading) return;
+    setDownloading("png");
+    try {
+      let blob = pngBlob;
+      if (!blob) {
+        const r = await api.get(`/checkins/${checkinId}/comune-receipts/${index}/preview`, {
+          responseType: "blob",
+          params: { download: 1 },
+        });
+        blob = new Blob([r.data], { type: "image/png" });
+        setPngBlob(blob);
+      }
+      downloadBlob(blob, `ricevuta_${numero}.png`);
+    } catch (e) {
+      alert(e.response?.data?.detail || "Errore scaricamento PNG");
+    } finally {
+      setDownloading("");
     }
   };
 
@@ -291,24 +330,24 @@ function DownloadReceiptBtn({ checkinId, index, numero, data, importo, onDeleted
             <br/>Oppure usa i pulsanti qui sotto.
           </p>
           <div className="flex gap-2 flex-wrap">
-            <a
-              href={`${previewSrc}?download=1`}
-              download={`ricevuta_${numero}.png`}
+            <button
+              type="button"
+              onClick={downloadPng}
+              disabled={!!downloading}
               data-testid={`comune-receipt-png-${checkinId}-${index}`}
-              className="flex-1 text-center border border-emerald-500/40 hover:border-emerald-400 text-emerald-400 px-4 py-2 uppercase tracking-widest text-[10px] cursor-pointer"
+              className="flex-1 text-center border border-emerald-500/40 hover:border-emerald-400 text-emerald-400 px-4 py-2 uppercase tracking-widest text-[10px] cursor-pointer disabled:opacity-50"
             >
-              ↓ Scarica come PNG
-            </a>
-            {pdfDataUrl && (
-              <a
-                href={pdfDataUrl}
-                download={`ricevuta_comune_${numero}.pdf`}
-                data-testid={`comune-receipt-download-${checkinId}-${index}`}
-                className="flex-1 text-center border border-[#1E1E28] hover:border-zinc-500 text-zinc-400 px-4 py-2 uppercase tracking-widest text-[10px] cursor-pointer"
-              >
-                ↓ PDF
-              </a>
-            )}
+              {downloading === "png" ? "..." : "↓ Scarica come PNG"}
+            </button>
+            <button
+              type="button"
+              onClick={downloadPdf}
+              disabled={!!downloading}
+              data-testid={`comune-receipt-download-${checkinId}-${index}`}
+              className="flex-1 text-center border border-[#1E1E28] hover:border-zinc-500 text-zinc-400 px-4 py-2 uppercase tracking-widest text-[10px] cursor-pointer disabled:opacity-50"
+            >
+              {downloading === "pdf" ? "..." : "↓ PDF"}
+            </button>
             <button
               type="button"
               onClick={remove}
