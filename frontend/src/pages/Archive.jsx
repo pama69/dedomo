@@ -287,8 +287,6 @@ function DownloadReceiptBtn({ checkinId, index, numero, data, importo, onDeleted
           <div className="flex gap-2 flex-wrap">
             <a
               href={pngUrl}
-              target="_blank"
-              rel="noopener noreferrer"
               data-testid={`comune-receipt-png-${checkinId}-${index}`}
               className="flex-1 text-center border border-emerald-500/40 hover:border-emerald-400 text-emerald-400 px-4 py-2 uppercase tracking-widest text-[10px] cursor-pointer no-underline"
             >
@@ -296,8 +294,6 @@ function DownloadReceiptBtn({ checkinId, index, numero, data, importo, onDeleted
             </a>
             <a
               href={pdfUrl}
-              target="_blank"
-              rel="noopener noreferrer"
               data-testid={`comune-receipt-download-${checkinId}-${index}`}
               className="flex-1 text-center border border-[#1E1E28] hover:border-zinc-500 text-zinc-400 px-4 py-2 uppercase tracking-widest text-[10px] cursor-pointer no-underline"
             >

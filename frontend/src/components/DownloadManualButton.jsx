@@ -15,8 +15,6 @@ export default function DownloadManualButton({ variant = "default", testid = "do
   return (
     <a
       href={url}
-      target="_blank"
-      rel="noopener noreferrer"
       data-testid={testid}
       className={baseCls}
     >
