@@ -11,6 +11,7 @@ import Owners from "@/pages/Owners";
 import OwnerArchive from "@/pages/OwnerArchive";
 import Admin from "@/pages/Admin";
 import CalendarPage from "@/pages/Calendar";
+import Help from "@/pages/Help";
 
 function AppRouter() {
   const location = useLocation();
@@ -31,6 +32,7 @@ function AppRouter() {
       <Route path="/admin" element={<Admin />} />
       <Route path="/calendar" element={<CalendarPage />} />
       <Route path="/settings" element={<Settings />} />
+      <Route path="/help" element={<Help />} />
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>
   );

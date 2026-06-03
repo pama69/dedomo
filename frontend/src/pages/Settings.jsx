@@ -139,7 +139,14 @@ export default function Settings() {
         </button>
       </div>
 
-      <div className="flex items-center justify-end pt-1">
+      <div className="flex items-center justify-end gap-3 pt-1">
+        <a
+          href="/help"
+          data-testid="settings-open-help"
+          className="text-[10px] tracking-[0.25em] uppercase text-zinc-400 hover:text-zinc-100 cursor-pointer"
+        >
+          Apri Guida Online →
+        </a>
         <DownloadManualButton testid="settings-download-manual" />
       </div>
 

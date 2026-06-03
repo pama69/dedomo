@@ -1167,6 +1167,31 @@ async def download_manual(user=Depends(get_current_user)):
     )
 
 
+@api_router.get("/manual/assets/{name}")
+async def manual_asset(name: str, user=Depends(get_current_user)):
+    """Serve a screenshot used by the online help page. Auth required."""
+    # Sanitize: only allow .png files with safe characters
+    import re
+    if not re.fullmatch(r"[a-zA-Z0-9_\-]+\.png", name):
+        raise HTTPException(400, "Nome non valido")
+    asset_path = (ROOT_DIR / ".." / "manual_assets" / name).resolve()
+    # Confine to manual_assets dir
+    base = (ROOT_DIR / ".." / "manual_assets").resolve()
+    try:
+        asset_path.relative_to(base)
+    except ValueError:
+        raise HTTPException(400, "Percorso non valido")
+    if not asset_path.exists():
+        raise HTTPException(404, "Asset non trovato")
+    with open(asset_path, "rb") as f:
+        data = f.read()
+    return StreamingResponse(
+        io.BytesIO(data),
+        media_type="image/png",
+        headers={"Cache-Control": "public, max-age=86400"},
+    )
+
+
 @api_router.get("/checkins/{checkin_id}/ross1000-csv")
 async def download_ross1000_csv(checkin_id: str, user=Depends(get_current_user)):
     c = await db.checkins.find_one(

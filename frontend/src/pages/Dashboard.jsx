@@ -126,9 +126,19 @@ export default function Dashboard() {
       <div className="border-t border-[#1E1E28] pt-6 flex items-center justify-between gap-4">
         <div className="flex flex-col gap-1">
           <span className="text-[10px] tracking-[0.3em] uppercase text-zinc-500">Guida d'uso</span>
-          <span className="text-zinc-300 text-sm">Manuale passo-passo in italiano (PDF).</span>
+          <span className="text-zinc-300 text-sm">Manuale passo-passo in italiano.</span>
         </div>
-        <DownloadManualButton testid="dashboard-download-manual" />
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => navigate("/help")}
+            data-testid="dashboard-open-help"
+            className="text-[10px] tracking-[0.25em] uppercase text-zinc-400 hover:text-zinc-100 cursor-pointer"
+          >
+            Apri Guida Online →
+          </button>
+          <DownloadManualButton testid="dashboard-download-manual" />
+        </div>
       </div>
     </Layout>
   );
