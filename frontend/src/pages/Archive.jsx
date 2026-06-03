@@ -262,39 +262,20 @@ function DownloadReceiptBtn({ checkinId, index, numero, data, importo, onDeleted
     setBusy("pdf");
     setStatusMsg("Apro PDF...");
     try {
-      let blob = pdfBlob;
-      if (!blob) {
-        const r = await api.get(`/checkins/${checkinId}/comune-receipts/${index}`, { responseType: "blob" });
-        blob = new Blob([r.data], { type: "application/pdf" });
-        setPdfBlob(blob);
-      }
-      console.log("[receipt] PDF blob size", blob.size, "bytes");
-      if (!blob.size) {
-        setStatusMsg("Errore: PDF vuoto sul server. Riprova o rigenera la ricevuta.");
-        return;
-      }
-      // Strategy: open in new tab so Chrome's built-in PDF viewer takes over.
-      // From there the user uses Ctrl+S or the download icon to save.
-      // This is the most robust path across all browser/iframe constraints.
-      const url = URL.createObjectURL(blob);
+      // Strategy: open the backend URL directly in a new tab.
+      // Server returns Content-Type: application/pdf + Content-Disposition: inline
+      // → Chrome's built-in PDF viewer takes over and offers Download button.
+      // Auth cookie is sent automatically because we are on the same site.
+      const url = `${api.defaults.baseURL}/checkins/${checkinId}/comune-receipts/${index}`;
       const win = window.open(url, "_blank", "noopener");
       if (!win) {
-        // Popup blocked → fall back to forced download
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `ricevuta_comune_${numero}.pdf`;
-        a.style.display = "none";
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        setStatusMsg("Popup bloccato dal browser — provato download diretto. Se non parte, sblocca i popup per questo sito.");
+        setStatusMsg("Popup bloccato dal browser. Sblocca i popup per questo sito.");
       } else {
-        setStatusMsg(`PDF aperto in nuova scheda (${Math.round(blob.size / 1024)} KB). Usa Ctrl+S o l'icona ⬇️ per salvarlo.`);
+        setStatusMsg("PDF aperto in nuova scheda. Usa Ctrl+S o l'icona ⬇️ per salvarlo.");
       }
-      setTimeout(() => URL.revokeObjectURL(url), 120000);
     } catch (e) {
-      const detail = e.response?.data?.detail || e.message || "Errore scaricamento PDF";
-      console.error("[receipt] PDF download error", e);
+      const detail = e.response?.data?.detail || e.message || "Errore apertura PDF";
+      console.error("[receipt] PDF open error", e);
       setStatusMsg(`Errore: ${detail}`);
     } finally {
       setBusy("");
@@ -306,38 +287,17 @@ function DownloadReceiptBtn({ checkinId, index, numero, data, importo, onDeleted
     setBusy("png");
     setStatusMsg("Apro PNG...");
     try {
-      let blob = pngBlob;
-      if (!blob) {
-        const r = await api.get(`/checkins/${checkinId}/comune-receipts/${index}/preview`, {
-          responseType: "blob",
-          params: { download: 1 },
-        });
-        blob = new Blob([r.data], { type: "image/png" });
-        setPngBlob(blob);
-      }
-      console.log("[receipt] PNG blob size", blob.size, "bytes");
-      if (!blob.size) {
-        setStatusMsg("Errore: PNG vuoto sul server.");
-        return;
-      }
-      const url = URL.createObjectURL(blob);
+      // Open PNG backend URL directly (Content-Type: image/png)
+      const url = `${api.defaults.baseURL}/checkins/${checkinId}/comune-receipts/${index}/preview?download=1`;
       const win = window.open(url, "_blank", "noopener");
       if (!win) {
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `ricevuta_${numero}.png`;
-        a.style.display = "none";
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        setStatusMsg("Popup bloccato — provato download diretto. Sblocca i popup per questo sito.");
+        setStatusMsg("Popup bloccato dal browser. Sblocca i popup per questo sito.");
       } else {
-        setStatusMsg(`PNG aperto in nuova scheda. Tasto destro sull'immagine → Salva con nome.`);
+        setStatusMsg("PNG aperto in nuova scheda. Tasto destro → Salva immagine con nome.");
       }
-      setTimeout(() => URL.revokeObjectURL(url), 120000);
     } catch (e) {
-      const detail = e.response?.data?.detail || e.message || "Errore scaricamento PNG";
-      console.error("[receipt] PNG download error", e);
+      const detail = e.response?.data?.detail || e.message || "Errore apertura PNG";
+      console.error("[receipt] PNG open error", e);
       setStatusMsg(`Errore: ${detail}`);
     } finally {
       setBusy("");
