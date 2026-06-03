@@ -260,7 +260,7 @@ function DownloadReceiptBtn({ checkinId, index, numero, data, importo, onDeleted
   const downloadPdf = async () => {
     if (busy) return;
     setBusy("pdf");
-    setStatusMsg("Scarico PDF...");
+    setStatusMsg("Apro PDF...");
     try {
       let blob = pdfBlob;
       if (!blob) {
@@ -270,12 +270,28 @@ function DownloadReceiptBtn({ checkinId, index, numero, data, importo, onDeleted
       }
       console.log("[receipt] PDF blob size", blob.size, "bytes");
       if (!blob.size) {
-        setStatusMsg("Errore: PDF vuoto. Ricarica la pagina.");
+        setStatusMsg("Errore: PDF vuoto sul server. Riprova o rigenera la ricevuta.");
         return;
       }
-      downloadBlob(blob, `ricevuta_comune_${numero}.pdf`);
-      setStatusMsg(`Download avviato (${Math.round(blob.size / 1024)} KB).`);
-      setTimeout(() => setStatusMsg(""), 4000);
+      // Strategy: open in new tab so Chrome's built-in PDF viewer takes over.
+      // From there the user uses Ctrl+S or the download icon to save.
+      // This is the most robust path across all browser/iframe constraints.
+      const url = URL.createObjectURL(blob);
+      const win = window.open(url, "_blank", "noopener");
+      if (!win) {
+        // Popup blocked → fall back to forced download
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `ricevuta_comune_${numero}.pdf`;
+        a.style.display = "none";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setStatusMsg("Popup bloccato dal browser — provato download diretto. Se non parte, sblocca i popup per questo sito.");
+      } else {
+        setStatusMsg(`PDF aperto in nuova scheda (${Math.round(blob.size / 1024)} KB). Usa Ctrl+S o l'icona ⬇️ per salvarlo.`);
+      }
+      setTimeout(() => URL.revokeObjectURL(url), 120000);
     } catch (e) {
       const detail = e.response?.data?.detail || e.message || "Errore scaricamento PDF";
       console.error("[receipt] PDF download error", e);
@@ -288,7 +304,7 @@ function DownloadReceiptBtn({ checkinId, index, numero, data, importo, onDeleted
   const downloadPng = async () => {
     if (busy) return;
     setBusy("png");
-    setStatusMsg("Scarico PNG...");
+    setStatusMsg("Apro PNG...");
     try {
       let blob = pngBlob;
       if (!blob) {
@@ -301,12 +317,24 @@ function DownloadReceiptBtn({ checkinId, index, numero, data, importo, onDeleted
       }
       console.log("[receipt] PNG blob size", blob.size, "bytes");
       if (!blob.size) {
-        setStatusMsg("Errore: PNG vuoto. Ricarica la pagina.");
+        setStatusMsg("Errore: PNG vuoto sul server.");
         return;
       }
-      downloadBlob(blob, `ricevuta_${numero}.png`);
-      setStatusMsg(`Download avviato (${Math.round(blob.size / 1024)} KB).`);
-      setTimeout(() => setStatusMsg(""), 4000);
+      const url = URL.createObjectURL(blob);
+      const win = window.open(url, "_blank", "noopener");
+      if (!win) {
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `ricevuta_${numero}.png`;
+        a.style.display = "none";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setStatusMsg("Popup bloccato — provato download diretto. Sblocca i popup per questo sito.");
+      } else {
+        setStatusMsg(`PNG aperto in nuova scheda. Tasto destro sull'immagine → Salva con nome.`);
+      }
+      setTimeout(() => URL.revokeObjectURL(url), 120000);
     } catch (e) {
       const detail = e.response?.data?.detail || e.message || "Errore scaricamento PNG";
       console.error("[receipt] PNG download error", e);
@@ -361,7 +389,7 @@ function DownloadReceiptBtn({ checkinId, index, numero, data, importo, onDeleted
               data-testid={`comune-receipt-png-${checkinId}-${index}`}
               className="flex-1 text-center border border-emerald-500/40 hover:border-emerald-400 text-emerald-400 px-4 py-2 uppercase tracking-widest text-[10px] cursor-pointer"
             >
-              {busy === "png" ? "..." : "↓ Scarica come PNG"}
+              {busy === "png" ? "..." : "🖼  Apri PNG"}
             </button>
             <button
               type="button"
@@ -369,7 +397,7 @@ function DownloadReceiptBtn({ checkinId, index, numero, data, importo, onDeleted
               data-testid={`comune-receipt-download-${checkinId}-${index}`}
               className="flex-1 text-center border border-[#1E1E28] hover:border-zinc-500 text-zinc-400 px-4 py-2 uppercase tracking-widest text-[10px] cursor-pointer"
             >
-              {busy === "pdf" ? "..." : "↓ PDF"}
+              {busy === "pdf" ? "..." : "📄  Apri PDF"}
             </button>
             <button
               type="button"
