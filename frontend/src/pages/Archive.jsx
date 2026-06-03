@@ -208,28 +208,32 @@ function Tag({ ok, skipped, label }) {
 }
 
 function downloadBlob(blob, filename) {
-  // Convert to data: URL (more extension-friendly than blob: URL)
-  const reader = new FileReader();
-  reader.onload = () => {
-    const a = document.createElement("a");
-    a.href = reader.result; // data:application/pdf;base64,...
-    a.download = filename;
-    a.style.display = "none";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-  };
-  reader.onerror = () => {
-    // Fallback to blob URL if FileReader fails
+  // Primary path: URL.createObjectURL (sync → keeps user-activation, no size limit)
+  try {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
     a.download = filename;
+    a.rel = "noopener";
     a.style.display = "none";
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     setTimeout(() => URL.revokeObjectURL(url), 60000);
+    return;
+  } catch (e) {
+    console.error("[downloadBlob] createObjectURL failed", e);
+  }
+  // Fallback: data: URL via FileReader (async, may be blocked on huge files)
+  const reader = new FileReader();
+  reader.onload = () => {
+    const a = document.createElement("a");
+    a.href = reader.result;
+    a.download = filename;
+    a.style.display = "none";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
   };
   reader.readAsDataURL(blob);
 }
@@ -239,7 +243,8 @@ function DownloadReceiptBtn({ checkinId, index, numero, data, importo, onDeleted
   const [pdfBlob, setPdfBlob] = useState(null);
   const [pngBlob, setPngBlob] = useState(null);
   const [deleting, setDeleting] = useState(false);
-  const [downloading, setDownloading] = useState("");
+  const [busy, setBusy] = useState("");
+  const [statusMsg, setStatusMsg] = useState("");
 
   const toggle = async () => {
     if (open) { setOpen(false); return; }
@@ -248,13 +253,14 @@ function DownloadReceiptBtn({ checkinId, index, numero, data, importo, onDeleted
       try {
         const r = await api.get(`/checkins/${checkinId}/comune-receipts/${index}`, { responseType: "blob" });
         setPdfBlob(new Blob([r.data], { type: "application/pdf" }));
-      } catch (_) { /* image fallback below still works */ }
+      } catch (e) { console.warn("[receipt] preload PDF failed", e); }
     }
   };
 
   const downloadPdf = async () => {
-    if (downloading) return;
-    setDownloading("pdf");
+    if (busy) return;
+    setBusy("pdf");
+    setStatusMsg("Scarico PDF...");
     try {
       let blob = pdfBlob;
       if (!blob) {
@@ -262,17 +268,27 @@ function DownloadReceiptBtn({ checkinId, index, numero, data, importo, onDeleted
         blob = new Blob([r.data], { type: "application/pdf" });
         setPdfBlob(blob);
       }
+      console.log("[receipt] PDF blob size", blob.size, "bytes");
+      if (!blob.size) {
+        setStatusMsg("Errore: PDF vuoto. Ricarica la pagina.");
+        return;
+      }
       downloadBlob(blob, `ricevuta_comune_${numero}.pdf`);
+      setStatusMsg(`Download avviato (${Math.round(blob.size / 1024)} KB).`);
+      setTimeout(() => setStatusMsg(""), 4000);
     } catch (e) {
-      alert(e.response?.data?.detail || "Errore scaricamento PDF");
+      const detail = e.response?.data?.detail || e.message || "Errore scaricamento PDF";
+      console.error("[receipt] PDF download error", e);
+      setStatusMsg(`Errore: ${detail}`);
     } finally {
-      setDownloading("");
+      setBusy("");
     }
   };
 
   const downloadPng = async () => {
-    if (downloading) return;
-    setDownloading("png");
+    if (busy) return;
+    setBusy("png");
+    setStatusMsg("Scarico PNG...");
     try {
       let blob = pngBlob;
       if (!blob) {
@@ -283,11 +299,20 @@ function DownloadReceiptBtn({ checkinId, index, numero, data, importo, onDeleted
         blob = new Blob([r.data], { type: "image/png" });
         setPngBlob(blob);
       }
+      console.log("[receipt] PNG blob size", blob.size, "bytes");
+      if (!blob.size) {
+        setStatusMsg("Errore: PNG vuoto. Ricarica la pagina.");
+        return;
+      }
       downloadBlob(blob, `ricevuta_${numero}.png`);
+      setStatusMsg(`Download avviato (${Math.round(blob.size / 1024)} KB).`);
+      setTimeout(() => setStatusMsg(""), 4000);
     } catch (e) {
-      alert(e.response?.data?.detail || "Errore scaricamento PNG");
+      const detail = e.response?.data?.detail || e.message || "Errore scaricamento PNG";
+      console.error("[receipt] PNG download error", e);
+      setStatusMsg(`Errore: ${detail}`);
     } finally {
-      setDownloading("");
+      setBusy("");
     }
   };
 
@@ -298,7 +323,7 @@ function DownloadReceiptBtn({ checkinId, index, numero, data, importo, onDeleted
       await api.delete(`/checkins/${checkinId}/comune-receipts/${index}`);
       onDeleted && onDeleted();
     } catch (e) {
-      alert(e.response?.data?.detail || "Errore eliminazione");
+      setStatusMsg(`Errore eliminazione: ${e.response?.data?.detail || e.message}`);
     } finally {
       setDeleting(false);
     }
@@ -333,20 +358,18 @@ function DownloadReceiptBtn({ checkinId, index, numero, data, importo, onDeleted
             <button
               type="button"
               onClick={downloadPng}
-              disabled={!!downloading}
               data-testid={`comune-receipt-png-${checkinId}-${index}`}
-              className="flex-1 text-center border border-emerald-500/40 hover:border-emerald-400 text-emerald-400 px-4 py-2 uppercase tracking-widest text-[10px] cursor-pointer disabled:opacity-50"
+              className="flex-1 text-center border border-emerald-500/40 hover:border-emerald-400 text-emerald-400 px-4 py-2 uppercase tracking-widest text-[10px] cursor-pointer"
             >
-              {downloading === "png" ? "..." : "↓ Scarica come PNG"}
+              {busy === "png" ? "..." : "↓ Scarica come PNG"}
             </button>
             <button
               type="button"
               onClick={downloadPdf}
-              disabled={!!downloading}
               data-testid={`comune-receipt-download-${checkinId}-${index}`}
-              className="flex-1 text-center border border-[#1E1E28] hover:border-zinc-500 text-zinc-400 px-4 py-2 uppercase tracking-widest text-[10px] cursor-pointer disabled:opacity-50"
+              className="flex-1 text-center border border-[#1E1E28] hover:border-zinc-500 text-zinc-400 px-4 py-2 uppercase tracking-widest text-[10px] cursor-pointer"
             >
-              {downloading === "pdf" ? "..." : "↓ PDF"}
+              {busy === "pdf" ? "..." : "↓ PDF"}
             </button>
             <button
               type="button"
@@ -358,6 +381,18 @@ function DownloadReceiptBtn({ checkinId, index, numero, data, importo, onDeleted
               {deleting ? "..." : "Elimina/Rigenera"}
             </button>
           </div>
+          {statusMsg && (
+            <p
+              data-testid={`comune-receipt-status-${checkinId}-${index}`}
+              className={`text-[10px] font-mono px-2 py-1 ${
+                statusMsg.toLowerCase().startsWith("errore")
+                  ? "text-red-400 bg-red-500/10 border border-red-500/30"
+                  : "text-emerald-400 bg-emerald-500/10 border border-emerald-500/30"
+              }`}
+            >
+              {statusMsg}
+            </p>
+          )}
         </div>
       )}
     </div>
