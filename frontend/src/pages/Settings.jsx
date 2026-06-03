@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import Layout from "@/components/Layout";
 import api from "@/lib/api";
+import DownloadManualButton from "@/components/DownloadManualButton";
 
 const emptyAlloggiati = {
   utente: "",
@@ -136,6 +137,10 @@ export default function Settings() {
         >
           + Nuova
         </button>
+      </div>
+
+      <div className="flex items-center justify-end pt-1">
+        <DownloadManualButton testid="settings-download-manual" />
       </div>
 
       {loading ? (

@@ -1146,6 +1146,27 @@ async def download_receipt_pdf(checkin_id: str, user=Depends(get_current_user)):
     )
 
 
+@api_router.get("/manual/download")
+async def download_manual(user=Depends(get_current_user)):
+    """Download the user manual PDF (Italian). Auth required."""
+    manual_path = ROOT_DIR / ".." / "static" / "manuale_dedomo.pdf"
+    manual_path = manual_path.resolve()
+    if not manual_path.exists():
+        # Lazy regenerate if missing
+        from services.manual_pdf import build as _build_manual
+        try:
+            _build_manual()
+        except Exception as e:
+            raise HTTPException(500, f"Manuale non disponibile: {e}")
+    with open(manual_path, "rb") as f:
+        data = f.read()
+    return StreamingResponse(
+        io.BytesIO(data),
+        media_type="application/pdf",
+        headers={"Content-Disposition": 'attachment; filename="manuale_dedomo.pdf"'},
+    )
+
+
 @api_router.get("/checkins/{checkin_id}/ross1000-csv")
 async def download_ross1000_csv(checkin_id: str, user=Depends(get_current_user)):
     c = await db.checkins.find_one(

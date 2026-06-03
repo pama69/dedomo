@@ -50,6 +50,7 @@ Host che gestisce **più unità immobiliari** (anche di proprietari diversi), ac
 - [x] Background scheduler: PDF fetch, iCal refresh, retry errori transient
 - [x] Niente `window.confirm()` / niente download `blob:` diretti (sandbox iframe)
 - [x] **Hard block check-in se credenziali Alloggiati o Ross1000 mancanti** (frontend + backend) — 2026-06-03
+- [x] **Manuale utente PDF** (13 pp, IT, tema scuro) — endpoint `/api/manual/download` + bottoni "Scarica Manuale" in Dashboard e Impostazioni — 2026-06-03
 
 ## Backlog
 

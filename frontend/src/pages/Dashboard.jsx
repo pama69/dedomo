@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Layout from "@/components/Layout";
 import api from "@/lib/api";
+import DownloadManualButton from "@/components/DownloadManualButton";
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -120,6 +121,14 @@ export default function Dashboard() {
             })}
           </div>
         )}
+      </div>
+
+      <div className="border-t border-[#1E1E28] pt-6 flex items-center justify-between gap-4">
+        <div className="flex flex-col gap-1">
+          <span className="text-[10px] tracking-[0.3em] uppercase text-zinc-500">Guida d'uso</span>
+          <span className="text-zinc-300 text-sm">Manuale passo-passo in italiano (PDF).</span>
+        </div>
+        <DownloadManualButton testid="dashboard-download-manual" />
       </div>
     </Layout>
   );
