@@ -208,23 +208,9 @@ function Tag({ ok, skipped, label }) {
 }
 
 function downloadBlob(blob, filename) {
-  // Primary path: URL.createObjectURL (sync → keeps user-activation, no size limit)
-  try {
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    a.rel = "noopener";
-    a.style.display = "none";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    setTimeout(() => URL.revokeObjectURL(url), 60000);
-    return;
-  } catch (e) {
-    console.error("[downloadBlob] createObjectURL failed", e);
-  }
-  // Fallback: data: URL via FileReader (async, may be blocked on huge files)
+  // Use the same approach as DownloadManualButton (which works for the user):
+  // FileReader → data: URL → programmatic <a> click.
+  // This is the most compatible across Chrome/Firefox/Safari, in or out of iframe.
   const reader = new FileReader();
   reader.onload = () => {
     const a = document.createElement("a");
@@ -234,6 +220,17 @@ function downloadBlob(blob, filename) {
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
+  };
+  reader.onerror = () => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.style.display = "none";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
   };
   reader.readAsDataURL(blob);
 }
@@ -260,22 +257,25 @@ function DownloadReceiptBtn({ checkinId, index, numero, data, importo, onDeleted
   const downloadPdf = async () => {
     if (busy) return;
     setBusy("pdf");
-    setStatusMsg("Apro PDF...");
+    setStatusMsg("Scarico PDF...");
     try {
-      // Strategy: open the backend URL directly in a new tab.
-      // Server returns Content-Type: application/pdf + Content-Disposition: inline
-      // → Chrome's built-in PDF viewer takes over and offers Download button.
-      // Auth cookie is sent automatically because we are on the same site.
-      const url = `${api.defaults.baseURL}/checkins/${checkinId}/comune-receipts/${index}`;
-      const win = window.open(url, "_blank", "noopener");
-      if (!win) {
-        setStatusMsg("Popup bloccato dal browser. Sblocca i popup per questo sito.");
-      } else {
-        setStatusMsg("PDF aperto in nuova scheda. Usa Ctrl+S o l'icona ⬇️ per salvarlo.");
+      let blob = pdfBlob;
+      if (!blob) {
+        const r = await api.get(`/checkins/${checkinId}/comune-receipts/${index}`, { responseType: "blob" });
+        blob = new Blob([r.data], { type: "application/pdf" });
+        setPdfBlob(blob);
       }
+      console.log("[receipt] PDF blob size", blob.size, "bytes");
+      if (!blob.size) {
+        setStatusMsg("Errore: PDF vuoto sul server. Riprova o rigenera la ricevuta.");
+        return;
+      }
+      downloadBlob(blob, `ricevuta_comune_${numero}.pdf`);
+      setStatusMsg(`Download avviato (${Math.round(blob.size / 1024)} KB). Controlla la barra dei download.`);
+      setTimeout(() => setStatusMsg(""), 6000);
     } catch (e) {
-      const detail = e.response?.data?.detail || e.message || "Errore apertura PDF";
-      console.error("[receipt] PDF open error", e);
+      const detail = e.response?.data?.detail || e.message || "Errore scaricamento PDF";
+      console.error("[receipt] PDF download error", e);
       setStatusMsg(`Errore: ${detail}`);
     } finally {
       setBusy("");
@@ -285,19 +285,28 @@ function DownloadReceiptBtn({ checkinId, index, numero, data, importo, onDeleted
   const downloadPng = async () => {
     if (busy) return;
     setBusy("png");
-    setStatusMsg("Apro PNG...");
+    setStatusMsg("Scarico PNG...");
     try {
-      // Open PNG backend URL directly (Content-Type: image/png)
-      const url = `${api.defaults.baseURL}/checkins/${checkinId}/comune-receipts/${index}/preview?download=1`;
-      const win = window.open(url, "_blank", "noopener");
-      if (!win) {
-        setStatusMsg("Popup bloccato dal browser. Sblocca i popup per questo sito.");
-      } else {
-        setStatusMsg("PNG aperto in nuova scheda. Tasto destro → Salva immagine con nome.");
+      let blob = pngBlob;
+      if (!blob) {
+        const r = await api.get(`/checkins/${checkinId}/comune-receipts/${index}/preview`, {
+          responseType: "blob",
+          params: { download: 1 },
+        });
+        blob = new Blob([r.data], { type: "image/png" });
+        setPngBlob(blob);
       }
+      console.log("[receipt] PNG blob size", blob.size, "bytes");
+      if (!blob.size) {
+        setStatusMsg("Errore: PNG vuoto sul server.");
+        return;
+      }
+      downloadBlob(blob, `ricevuta_${numero}.png`);
+      setStatusMsg(`Download avviato (${Math.round(blob.size / 1024)} KB). Controlla la barra dei download.`);
+      setTimeout(() => setStatusMsg(""), 6000);
     } catch (e) {
-      const detail = e.response?.data?.detail || e.message || "Errore apertura PNG";
-      console.error("[receipt] PNG open error", e);
+      const detail = e.response?.data?.detail || e.message || "Errore scaricamento PNG";
+      console.error("[receipt] PNG download error", e);
       setStatusMsg(`Errore: ${detail}`);
     } finally {
       setBusy("");
@@ -349,7 +358,7 @@ function DownloadReceiptBtn({ checkinId, index, numero, data, importo, onDeleted
               data-testid={`comune-receipt-png-${checkinId}-${index}`}
               className="flex-1 text-center border border-emerald-500/40 hover:border-emerald-400 text-emerald-400 px-4 py-2 uppercase tracking-widest text-[10px] cursor-pointer"
             >
-              {busy === "png" ? "..." : "🖼  Apri PNG"}
+              {busy === "png" ? "..." : "↓ Scarica PNG"}
             </button>
             <button
               type="button"
@@ -357,7 +366,7 @@ function DownloadReceiptBtn({ checkinId, index, numero, data, importo, onDeleted
               data-testid={`comune-receipt-download-${checkinId}-${index}`}
               className="flex-1 text-center border border-[#1E1E28] hover:border-zinc-500 text-zinc-400 px-4 py-2 uppercase tracking-widest text-[10px] cursor-pointer"
             >
-              {busy === "pdf" ? "..." : "📄  Apri PDF"}
+              {busy === "pdf" ? "..." : "↓ Scarica PDF"}
             </button>
             <button
               type="button"
