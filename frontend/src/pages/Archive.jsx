@@ -239,117 +239,62 @@ function DownloadReceiptBtn({ checkinId, index, numero, data, importo, onDeleted
   const [open, setOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [busy, setBusy] = useState("");
-  const [statusMsg, setStatusMsg] = useState("");
-  const [statusColor, setStatusColor] = useState("emerald");
-  const [pdfHref, setPdfHref] = useState("");
-  const [pngHref, setPngHref] = useState("");
+  const [err, setErr] = useState("");
 
   const toggle = () => {
     setOpen((v) => !v);
   };
 
-  const setStatus = (msg, color = "emerald") => {
-    setStatusMsg(msg);
-    setStatusColor(color);
-  };
-
-  const downloadPdf = async () => {
-    if (busy) return;
-    setBusy("pdf");
-    setStatus("Scarico PDF...", "emerald");
+  // EXACT same pattern as DownloadManualButton.jsx (which works for the user).
+  const downloadFromApi = async (apiPath, filename, mime, params) => {
+    setErr("");
+    setBusy(filename.endsWith(".pdf") ? "pdf" : "png");
     try {
-      const r = await api.get(`/checkins/${checkinId}/comune-receipts/${index}`, {
-        responseType: "blob",
-        validateStatus: () => true,
-      });
-      const blob = r.data;
-      const ct = blob.type || r.headers?.["content-type"] || "";
-      console.log("[receipt] PDF status", r.status, "size", blob.size, "type", ct);
-
-      if (r.status !== 200) {
-        const txt = await blob.text();
-        let msg = txt;
-        try { msg = JSON.parse(txt).detail || txt; } catch { /* ignore */ }
-        setStatus(`Errore server (HTTP ${r.status}): ${typeof msg === "string" ? msg : JSON.stringify(msg)}`, "red");
-        return;
-      }
-
-      // Inspect first bytes to verify it's a real PDF
-      const head = await blob.slice(0, 8).text();
-      console.log("[receipt] PDF head bytes:", JSON.stringify(head));
-      if (!head.startsWith("%PDF")) {
-        const txt = await blob.text();
-        setStatus(`Errore: il server ha risposto con contenuto non-PDF. Primi byte: "${head}". Contenuto: ${txt.slice(0, 200)}`, "red");
-        return;
-      }
-
-      const pdfReal = new Blob([blob], { type: "application/pdf" });
-      const url = URL.createObjectURL(pdfReal);
-      setPdfHref(url);
-      // Auto-trigger download
-      downloadBlob(pdfReal, `ricevuta_comune_${numero}.pdf`);
-      setStatus(
-        `PDF pronto (${Math.round(pdfReal.size / 1024)} KB, è un PDF valido). Se il download non parte automaticamente, USA IL LINK ROSSO QUI SOTTO ↓`,
-        "emerald"
-      );
+      const r = await api.get(apiPath, { responseType: "blob", params });
+      const blob = new Blob([r.data], { type: mime });
+      const reader = new FileReader();
+      reader.onload = () => {
+        const a = document.createElement("a");
+        a.href = reader.result;
+        a.download = filename;
+        a.style.display = "none";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      };
+      reader.onerror = () => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        a.style.display = "none";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 60000);
+      };
+      reader.readAsDataURL(blob);
     } catch (e) {
-      const detail = e.response?.data?.detail || e.message || "Errore scaricamento PDF";
-      console.error("[receipt] PDF download error", e);
-      setStatus(`Errore: ${detail}`, "red");
+      setErr(`Impossibile scaricare ${filename}.`);
     } finally {
       setBusy("");
     }
   };
 
-  const downloadPng = async () => {
-    if (busy) return;
-    setBusy("png");
-    setStatus("Scarico PNG...", "emerald");
-    try {
-      const r = await api.get(`/checkins/${checkinId}/comune-receipts/${index}/preview`, {
-        responseType: "blob",
-        params: { download: 1 },
-        validateStatus: () => true,
-      });
-      const blob = r.data;
-      const ct = blob.type || r.headers?.["content-type"] || "";
-      console.log("[receipt] PNG status", r.status, "size", blob.size, "type", ct);
+  const downloadPdf = () =>
+    downloadFromApi(
+      `/checkins/${checkinId}/comune-receipts/${index}`,
+      `ricevuta_comune_${numero}.pdf`,
+      "application/pdf"
+    );
 
-      if (r.status !== 200) {
-        const txt = await blob.text();
-        let msg = txt;
-        try { msg = JSON.parse(txt).detail || txt; } catch { /* ignore */ }
-        setStatus(`Errore server (HTTP ${r.status}): ${typeof msg === "string" ? msg : JSON.stringify(msg)}`, "red");
-        return;
-      }
-
-      // PNG starts with 0x89 0x50 0x4E 0x47 ("\x89PNG")
-      const headBuf = await blob.slice(0, 4).arrayBuffer();
-      const headArr = new Uint8Array(headBuf);
-      const isPng = headArr[0] === 0x89 && headArr[1] === 0x50 && headArr[2] === 0x4E && headArr[3] === 0x47;
-      console.log("[receipt] PNG head bytes:", [...headArr]);
-      if (!isPng) {
-        const txt = await blob.text();
-        setStatus(`Errore: il server ha risposto con contenuto non-PNG. Contenuto: ${txt.slice(0, 200)}`, "red");
-        return;
-      }
-
-      const pngReal = new Blob([blob], { type: "image/png" });
-      const url = URL.createObjectURL(pngReal);
-      setPngHref(url);
-      downloadBlob(pngReal, `ricevuta_${numero}.png`);
-      setStatus(
-        `PNG pronto (${Math.round(pngReal.size / 1024)} KB, è un PNG valido). Se il download non parte automaticamente, USA IL LINK ROSSO QUI SOTTO ↓`,
-        "emerald"
-      );
-    } catch (e) {
-      const detail = e.response?.data?.detail || e.message || "Errore scaricamento PNG";
-      console.error("[receipt] PNG download error", e);
-      setStatus(`Errore: ${detail}`, "red");
-    } finally {
-      setBusy("");
-    }
-  };
+  const downloadPng = () =>
+    downloadFromApi(
+      `/checkins/${checkinId}/comune-receipts/${index}/preview`,
+      `ricevuta_${numero}.png`,
+      "image/png",
+      { download: 1 }
+    );
 
   const remove = async () => {
     if (!window.confirm(`Eliminare la ricevuta N. ${numero}? Potrai poi generarne una nuova con dati corretti.`)) return;
@@ -358,7 +303,7 @@ function DownloadReceiptBtn({ checkinId, index, numero, data, importo, onDeleted
       await api.delete(`/checkins/${checkinId}/comune-receipts/${index}`);
       onDeleted && onDeleted();
     } catch (e) {
-      setStatusMsg(`Errore eliminazione: ${e.response?.data?.detail || e.message}`);
+      setErr(`Errore eliminazione: ${e.response?.data?.detail || e.message}`);
     } finally {
       setDeleting(false);
     }
@@ -393,16 +338,18 @@ function DownloadReceiptBtn({ checkinId, index, numero, data, importo, onDeleted
             <button
               type="button"
               onClick={downloadPng}
+              disabled={!!busy}
               data-testid={`comune-receipt-png-${checkinId}-${index}`}
-              className="flex-1 text-center border border-emerald-500/40 hover:border-emerald-400 text-emerald-400 px-4 py-2 uppercase tracking-widest text-[10px] cursor-pointer"
+              className="flex-1 text-center border border-emerald-500/40 hover:border-emerald-400 text-emerald-400 px-4 py-2 uppercase tracking-widest text-[10px] cursor-pointer disabled:opacity-50"
             >
               {busy === "png" ? "..." : "↓ Scarica PNG"}
             </button>
             <button
               type="button"
               onClick={downloadPdf}
+              disabled={!!busy}
               data-testid={`comune-receipt-download-${checkinId}-${index}`}
-              className="flex-1 text-center border border-[#1E1E28] hover:border-zinc-500 text-zinc-400 px-4 py-2 uppercase tracking-widest text-[10px] cursor-pointer"
+              className="flex-1 text-center border border-[#1E1E28] hover:border-zinc-500 text-zinc-400 px-4 py-2 uppercase tracking-widest text-[10px] cursor-pointer disabled:opacity-50"
             >
               {busy === "pdf" ? "..." : "↓ Scarica PDF"}
             </button>
@@ -416,74 +363,19 @@ function DownloadReceiptBtn({ checkinId, index, numero, data, importo, onDeleted
               {deleting ? "..." : "Elimina/Rigenera"}
             </button>
           </div>
-          {statusMsg && (
+          {err && (
             <p
-              data-testid={`comune-receipt-status-${checkinId}-${index}`}
-              className={`text-[10px] font-mono px-2 py-1 break-words ${
-                statusColor === "red"
-                  ? "text-red-400 bg-red-500/10 border border-red-500/30"
-                  : "text-emerald-400 bg-emerald-500/10 border border-emerald-500/30"
-              }`}
+              data-testid={`comune-receipt-error-${checkinId}-${index}`}
+              className="text-[10px] font-mono px-2 py-1 text-red-400 bg-red-500/10 border border-red-500/30"
             >
-              {statusMsg}
+              {err}
             </p>
-          )}
-          {(pdfHref || pngHref) && (
-            <div className="border border-red-500/50 bg-red-500/5 p-3 flex flex-col gap-2">
-              <p className="text-[10px] uppercase tracking-widest text-red-400 font-bold">
-                ↓ Link Download Manuale (fallback)
-              </p>
-              <p className="text-[10px] text-zinc-400">
-                Se il download automatico non è partito, clicca direttamente il link qui sotto:
-              </p>
-              {pdfHref && (
-                <a
-                  href={pdfHref}
-                  download={`ricevuta_comune_${numero}.pdf`}
-                  data-testid={`receipt-fallback-pdf-${checkinId}-${index}`}
-                  className="text-emerald-400 underline hover:text-emerald-300 text-xs font-mono"
-                >
-                  ↓ Clicca qui per scaricare ricevuta_comune_{numero}.pdf
-                </a>
-              )}
-              {pngHref && (
-                <a
-                  href={pngHref}
-                  download={`ricevuta_${numero}.png`}
-                  data-testid={`receipt-fallback-png-${checkinId}-${index}`}
-                  className="text-emerald-400 underline hover:text-emerald-300 text-xs font-mono"
-                >
-                  ↓ Clicca qui per scaricare ricevuta_{numero}.png
-                </a>
-              )}
-              {pdfHref && (
-                <a
-                  href={pdfHref}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-zinc-400 underline hover:text-zinc-200 text-xs font-mono"
-                >
-                  → Oppure apri il PDF in nuova scheda
-                </a>
-              )}
-              {pngHref && (
-                <a
-                  href={pngHref}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-zinc-400 underline hover:text-zinc-200 text-xs font-mono"
-                >
-                  → Oppure apri il PNG in nuova scheda
-                </a>
-              )}
-            </div>
           )}
         </div>
       )}
     </div>
   );
 }
-
 
 function GenerateReceiptButton({ checkinId, guests, importo, onGenerated }) {
   const [open, setOpen] = useState(false);
