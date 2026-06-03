@@ -237,47 +237,65 @@ function downloadBlob(blob, filename) {
 
 function DownloadReceiptBtn({ checkinId, index, numero, data, importo, onDeleted }) {
   const [open, setOpen] = useState(false);
-  const [pdfBlob, setPdfBlob] = useState(null);
-  const [pngBlob, setPngBlob] = useState(null);
   const [deleting, setDeleting] = useState(false);
   const [busy, setBusy] = useState("");
   const [statusMsg, setStatusMsg] = useState("");
+  const [statusColor, setStatusColor] = useState("emerald");
+  const [pdfHref, setPdfHref] = useState("");
+  const [pngHref, setPngHref] = useState("");
 
   const toggle = () => {
     setOpen((v) => !v);
   };
 
+  const setStatus = (msg, color = "emerald") => {
+    setStatusMsg(msg);
+    setStatusColor(color);
+  };
+
   const downloadPdf = async () => {
     if (busy) return;
     setBusy("pdf");
-    setStatusMsg("Scarico PDF...");
+    setStatus("Scarico PDF...", "emerald");
     try {
       const r = await api.get(`/checkins/${checkinId}/comune-receipts/${index}`, {
         responseType: "blob",
-        validateStatus: () => true, // don't throw on 4xx/5xx — handle manually
+        validateStatus: () => true,
       });
       const blob = r.data;
       const ct = blob.type || r.headers?.["content-type"] || "";
       console.log("[receipt] PDF status", r.status, "size", blob.size, "type", ct);
 
-      // Detect error responses: non-200, or content-type is JSON / text, or implausibly small
-      if (r.status !== 200 || ct.includes("json") || ct.includes("text") || blob.size < 1000) {
+      if (r.status !== 200) {
         const txt = await blob.text();
         let msg = txt;
         try { msg = JSON.parse(txt).detail || txt; } catch { /* ignore */ }
-        setStatusMsg(`Errore server (HTTP ${r.status}): ${typeof msg === "string" ? msg : JSON.stringify(msg)}`);
+        setStatus(`Errore server (HTTP ${r.status}): ${typeof msg === "string" ? msg : JSON.stringify(msg)}`, "red");
+        return;
+      }
+
+      // Inspect first bytes to verify it's a real PDF
+      const head = await blob.slice(0, 8).text();
+      console.log("[receipt] PDF head bytes:", JSON.stringify(head));
+      if (!head.startsWith("%PDF")) {
+        const txt = await blob.text();
+        setStatus(`Errore: il server ha risposto con contenuto non-PDF. Primi byte: "${head}". Contenuto: ${txt.slice(0, 200)}`, "red");
         return;
       }
 
       const pdfReal = new Blob([blob], { type: "application/pdf" });
-      setPdfBlob(pdfReal);
+      const url = URL.createObjectURL(pdfReal);
+      setPdfHref(url);
+      // Auto-trigger download
       downloadBlob(pdfReal, `ricevuta_comune_${numero}.pdf`);
-      setStatusMsg(`Download avviato (${Math.round(pdfReal.size / 1024)} KB). Controlla la barra dei download.`);
-      setTimeout(() => setStatusMsg(""), 6000);
+      setStatus(
+        `PDF pronto (${Math.round(pdfReal.size / 1024)} KB, è un PDF valido). Se il download non parte automaticamente, USA IL LINK ROSSO QUI SOTTO ↓`,
+        "emerald"
+      );
     } catch (e) {
       const detail = e.response?.data?.detail || e.message || "Errore scaricamento PDF";
       console.error("[receipt] PDF download error", e);
-      setStatusMsg(`Errore: ${detail}`);
+      setStatus(`Errore: ${detail}`, "red");
     } finally {
       setBusy("");
     }
@@ -286,7 +304,7 @@ function DownloadReceiptBtn({ checkinId, index, numero, data, importo, onDeleted
   const downloadPng = async () => {
     if (busy) return;
     setBusy("png");
-    setStatusMsg("Scarico PNG...");
+    setStatus("Scarico PNG...", "emerald");
     try {
       const r = await api.get(`/checkins/${checkinId}/comune-receipts/${index}/preview`, {
         responseType: "blob",
@@ -297,23 +315,37 @@ function DownloadReceiptBtn({ checkinId, index, numero, data, importo, onDeleted
       const ct = blob.type || r.headers?.["content-type"] || "";
       console.log("[receipt] PNG status", r.status, "size", blob.size, "type", ct);
 
-      if (r.status !== 200 || ct.includes("json") || ct.includes("text") || blob.size < 1000) {
+      if (r.status !== 200) {
         const txt = await blob.text();
         let msg = txt;
         try { msg = JSON.parse(txt).detail || txt; } catch { /* ignore */ }
-        setStatusMsg(`Errore server (HTTP ${r.status}): ${typeof msg === "string" ? msg : JSON.stringify(msg)}`);
+        setStatus(`Errore server (HTTP ${r.status}): ${typeof msg === "string" ? msg : JSON.stringify(msg)}`, "red");
+        return;
+      }
+
+      // PNG starts with 0x89 0x50 0x4E 0x47 ("\x89PNG")
+      const headBuf = await blob.slice(0, 4).arrayBuffer();
+      const headArr = new Uint8Array(headBuf);
+      const isPng = headArr[0] === 0x89 && headArr[1] === 0x50 && headArr[2] === 0x4E && headArr[3] === 0x47;
+      console.log("[receipt] PNG head bytes:", [...headArr]);
+      if (!isPng) {
+        const txt = await blob.text();
+        setStatus(`Errore: il server ha risposto con contenuto non-PNG. Contenuto: ${txt.slice(0, 200)}`, "red");
         return;
       }
 
       const pngReal = new Blob([blob], { type: "image/png" });
-      setPngBlob(pngReal);
+      const url = URL.createObjectURL(pngReal);
+      setPngHref(url);
       downloadBlob(pngReal, `ricevuta_${numero}.png`);
-      setStatusMsg(`Download avviato (${Math.round(pngReal.size / 1024)} KB). Controlla la barra dei download.`);
-      setTimeout(() => setStatusMsg(""), 6000);
+      setStatus(
+        `PNG pronto (${Math.round(pngReal.size / 1024)} KB, è un PNG valido). Se il download non parte automaticamente, USA IL LINK ROSSO QUI SOTTO ↓`,
+        "emerald"
+      );
     } catch (e) {
       const detail = e.response?.data?.detail || e.message || "Errore scaricamento PNG";
       console.error("[receipt] PNG download error", e);
-      setStatusMsg(`Errore: ${detail}`);
+      setStatus(`Errore: ${detail}`, "red");
     } finally {
       setBusy("");
     }
@@ -387,14 +419,64 @@ function DownloadReceiptBtn({ checkinId, index, numero, data, importo, onDeleted
           {statusMsg && (
             <p
               data-testid={`comune-receipt-status-${checkinId}-${index}`}
-              className={`text-[10px] font-mono px-2 py-1 ${
-                statusMsg.toLowerCase().startsWith("errore")
+              className={`text-[10px] font-mono px-2 py-1 break-words ${
+                statusColor === "red"
                   ? "text-red-400 bg-red-500/10 border border-red-500/30"
                   : "text-emerald-400 bg-emerald-500/10 border border-emerald-500/30"
               }`}
             >
               {statusMsg}
             </p>
+          )}
+          {(pdfHref || pngHref) && (
+            <div className="border border-red-500/50 bg-red-500/5 p-3 flex flex-col gap-2">
+              <p className="text-[10px] uppercase tracking-widest text-red-400 font-bold">
+                ↓ Link Download Manuale (fallback)
+              </p>
+              <p className="text-[10px] text-zinc-400">
+                Se il download automatico non è partito, clicca direttamente il link qui sotto:
+              </p>
+              {pdfHref && (
+                <a
+                  href={pdfHref}
+                  download={`ricevuta_comune_${numero}.pdf`}
+                  data-testid={`receipt-fallback-pdf-${checkinId}-${index}`}
+                  className="text-emerald-400 underline hover:text-emerald-300 text-xs font-mono"
+                >
+                  ↓ Clicca qui per scaricare ricevuta_comune_{numero}.pdf
+                </a>
+              )}
+              {pngHref && (
+                <a
+                  href={pngHref}
+                  download={`ricevuta_${numero}.png`}
+                  data-testid={`receipt-fallback-png-${checkinId}-${index}`}
+                  className="text-emerald-400 underline hover:text-emerald-300 text-xs font-mono"
+                >
+                  ↓ Clicca qui per scaricare ricevuta_{numero}.png
+                </a>
+              )}
+              {pdfHref && (
+                <a
+                  href={pdfHref}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-zinc-400 underline hover:text-zinc-200 text-xs font-mono"
+                >
+                  → Oppure apri il PDF in nuova scheda
+                </a>
+              )}
+              {pngHref && (
+                <a
+                  href={pngHref}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-zinc-400 underline hover:text-zinc-200 text-xs font-mono"
+                >
+                  → Oppure apri il PNG in nuova scheda
+                </a>
+              )}
+            </div>
           )}
         </div>
       )}
