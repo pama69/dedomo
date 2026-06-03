@@ -238,63 +238,9 @@ function downloadBlob(blob, filename) {
 function DownloadReceiptBtn({ checkinId, index, numero, data, importo, onDeleted }) {
   const [open, setOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [busy, setBusy] = useState("");
   const [err, setErr] = useState("");
 
-  const toggle = () => {
-    setOpen((v) => !v);
-  };
-
-  // EXACT same pattern as DownloadManualButton.jsx (which works for the user).
-  const downloadFromApi = async (apiPath, filename, mime, params) => {
-    setErr("");
-    setBusy(filename.endsWith(".pdf") ? "pdf" : "png");
-    try {
-      const r = await api.get(apiPath, { responseType: "blob", params });
-      const blob = new Blob([r.data], { type: mime });
-      const reader = new FileReader();
-      reader.onload = () => {
-        const a = document.createElement("a");
-        a.href = reader.result;
-        a.download = filename;
-        a.style.display = "none";
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-      };
-      reader.onerror = () => {
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = filename;
-        a.style.display = "none";
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        setTimeout(() => URL.revokeObjectURL(url), 60000);
-      };
-      reader.readAsDataURL(blob);
-    } catch (e) {
-      setErr(`Impossibile scaricare ${filename}.`);
-    } finally {
-      setBusy("");
-    }
-  };
-
-  const downloadPdf = () =>
-    downloadFromApi(
-      `/checkins/${checkinId}/comune-receipts/${index}`,
-      `ricevuta_comune_${numero}.pdf`,
-      "application/pdf"
-    );
-
-  const downloadPng = () =>
-    downloadFromApi(
-      `/checkins/${checkinId}/comune-receipts/${index}/preview`,
-      `ricevuta_${numero}.png`,
-      "image/png",
-      { download: 1 }
-    );
+  const toggle = () => setOpen((v) => !v);
 
   const remove = async () => {
     if (!window.confirm(`Eliminare la ricevuta N. ${numero}? Potrai poi generarne una nuova con dati corretti.`)) return;
@@ -310,6 +256,10 @@ function DownloadReceiptBtn({ checkinId, index, numero, data, importo, onDeleted
   };
 
   const previewSrc = `${api.defaults.baseURL}/checkins/${checkinId}/comune-receipts/${index}/preview`;
+  // Direct browser navigation = same as pasting URL in address bar (which works for the user).
+  // Backend returns Content-Disposition: attachment → Chrome downloads the file.
+  const pdfUrl = `${api.defaults.baseURL}/checkins/${checkinId}/comune-receipts/${index}?download=1`;
+  const pngUrl = `${api.defaults.baseURL}/checkins/${checkinId}/comune-receipts/${index}/preview?download=1`;
 
   return (
     <div className="flex flex-col gap-2">
@@ -335,24 +285,24 @@ function DownloadReceiptBtn({ checkinId, index, numero, data, importo, onDeleted
             <br/>Oppure usa i pulsanti qui sotto.
           </p>
           <div className="flex gap-2 flex-wrap">
-            <button
-              type="button"
-              onClick={downloadPng}
-              disabled={!!busy}
+            <a
+              href={pngUrl}
+              target="_blank"
+              rel="noopener noreferrer"
               data-testid={`comune-receipt-png-${checkinId}-${index}`}
-              className="flex-1 text-center border border-emerald-500/40 hover:border-emerald-400 text-emerald-400 px-4 py-2 uppercase tracking-widest text-[10px] cursor-pointer disabled:opacity-50"
+              className="flex-1 text-center border border-emerald-500/40 hover:border-emerald-400 text-emerald-400 px-4 py-2 uppercase tracking-widest text-[10px] cursor-pointer no-underline"
             >
-              {busy === "png" ? "..." : "↓ Scarica PNG"}
-            </button>
-            <button
-              type="button"
-              onClick={downloadPdf}
-              disabled={!!busy}
+              ↓ Scarica PNG
+            </a>
+            <a
+              href={pdfUrl}
+              target="_blank"
+              rel="noopener noreferrer"
               data-testid={`comune-receipt-download-${checkinId}-${index}`}
-              className="flex-1 text-center border border-[#1E1E28] hover:border-zinc-500 text-zinc-400 px-4 py-2 uppercase tracking-widest text-[10px] cursor-pointer disabled:opacity-50"
+              className="flex-1 text-center border border-[#1E1E28] hover:border-zinc-500 text-zinc-400 px-4 py-2 uppercase tracking-widest text-[10px] cursor-pointer no-underline"
             >
-              {busy === "pdf" ? "..." : "↓ Scarica PDF"}
-            </button>
+              ↓ Scarica PDF
+            </a>
             <button
               type="button"
               onClick={remove}

@@ -1431,9 +1431,10 @@ async def list_comune_receipts(checkin_id: str, user=Depends(get_current_user)):
 
 @api_router.get("/checkins/{checkin_id}/comune-receipts/{index}")
 async def download_comune_receipt(
-    checkin_id: str, index: int, user=Depends(get_current_user)
+    checkin_id: str, index: int, download: int = 0, user=Depends(get_current_user)
 ):
-    """Download an archived municipal receipt PDF by index."""
+    """Download an archived municipal receipt PDF by index.
+    ?download=1 forces attachment (Save As) instead of inline viewer."""
     c = await db.checkins.find_one(
         {"checkin_id": checkin_id, "user_id": user["user_id"]}, {"_id": 0}
     )
@@ -1445,11 +1446,13 @@ async def download_comune_receipt(
     pdf_b64 = receipts[index].get("pdf_base64")
     if not pdf_b64:
         raise HTTPException(404, "PDF non disponibile")
+    numero = receipts[index].get("numero", "")
+    disposition = "attachment" if download else "inline"
     return StreamingResponse(
         io.BytesIO(base64.b64decode(pdf_b64)),
         media_type="application/pdf",
         headers={
-            "Content-Disposition": f'inline; filename="ricevuta_{receipts[index].get("numero","")}.pdf"'
+            "Content-Disposition": f'{disposition}; filename="ricevuta_comune_{numero}.pdf"'
         },
     )
 
