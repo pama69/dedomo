@@ -529,7 +529,17 @@ export default function Checkin() {
       setResult(r.data);
       setStep(5);
     } catch (e) {
-      setError(e.response?.data?.detail || "Errore invio");
+      const detail = e.response?.data?.detail;
+      let msg = "Errore invio";
+      if (typeof detail === "string") {
+        msg = detail;
+      } else if (detail && typeof detail === "object") {
+        msg = detail.message || msg;
+        if (Array.isArray(detail.missing) && detail.missing.length) {
+          msg += ` Mancano: ${detail.missing.join(", ")}.`;
+        }
+      }
+      setError(msg);
     } finally {
       setSubmitting(false);
     }

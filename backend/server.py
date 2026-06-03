@@ -808,6 +808,25 @@ async def checkin_submit(body: CheckinSubmit, user=Depends(get_current_user)):
     if not prop:
         raise HTTPException(404, "Proprietà non trovata")
 
+    # Guard: refuse check-in if external credentials are missing.
+    # The frontend already blocks this at step 2; this is the backend safeguard.
+    _aw = prop.get("alloggiati", {}) or {}
+    _r1k = prop.get("ross1000", {}) or {}
+    _missing = []
+    if not (_aw.get("utente") and _aw.get("password") and _aw.get("ws_key")):
+        _missing.append("Alloggiati Web (utente, password, WSKey)")
+    if not (_r1k.get("utente") and _r1k.get("password") and _r1k.get("codice_struttura")):
+        _missing.append("Ross 1000 / Turismo 5 (utente, password, codice struttura)")
+    if _missing:
+        raise HTTPException(
+            400,
+            {
+                "error": "missing_credentials",
+                "message": "Credenziali esterne mancanti per questa proprietà. Configurale in Impostazioni.",
+                "missing": _missing,
+            },
+        )
+
     arr = datetime.fromisoformat(body.data_arrivo)
     part = datetime.fromisoformat(body.data_partenza)
     giorni = max(1, (part - arr).days)
