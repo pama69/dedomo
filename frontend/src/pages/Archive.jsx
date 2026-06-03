@@ -240,59 +240,45 @@ function DownloadReceiptBtn({ checkinId, index, numero, data, importo, onDeleted
   const [deleting, setDeleting] = useState(false);
   const [busy, setBusy] = useState("");
   const [err, setErr] = useState("");
+  const [pdfUrl, setPdfUrl] = useState("");
+  const [pngUrl, setPngUrl] = useState("");
 
   const toggle = () => setOpen((v) => !v);
 
-  // EXACT same pattern as DownloadManualButton.jsx (original, worked in incognito).
-  const downloadFromApi = async (apiPath, filename, mime, params) => {
+  // Two-step: fetch file via axios → store blob URL in state → render <a download>
+  // which the user clicks directly. Guaranteed to work in any Chrome configuration.
+  const preparePdf = async () => {
     setErr("");
-    setBusy(filename.endsWith(".pdf") ? "pdf" : "png");
+    setPdfUrl("");
+    setBusy("pdf");
     try {
-      const r = await api.get(apiPath, { responseType: "blob", params });
-      const blob = new Blob([r.data], { type: mime });
-      const reader = new FileReader();
-      reader.onload = () => {
-        const a = document.createElement("a");
-        a.href = reader.result;
-        a.download = filename;
-        a.style.display = "none";
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-      };
-      reader.onerror = () => {
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = filename;
-        a.style.display = "none";
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        setTimeout(() => URL.revokeObjectURL(url), 60000);
-      };
-      reader.readAsDataURL(blob);
+      const r = await api.get(`/checkins/${checkinId}/comune-receipts/${index}`, { responseType: "blob" });
+      const blob = new Blob([r.data], { type: "application/pdf" });
+      setPdfUrl(URL.createObjectURL(blob));
     } catch (e) {
-      setErr(`Impossibile scaricare ${filename}.`);
+      setErr("Impossibile preparare il PDF.");
     } finally {
       setBusy("");
     }
   };
 
-  const downloadPdf = () =>
-    downloadFromApi(
-      `/checkins/${checkinId}/comune-receipts/${index}`,
-      `ricevuta_comune_${numero}.pdf`,
-      "application/pdf"
-    );
-
-  const downloadPng = () =>
-    downloadFromApi(
-      `/checkins/${checkinId}/comune-receipts/${index}/preview`,
-      `ricevuta_${numero}.png`,
-      "image/png",
-      { download: 1 }
-    );
+  const preparePng = async () => {
+    setErr("");
+    setPngUrl("");
+    setBusy("png");
+    try {
+      const r = await api.get(`/checkins/${checkinId}/comune-receipts/${index}/preview`, {
+        responseType: "blob",
+        params: { download: 1 },
+      });
+      const blob = new Blob([r.data], { type: "image/png" });
+      setPngUrl(URL.createObjectURL(blob));
+    } catch (e) {
+      setErr("Impossibile preparare il PNG.");
+    } finally {
+      setBusy("");
+    }
+  };
 
   const remove = async () => {
     if (!window.confirm(`Eliminare la ricevuta N. ${numero}? Potrai poi generarne una nuova con dati corretti.`)) return;
@@ -333,24 +319,46 @@ function DownloadReceiptBtn({ checkinId, index, numero, data, importo, onDeleted
             <br/>Oppure usa i pulsanti qui sotto.
           </p>
           <div className="flex gap-2 flex-wrap">
-            <button
-              type="button"
-              onClick={downloadPng}
-              disabled={!!busy}
-              data-testid={`comune-receipt-png-${checkinId}-${index}`}
-              className="flex-1 text-center border border-emerald-500/40 hover:border-emerald-400 text-emerald-400 px-4 py-2 uppercase tracking-widest text-[10px] cursor-pointer disabled:opacity-50"
-            >
-              {busy === "png" ? "..." : "↓ Scarica PNG"}
-            </button>
-            <button
-              type="button"
-              onClick={downloadPdf}
-              disabled={!!busy}
-              data-testid={`comune-receipt-download-${checkinId}-${index}`}
-              className="flex-1 text-center border border-[#1E1E28] hover:border-zinc-500 text-zinc-400 px-4 py-2 uppercase tracking-widest text-[10px] cursor-pointer disabled:opacity-50"
-            >
-              {busy === "pdf" ? "..." : "↓ Scarica PDF"}
-            </button>
+            {!pngUrl ? (
+              <button
+                type="button"
+                onClick={preparePng}
+                disabled={!!busy}
+                data-testid={`comune-receipt-png-${checkinId}-${index}`}
+                className="flex-1 text-center border border-emerald-500/40 hover:border-emerald-400 text-emerald-400 px-4 py-2 uppercase tracking-widest text-[10px] cursor-pointer disabled:opacity-50"
+              >
+                {busy === "png" ? "Preparo PNG…" : "↓ Prepara PNG"}
+              </button>
+            ) : (
+              <a
+                href={pngUrl}
+                download={`ricevuta_${numero}.png`}
+                data-testid={`comune-receipt-png-link-${checkinId}-${index}`}
+                className="flex-1 text-center border border-emerald-400 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-200 px-4 py-2 uppercase tracking-widest text-[10px] cursor-pointer animate-pulse no-underline"
+              >
+                ✓ CLICCA QUI PER SALVARE PNG
+              </a>
+            )}
+            {!pdfUrl ? (
+              <button
+                type="button"
+                onClick={preparePdf}
+                disabled={!!busy}
+                data-testid={`comune-receipt-download-${checkinId}-${index}`}
+                className="flex-1 text-center border border-[#1E1E28] hover:border-zinc-500 text-zinc-400 px-4 py-2 uppercase tracking-widest text-[10px] cursor-pointer disabled:opacity-50"
+              >
+                {busy === "pdf" ? "Preparo PDF…" : "↓ Prepara PDF"}
+              </button>
+            ) : (
+              <a
+                href={pdfUrl}
+                download={`ricevuta_comune_${numero}.pdf`}
+                data-testid={`comune-receipt-download-link-${checkinId}-${index}`}
+                className="flex-1 text-center border border-emerald-400 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-200 px-4 py-2 uppercase tracking-widest text-[10px] cursor-pointer animate-pulse no-underline"
+              >
+                ✓ CLICCA QUI PER SALVARE PDF
+              </a>
+            )}
             <button
               type="button"
               onClick={remove}
