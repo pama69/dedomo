@@ -243,15 +243,8 @@ function DownloadReceiptBtn({ checkinId, index, numero, data, importo, onDeleted
   const [busy, setBusy] = useState("");
   const [statusMsg, setStatusMsg] = useState("");
 
-  const toggle = async () => {
-    if (open) { setOpen(false); return; }
-    setOpen(true);
-    if (!pdfBlob) {
-      try {
-        const r = await api.get(`/checkins/${checkinId}/comune-receipts/${index}`, { responseType: "blob" });
-        setPdfBlob(new Blob([r.data], { type: "application/pdf" }));
-      } catch (e) { console.warn("[receipt] preload PDF failed", e); }
-    }
+  const toggle = () => {
+    setOpen((v) => !v);
   };
 
   const downloadPdf = async () => {
@@ -259,19 +252,27 @@ function DownloadReceiptBtn({ checkinId, index, numero, data, importo, onDeleted
     setBusy("pdf");
     setStatusMsg("Scarico PDF...");
     try {
-      let blob = pdfBlob;
-      if (!blob) {
-        const r = await api.get(`/checkins/${checkinId}/comune-receipts/${index}`, { responseType: "blob" });
-        blob = new Blob([r.data], { type: "application/pdf" });
-        setPdfBlob(blob);
-      }
-      console.log("[receipt] PDF blob size", blob.size, "bytes");
-      if (!blob.size) {
-        setStatusMsg("Errore: PDF vuoto sul server. Riprova o rigenera la ricevuta.");
+      const r = await api.get(`/checkins/${checkinId}/comune-receipts/${index}`, {
+        responseType: "blob",
+        validateStatus: () => true, // don't throw on 4xx/5xx — handle manually
+      });
+      const blob = r.data;
+      const ct = blob.type || r.headers?.["content-type"] || "";
+      console.log("[receipt] PDF status", r.status, "size", blob.size, "type", ct);
+
+      // Detect error responses: non-200, or content-type is JSON / text, or implausibly small
+      if (r.status !== 200 || ct.includes("json") || ct.includes("text") || blob.size < 1000) {
+        const txt = await blob.text();
+        let msg = txt;
+        try { msg = JSON.parse(txt).detail || txt; } catch { /* ignore */ }
+        setStatusMsg(`Errore server (HTTP ${r.status}): ${typeof msg === "string" ? msg : JSON.stringify(msg)}`);
         return;
       }
-      downloadBlob(blob, `ricevuta_comune_${numero}.pdf`);
-      setStatusMsg(`Download avviato (${Math.round(blob.size / 1024)} KB). Controlla la barra dei download.`);
+
+      const pdfReal = new Blob([blob], { type: "application/pdf" });
+      setPdfBlob(pdfReal);
+      downloadBlob(pdfReal, `ricevuta_comune_${numero}.pdf`);
+      setStatusMsg(`Download avviato (${Math.round(pdfReal.size / 1024)} KB). Controlla la barra dei download.`);
       setTimeout(() => setStatusMsg(""), 6000);
     } catch (e) {
       const detail = e.response?.data?.detail || e.message || "Errore scaricamento PDF";
@@ -287,22 +288,27 @@ function DownloadReceiptBtn({ checkinId, index, numero, data, importo, onDeleted
     setBusy("png");
     setStatusMsg("Scarico PNG...");
     try {
-      let blob = pngBlob;
-      if (!blob) {
-        const r = await api.get(`/checkins/${checkinId}/comune-receipts/${index}/preview`, {
-          responseType: "blob",
-          params: { download: 1 },
-        });
-        blob = new Blob([r.data], { type: "image/png" });
-        setPngBlob(blob);
-      }
-      console.log("[receipt] PNG blob size", blob.size, "bytes");
-      if (!blob.size) {
-        setStatusMsg("Errore: PNG vuoto sul server.");
+      const r = await api.get(`/checkins/${checkinId}/comune-receipts/${index}/preview`, {
+        responseType: "blob",
+        params: { download: 1 },
+        validateStatus: () => true,
+      });
+      const blob = r.data;
+      const ct = blob.type || r.headers?.["content-type"] || "";
+      console.log("[receipt] PNG status", r.status, "size", blob.size, "type", ct);
+
+      if (r.status !== 200 || ct.includes("json") || ct.includes("text") || blob.size < 1000) {
+        const txt = await blob.text();
+        let msg = txt;
+        try { msg = JSON.parse(txt).detail || txt; } catch { /* ignore */ }
+        setStatusMsg(`Errore server (HTTP ${r.status}): ${typeof msg === "string" ? msg : JSON.stringify(msg)}`);
         return;
       }
-      downloadBlob(blob, `ricevuta_${numero}.png`);
-      setStatusMsg(`Download avviato (${Math.round(blob.size / 1024)} KB). Controlla la barra dei download.`);
+
+      const pngReal = new Blob([blob], { type: "image/png" });
+      setPngBlob(pngReal);
+      downloadBlob(pngReal, `ricevuta_${numero}.png`);
+      setStatusMsg(`Download avviato (${Math.round(pngReal.size / 1024)} KB). Controlla la barra dei download.`);
       setTimeout(() => setStatusMsg(""), 6000);
     } catch (e) {
       const detail = e.response?.data?.detail || e.message || "Errore scaricamento PNG";
