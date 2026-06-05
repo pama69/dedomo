@@ -3,12 +3,24 @@ import { Link } from "react-router-dom";
 import Layout from "@/components/Layout";
 import api from "@/lib/api";
 
+const MONTHS_IT = [
+  "Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno",
+  "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre",
+];
+
+function monthLabel(key) {
+  // key = "2026-06"
+  const [y, m] = key.split("-");
+  return `${MONTHS_IT[parseInt(m) - 1]} ${y}`;
+}
+
 export default function Archive() {
   const [items, setItems] = useState([]);
   const [properties, setProperties] = useState([]);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState(null);
   const [activeProperty, setActiveProperty] = useState(null);
+  const [collapsedMonths, setCollapsedMonths] = useState({}); // { "2026-06": true }
 
   useEffect(() => {
     Promise.all([
@@ -29,6 +41,28 @@ export default function Archive() {
     if (!grouped[c.property_id]) grouped[c.property_id] = [];
     grouped[c.property_id].push(c);
   }
+
+  // For active property, group by month/year (sorted desc, most recent month first)
+  const monthsForProperty = (propId) => {
+    const list = grouped[propId] || [];
+    const map = {};
+    for (const c of list) {
+      const d = new Date(c.data_arrivo);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      if (!map[key]) map[key] = [];
+      map[key].push(c);
+    }
+    const keys = Object.keys(map).sort().reverse();
+    return keys.map((k) => ({
+      key: k,
+      label: monthLabel(k),
+      items: map[k].sort((a, b) => (a.data_arrivo < b.data_arrivo ? 1 : -1)),
+    }));
+  };
+
+  const toggleMonth = (key) => {
+    setCollapsedMonths((s) => ({ ...s, [key]: !s[key] }));
+  };
 
   return (
     <Layout>
@@ -82,52 +116,67 @@ export default function Archive() {
             })}
           </div>
 
-          <div className="flex flex-col gap-2">
-            {(grouped[activeProperty] || []).map((c) => {
-              const aw = c.results?.alloggiati_web;
-              const r1k = c.results?.ross1000;
-              const is_ = c.results?.imposta_soggiorno;
-              const isOpen = expanded === c.checkin_id;
+          <div className="flex flex-col gap-3">
+            {monthsForProperty(activeProperty).map((mon) => {
+              const collapsed = collapsedMonths[`${activeProperty}::${mon.key}`];
               return (
-                <div
-                  key={c.checkin_id}
-                  data-testid={`archive-row-${c.checkin_id}`}
-                  className="bg-[#0E0E14] border border-[#1E1E28]"
-                >
+                <div key={mon.key} className="flex flex-col gap-2" data-testid={`archive-month-${mon.key}`}>
                   <button
-                    onClick={() => setExpanded(isOpen ? null : c.checkin_id)}
-                    className="w-full p-4 flex justify-between items-center text-left cursor-pointer hover:bg-[#15151C] transition-colors"
+                    type="button"
+                    onClick={() => toggleMonth(`${activeProperty}::${mon.key}`)}
+                    data-testid={`archive-month-toggle-${mon.key}`}
+                    className="flex justify-between items-center w-full bg-[#0E0E14] border border-[#1E1E28] hover:border-zinc-500 px-4 py-2 cursor-pointer transition-colors text-left"
                   >
-                    <div>
-                      <p className="font-medium text-zinc-100">
-                        {new Date(c.data_arrivo).toLocaleDateString("it-IT")} → {new Date(c.data_partenza).toLocaleDateString("it-IT")}
-                      </p>
-                      <p className="text-[10px] tracking-[0.2em] uppercase text-zinc-500 mt-1 font-mono">
-                        {c.guests?.[0]
-                          ? `${c.guests[0].cognome || ''} ${c.guests[0].nome || ''}`.trim()
-                          : "—"}
-                        {c.guests?.length > 1 && (
-                          <span className="text-zinc-600"> (+{c.guests.length - 1})</span>
-                        )}
-                        {" · "}[{c.mode}] · {new Date(c.created_at).toLocaleString("it-IT")}
-                      </p>
-                    </div>
-                    <div className="flex gap-2 font-mono text-[10px]">
-                      <Tag ok={aw?.success} skipped={aw?.skipped} label="AW" />
-                      <Tag ok={r1k?.success} skipped={r1k?.skipped} label="T5" />
-                      <Tag ok={is_?.success} skipped={is_?.skipped} label="IS" />
-                    </div>
+                    <span className="text-[11px] tracking-[0.25em] uppercase text-zinc-300 font-mono">
+                      {mon.label} <span className="text-zinc-600">· {mon.items.length} invio/i</span>
+                    </span>
+                    <span className="text-zinc-500 text-xs font-mono">{collapsed ? "▶" : "▼"}</span>
                   </button>
+                  {!collapsed && mon.items.map((c) => {
+                    const aw = c.results?.alloggiati_web;
+                    const r1k = c.results?.ross1000;
+                    const is_ = c.results?.imposta_soggiorno;
+                    const isOpen = expanded === c.checkin_id;
+                    return (
+                      <div
+                        key={c.checkin_id}
+                        data-testid={`archive-row-${c.checkin_id}`}
+                        className="bg-[#0E0E14] border border-[#1E1E28] ml-3"
+                      >
+                        <button
+                          onClick={() => setExpanded(isOpen ? null : c.checkin_id)}
+                          className="w-full p-4 flex justify-between items-center text-left cursor-pointer hover:bg-[#15151C] transition-colors"
+                        >
+                          <div>
+                            <p className="font-medium text-zinc-100">
+                              {new Date(c.data_arrivo).toLocaleDateString("it-IT")} → {new Date(c.data_partenza).toLocaleDateString("it-IT")}
+                            </p>
+                            <p className="text-[10px] tracking-[0.2em] uppercase text-zinc-500 mt-1 font-mono">
+                              {c.guests?.[0]
+                                ? `${c.guests[0].cognome || ''} ${c.guests[0].nome || ''}`.trim()
+                                : "—"}
+                              {c.guests?.length > 1 && (
+                                <span className="text-zinc-600"> (+{c.guests.length - 1})</span>
+                              )}
+                              {" · "}[{c.mode}] · {new Date(c.created_at).toLocaleString("it-IT")}
+                            </p>
+                          </div>
+                          <div className="flex gap-2 font-mono text-[10px]">
+                            <Tag ok={aw?.success} skipped={aw?.skipped} label="AW" />
+                            <Tag ok={r1k?.success} skipped={r1k?.skipped} label="T5" />
+                            <Tag ok={is_?.success} skipped={is_?.skipped} label="IS" />
+                          </div>
+                        </button>
 
-                  {isOpen && (
-                    <div className="border-t border-[#1E1E28] p-4 flex flex-col gap-3 font-mono text-xs">
-                      <div className="flex flex-col gap-1">
-                        <span className="text-zinc-500">OSPITI</span>
-                        {c.guests?.map((g, i) => (
-                          <span key={i} className="text-zinc-200">
-                            #{i + 1} {g.cognome} {g.nome} — {g.tipo_documento} {g.numero_documento}
-                          </span>
-                        ))}
+                        {isOpen && (
+                          <div className="border-t border-[#1E1E28] p-4 flex flex-col gap-3 font-mono text-xs">
+                            <div className="flex flex-col gap-1">
+                              <span className="text-zinc-500">OSPITI</span>
+                              {c.guests?.map((g, i) => (
+                                <span key={i} className="text-zinc-200">
+                                  #{i + 1} {g.cognome} {g.nome} — {g.tipo_documento} {g.numero_documento}
+                                </span>
+                              ))}
                       </div>
                       {is_?.calculation && (
                         <div className="border-t border-[#1E1E28] pt-3 flex justify-between">
@@ -180,26 +229,6 @@ export default function Archive() {
                             ))}
                           </div>
                         )}
-                        {r1k?.xml_preview && (
-                          <details className="border border-[#1E1E28] p-3 text-[10px]">
-                            <summary className="text-zinc-400 cursor-pointer uppercase tracking-widest">
-                              Anteprima XML Turismo 5
-                            </summary>
-                            <pre className="text-zinc-500 mt-2 whitespace-pre-wrap break-all text-[9px]">
-                              {r1k.xml_preview}
-                            </pre>
-                          </details>
-                        )}
-                        {aw?.schedine_preview && (
-                          <details className="border border-[#1E1E28] p-3 text-[10px]">
-                            <summary className="text-zinc-400 cursor-pointer uppercase tracking-widest">
-                              Anteprima Schedine Alloggiati Web
-                            </summary>
-                            <pre className="text-zinc-500 mt-2 whitespace-pre-wrap break-all text-[9px]">
-                              {aw.schedine_preview.join("\n")}
-                            </pre>
-                          </details>
-                        )}
                         {c.mode === "PROD" && aw?.success && (
                           c.alloggiati_ricevuta_pdf ? (
                             <DownloadAlloggiatiBtn checkinId={c.checkin_id} />
@@ -212,6 +241,9 @@ export default function Archive() {
                       </div>
                     </div>
                   )}
+                </div>
+              );
+            })}
                 </div>
               );
             })}
