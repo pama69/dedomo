@@ -296,7 +296,7 @@ export default function OwnerArchive() {
             ))}
           </div>
         )
-      )}
+      ) : null}
 
       {tab === "locazione" && !loading && (
         locazione.length === 0 ? (
