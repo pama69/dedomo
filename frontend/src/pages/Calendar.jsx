@@ -72,19 +72,19 @@ export default function Calendar() {
   const eventsByDay = useMemo(() => {
     const map = {};
     for (const ev of events) {
-      // Normalize: iCal end is exclusive — span includes start, excludes end
+      // Backend uses iCal-style exclusive end → for display we want inclusive,
+      // so the bar covers the departure day too. Iterate [start..end] inclusive.
       const s = new Date(ev.start);
       const e = new Date(ev.end);
-      for (let d = new Date(s); d < e; d.setDate(d.getDate() + 1)) {
-        const k = fmtISO(d);
+      const cur = new Date(s);
+      while (cur <= e) {
+        const k = fmtISO(cur);
         if (!map[k]) map[k] = [];
-        map[k].push(ev);
-      }
-      // If event is single-day (start == end), include the start
-      if (s.getTime() === e.getTime()) {
-        const k = fmtISO(s);
-        if (!map[k]) map[k] = [];
-        map[k].push(ev);
+        const isStart = cur.getTime() === s.getTime();
+        const isEnd = cur.getTime() === e.getTime();
+        const type = isStart && isEnd ? "full" : isStart ? "start" : isEnd ? "end" : "middle";
+        map[k].push({ event: ev, type });
+        cur.setDate(cur.getDate() + 1);
       }
     }
     return map;
@@ -176,23 +176,57 @@ export default function Calendar() {
                   {d.getDate()}
                 </span>
                 <div className="flex flex-col gap-0.5">
-                  {dayEvents.slice(0, 3).map((ev) => (
-                    <button
-                      key={ev.id}
-                      type="button"
-                      onClick={() => ev.editable && setEditEvent(ev)}
-                      data-testid={`cal-event-${ev.id}`}
-                      style={{ backgroundColor: ev.color }}
-                      className={`text-left text-[9px] font-mono text-white truncate px-1.5 py-0.5 ${ev.editable ? "cursor-pointer hover:opacity-80" : "cursor-default"}`}
-                      title={`${ev.property_name} · ${ev.source}${ev.notes ? ` · ${ev.notes}` : ""}`}
-                    >
-                      <span className="font-bold mr-1">{ev.source}</span>
-                      <span className="opacity-80">{ev.property_name?.slice(0, 12)}</span>
-                    </button>
-                  ))}
-                  {dayEvents.length > 3 && (
-                    <span className="text-[9px] font-mono text-zinc-500 px-1.5">+{dayEvents.length - 3}</span>
-                  )}
+                  {(() => {
+                    // Group day entries by property_id (or event id as fallback)
+                    const groups = new Map();
+                    for (const en of dayEvents) {
+                      const k = en.event.property_id || en.event.id;
+                      if (!groups.has(k)) groups.set(k, []);
+                      groups.get(k).push(en);
+                    }
+                    const groupArr = Array.from(groups.values());
+                    return (
+                      <>
+                        {groupArr.slice(0, 3).map((group, gi) => {
+                          const startEntry = group.find((x) => x.type === "start");
+                          const endEntry = group.find((x) => x.type === "end");
+                          const middleEntry = group.find((x) => x.type === "middle" || x.type === "full");
+                          // Priority: full/middle > split(start+end) > start > end
+                          if (middleEntry) {
+                            return <DayBar key={gi} event={middleEntry.event} variant="full" onEdit={setEditEvent} />;
+                          }
+                          if (startEntry && endEntry) {
+                            return (
+                              <div key={gi} className="grid grid-cols-2 gap-[2px]">
+                                <DayBar event={endEntry.event} variant="end" onEdit={setEditEvent} />
+                                <DayBar event={startEntry.event} variant="start" onEdit={setEditEvent} />
+                              </div>
+                            );
+                          }
+                          if (startEntry) {
+                            return (
+                              <div key={gi} className="grid grid-cols-2 gap-[2px]">
+                                <div />
+                                <DayBar event={startEntry.event} variant="start" onEdit={setEditEvent} />
+                              </div>
+                            );
+                          }
+                          if (endEntry) {
+                            return (
+                              <div key={gi} className="grid grid-cols-2 gap-[2px]">
+                                <DayBar event={endEntry.event} variant="end" onEdit={setEditEvent} />
+                                <div />
+                              </div>
+                            );
+                          }
+                          return null;
+                        })}
+                        {groupArr.length > 3 && (
+                          <span className="text-[9px] font-mono text-zinc-500 px-1.5">+{groupArr.length - 3}</span>
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
               </div>
             );
@@ -379,3 +413,34 @@ function BookingModal({ properties, booking, onClose, onSaved, onDeleted }) {
     </div>
   );
 }
+
+function DayBar({ event, variant, onEdit }) {
+  // variant: "full" | "start" | "end"
+  // - full: bar takes the whole cell width
+  // - start: right half (booking starts this day)
+  // - end: left half (booking ends this day)
+  const showLabel = variant !== "end"; // never label on the check-out half
+  const title = `${event.property_name} · ${event.source}${event.notes ? ` · ${event.notes}` : ""}`;
+  return (
+    <button
+      type="button"
+      onClick={() => event.editable && onEdit(event)}
+      data-testid={`cal-event-${event.id}-${variant}`}
+      style={{ backgroundColor: event.color }}
+      className={`text-left text-[9px] font-mono text-white truncate px-1.5 py-0.5 ${
+        event.editable ? "cursor-pointer hover:opacity-80" : "cursor-default"
+      }`}
+      title={title}
+    >
+      {showLabel ? (
+        <>
+          <span className="font-bold mr-1">{event.source}</span>
+          <span className="opacity-80">{event.property_name?.slice(0, variant === "start" ? 6 : 12)}</span>
+        </>
+      ) : (
+        <span className="opacity-0">·</span>
+      )}
+    </button>
+  );
+}
+
