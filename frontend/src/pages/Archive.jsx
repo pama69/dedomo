@@ -103,7 +103,13 @@ export default function Archive() {
                         {new Date(c.data_arrivo).toLocaleDateString("it-IT")} → {new Date(c.data_partenza).toLocaleDateString("it-IT")}
                       </p>
                       <p className="text-[10px] tracking-[0.2em] uppercase text-zinc-500 mt-1 font-mono">
-                        {c.guests?.length || 0} ospite/i · [{c.mode}] · {new Date(c.created_at).toLocaleString("it-IT")}
+                        {c.guests?.[0]
+                          ? `${c.guests[0].cognome || ''} ${c.guests[0].nome || ''}`.trim()
+                          : "—"}
+                        {c.guests?.length > 1 && (
+                          <span className="text-zinc-600"> (+{c.guests.length - 1})</span>
+                        )}
+                        {" · "}[{c.mode}] · {new Date(c.created_at).toLocaleString("it-IT")}
                       </p>
                     </div>
                     <div className="flex gap-2 font-mono text-[10px]">
@@ -137,6 +143,26 @@ export default function Archive() {
                             importo={is_.calculation.totale_imposta}
                             onGenerated={() => window.location.reload()}
                           />
+                        )}
+                        <GenerateLocazioneButton
+                          checkinId={c.checkin_id}
+                          guests={c.guests}
+                          imposta={is_?.calculation?.totale_imposta || 0}
+                          onGenerated={() => window.location.reload()}
+                        />
+                        {c.locazione_receipts && c.locazione_receipts.length > 0 && (
+                          <div className="flex flex-col gap-1 border border-sky-500/30 p-3 bg-sky-500/5">
+                            <span className="text-[10px] tracking-[0.25em] uppercase text-sky-400 mb-1">Ricevute Locazione</span>
+                            {c.locazione_receipts.map((rc, idx) => (
+                              <LocazioneReceiptRow
+                                key={idx}
+                                checkinId={c.checkin_id}
+                                index={idx}
+                                receipt={rc}
+                                onDeleted={() => window.location.reload()}
+                              />
+                            ))}
+                          </div>
                         )}
                         {c.comune_receipts && c.comune_receipts.length > 0 && (
                           <div className="flex flex-col gap-1 border border-[#1E1E28] p-3">
@@ -541,6 +567,270 @@ function RefreshReceiptsButton() {
       <p className="text-zinc-600 text-[10px] font-mono">
         Recupero automatico ogni ora. Le ricevute sono disponibili 24h dopo l'invio.
       </p>
+    </div>
+  );
+}
+
+// ============================================================
+// LOCAZIONE RECEIPT — Generate button + modal
+// ============================================================
+
+function GenerateLocazioneButton({ checkinId, guests, imposta, onGenerated }) {
+  const [open, setOpen] = useState(false);
+  const [importo, setImporto] = useState("");
+  const [numero, setNumero] = useState("");
+  const [autoNumero, setAutoNumero] = useState(true);
+  const [generating, setGenerating] = useState(false);
+  const [err, setErr] = useState("");
+
+  const capogruppo = guests?.[0]
+    ? `${guests[0].cognome || ""} ${guests[0].nome || ""}`.trim()
+    : "";
+
+  const importoNum = parseFloat(importo.replace(",", ".")) || 0;
+  const bollo = importoNum > 77.47 ? 2.0 : 0.0;
+  const totale = importoNum + (imposta || 0) + bollo;
+
+  const submit = async () => {
+    if (importoNum <= 0) {
+      setErr("Importo non valido");
+      return;
+    }
+    setErr("");
+    setGenerating(true);
+    try {
+      await api.post(`/checkins/${checkinId}/locazione-receipts`, {
+        importo_locazione: importoNum,
+        numero_ricevuta: autoNumero ? "" : numero.trim(),
+      });
+      setOpen(false);
+      setImporto("");
+      setNumero("");
+      onGenerated && onGenerated();
+    } catch (e) {
+      setErr(e.response?.data?.detail || "Errore generazione ricevuta");
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        data-testid={`gen-locazione-btn-${checkinId}`}
+        className="text-center border border-sky-500/40 hover:border-sky-400 hover:bg-sky-500/10 text-sky-400 px-4 py-3 uppercase tracking-widest text-[10px] cursor-pointer transition-colors"
+      >
+        Genera Ricevuta Locazione
+      </button>
+    );
+  }
+
+  return (
+    <div className="border border-sky-500/50 bg-sky-500/5 p-4 flex flex-col gap-3" data-testid={`loc-modal-${checkinId}`}>
+      <p className="text-[10px] tracking-[0.25em] uppercase text-sky-400 font-bold">
+        Nuova Ricevuta di Locazione
+      </p>
+
+      {capogruppo && (
+        <div className="text-[10px] font-mono text-zinc-400">
+          Capogruppo: <span className="text-zinc-100">{capogruppo}</span>
+        </div>
+      )}
+
+      <label className="flex flex-col gap-1">
+        <span className="text-[10px] tracking-widest uppercase text-zinc-500">Importo Locazione (€)</span>
+        <input
+          type="text"
+          inputMode="decimal"
+          autoFocus
+          value={importo}
+          onChange={(e) => setImporto(e.target.value)}
+          placeholder="850,00"
+          data-testid={`loc-importo-${checkinId}`}
+          className="bg-[#0E0E14] border border-[#1E1E28] focus:border-sky-500 px-3 py-2 text-zinc-100 outline-none font-mono"
+        />
+      </label>
+
+      <div className="flex flex-col gap-1">
+        <span className="text-[10px] tracking-widest uppercase text-zinc-500">Numero Ricevuta</span>
+        <label className="flex items-center gap-2 text-[11px] text-zinc-400">
+          <input
+            type="checkbox"
+            checked={autoNumero}
+            onChange={(e) => setAutoNumero(e.target.checked)}
+            data-testid={`loc-auto-${checkinId}`}
+          />
+          Auto-incrementale per CF (consigliato)
+        </label>
+        {!autoNumero && (
+          <input
+            type="text"
+            value={numero}
+            onChange={(e) => setNumero(e.target.value)}
+            placeholder="es. RL-2026/047"
+            data-testid={`loc-numero-${checkinId}`}
+            className="bg-[#0E0E14] border border-[#1E1E28] focus:border-sky-500 px-3 py-2 text-zinc-100 outline-none font-mono"
+          />
+        )}
+      </div>
+
+      {importoNum > 0 && (
+        <div className="border border-[#1E1E28] p-3 flex flex-col gap-1 text-[11px] font-mono">
+          <div className="flex justify-between text-zinc-400"><span>Canone</span><span className="text-zinc-100">€ {importoNum.toFixed(2)}</span></div>
+          {imposta > 0 && (
+            <div className="flex justify-between text-zinc-400"><span>Imposta soggiorno</span><span className="text-zinc-100">€ {imposta.toFixed(2)}</span></div>
+          )}
+          {bollo > 0 && (
+            <div className="flex justify-between text-amber-400"><span>Marca da bollo</span><span>€ {bollo.toFixed(2)}</span></div>
+          )}
+          <div className="flex justify-between border-t border-[#1E1E28] pt-1 mt-1">
+            <span className="text-sky-400 font-bold">TOTALE</span>
+            <span className="text-sky-300 font-bold">€ {totale.toFixed(2)}</span>
+          </div>
+        </div>
+      )}
+
+      {err && (
+        <p data-testid={`loc-error-${checkinId}`} className="text-[10px] text-red-400 font-mono break-words">{err}</p>
+      )}
+
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={submit}
+          disabled={generating || importoNum <= 0}
+          data-testid={`loc-submit-${checkinId}`}
+          className="flex-1 text-center bg-sky-500 hover:bg-sky-400 text-[#05050A] px-4 py-3 uppercase tracking-widest text-[10px] cursor-pointer disabled:opacity-50 font-bold"
+        >
+          {generating ? "Genero..." : "Genera Ricevuta"}
+        </button>
+        <button
+          type="button"
+          onClick={() => { setOpen(false); setErr(""); }}
+          data-testid={`loc-cancel-${checkinId}`}
+          className="text-center border border-[#1E1E28] hover:border-zinc-500 text-zinc-400 px-4 py-3 uppercase tracking-widest text-[10px] cursor-pointer"
+        >
+          Annulla
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function LocazioneReceiptRow({ checkinId, index, receipt, onDeleted }) {
+  const [busy, setBusy] = useState("");
+  const [pdfUrl, setPdfUrl] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const [err, setErr] = useState("");
+  const [confirmDel, setConfirmDel] = useState(false);
+
+  const numero = receipt.numero || "";
+  const totale = receipt.totale || 0;
+  const dataEm = receipt.data_emissione || "";
+
+  const printReceipt = () => {
+    // Open the HTML in a new window — uses the in-app print button.
+    const url = `${api.defaults.baseURL}/checkins/${checkinId}/locazione-receipts/${index}/html`;
+    window.open(url, "_blank", "noopener");
+  };
+
+  const preparePdf = async () => {
+    setErr("");
+    setPdfUrl("");
+    setBusy("pdf");
+    try {
+      const r = await api.get(`/checkins/${checkinId}/locazione-receipts/${index}`, { responseType: "blob" });
+      const blob = new Blob([r.data], { type: "application/pdf" });
+      setPdfUrl(URL.createObjectURL(blob));
+    } catch (e) {
+      setErr("Impossibile preparare il PDF.");
+    } finally {
+      setBusy("");
+    }
+  };
+
+  const remove = async () => {
+    setDeleting(true);
+    try {
+      await api.delete(`/checkins/${checkinId}/locazione-receipts/${index}`);
+      onDeleted && onDeleted();
+    } catch (e) {
+      setErr(e.response?.data?.detail || "Errore eliminazione");
+      setDeleting(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-2 border-t border-sky-500/20 pt-2">
+      <div className="flex justify-between items-center text-[10px] font-mono">
+        <div className="flex flex-col">
+          <span className="text-zinc-100">{numero}</span>
+          <span className="text-zinc-500">{dataEm} · {receipt.capogruppo_nome || ""}</span>
+        </div>
+        <span className="text-sky-400 font-bold">€ {totale.toFixed(2)}</span>
+      </div>
+      <div className="flex gap-2 flex-wrap">
+        <button
+          type="button"
+          onClick={printReceipt}
+          data-testid={`loc-print-${checkinId}-${index}`}
+          className="flex-1 text-center border border-sky-500/40 hover:border-sky-400 text-sky-400 px-3 py-2 uppercase tracking-widest text-[10px] cursor-pointer"
+        >
+          🖨 Stampa
+        </button>
+        {!pdfUrl ? (
+          <button
+            type="button"
+            onClick={preparePdf}
+            disabled={!!busy}
+            data-testid={`loc-prepare-pdf-${checkinId}-${index}`}
+            className="flex-1 text-center border border-[#1E1E28] hover:border-zinc-500 text-zinc-400 px-3 py-2 uppercase tracking-widest text-[10px] cursor-pointer disabled:opacity-50"
+          >
+            {busy === "pdf" ? "..." : "↓ Prepara PDF"}
+          </button>
+        ) : (
+          <a
+            href={pdfUrl}
+            download={`ricevuta_locazione_${numero.replace(/\//g, "_")}.pdf`}
+            data-testid={`loc-pdf-link-${checkinId}-${index}`}
+            className="flex-1 text-center border border-emerald-400 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-200 px-3 py-2 uppercase tracking-widest text-[10px] cursor-pointer animate-pulse no-underline"
+          >
+            ✓ Salva PDF
+          </a>
+        )}
+        {!confirmDel ? (
+          <button
+            type="button"
+            onClick={() => setConfirmDel(true)}
+            data-testid={`loc-delete-${checkinId}-${index}`}
+            className="text-center border border-red-500/40 hover:border-red-400 text-red-400 px-3 py-2 uppercase tracking-widest text-[10px] cursor-pointer"
+          >
+            Elimina
+          </button>
+        ) : (
+          <div className="flex gap-1">
+            <button
+              type="button"
+              onClick={remove}
+              disabled={deleting}
+              data-testid={`loc-confirm-delete-${checkinId}-${index}`}
+              className="text-center bg-red-500 hover:bg-red-400 text-white px-3 py-2 uppercase tracking-widest text-[10px] cursor-pointer disabled:opacity-50"
+            >
+              {deleting ? "..." : "Conferma"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setConfirmDel(false)}
+              className="text-center border border-[#1E1E28] text-zinc-400 px-2 py-2 uppercase tracking-widest text-[10px] cursor-pointer"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+      </div>
+      {err && <p className="text-[10px] text-red-400 font-mono">{err}</p>}
     </div>
   );
 }

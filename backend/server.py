@@ -1548,6 +1548,285 @@ async def property_comune_receipts(
 # OWNERS / FISCAL CODE ARCHIVE
 # ====================================================================
 
+# ====================================================================
+# LOCAZIONE RECEIPTS (rental receipts) — per CF proprietario
+# ====================================================================
+
+class OwnerBankInfoBody(BaseModel):
+    codice_fiscale: str
+    intestatario: str = ""
+    iban: str = ""
+    banca: str = ""
+    swift: str = ""
+    next_receipt_num: int = 1
+
+
+@api_router.get("/owner-bank-info")
+async def list_owner_bank_info(user=Depends(get_current_user)):
+    """List all bank-info records owned by this user (one per CF)."""
+    cursor = db.owner_bank_info.find({"user_id": user["user_id"]}, {"_id": 0})
+    return await cursor.to_list(500)
+
+
+@api_router.get("/owner-bank-info/{cf}")
+async def get_owner_bank_info(cf: str, user=Depends(get_current_user)):
+    cf = cf.upper().strip()
+    doc = await db.owner_bank_info.find_one(
+        {"user_id": user["user_id"], "codice_fiscale": cf}, {"_id": 0}
+    )
+    if not doc:
+        return {
+            "codice_fiscale": cf,
+            "intestatario": "",
+            "iban": "",
+            "banca": "",
+            "swift": "",
+            "next_receipt_num": 1,
+        }
+    return doc
+
+
+@api_router.put("/owner-bank-info/{cf}")
+async def upsert_owner_bank_info(cf: str, body: OwnerBankInfoBody, user=Depends(get_current_user)):
+    cf = cf.upper().strip()
+    body.codice_fiscale = cf
+    await db.owner_bank_info.update_one(
+        {"user_id": user["user_id"], "codice_fiscale": cf},
+        {"$set": {
+            "user_id": user["user_id"],
+            "codice_fiscale": cf,
+            "intestatario": body.intestatario,
+            "iban": body.iban.replace(" ", "").upper(),
+            "banca": body.banca,
+            "swift": body.swift.upper(),
+            "next_receipt_num": max(1, int(body.next_receipt_num)),
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }},
+        upsert=True,
+    )
+    return {"ok": True}
+
+
+class LocazioneReceiptBody(BaseModel):
+    importo_locazione: float
+    numero_ricevuta: str = ""  # if empty, auto-incremented
+
+
+@api_router.post("/checkins/{checkin_id}/locazione-receipts")
+async def create_locazione_receipt(checkin_id: str, body: LocazioneReceiptBody, user=Depends(get_current_user)):
+    """Generate a rental (locazione) receipt PDF + HTML for a checkin."""
+    from services.locazione_pdf import render_pdf as loc_render_pdf, render_html as loc_render_html, compute_totals as loc_compute
+
+    c = await db.checkins.find_one(
+        {"checkin_id": checkin_id, "user_id": user["user_id"]}, {"_id": 0}
+    )
+    if not c:
+        raise HTTPException(404, "Check-in non trovato")
+    prop = await db.properties.find_one(
+        {"property_id": c["property_id"], "user_id": user["user_id"]}, {"_id": 0}
+    )
+    if not prop:
+        raise HTTPException(404, "Proprietà non trovata")
+
+    cf = (prop.get("codice_fiscale") or "").upper().strip()
+    if not cf:
+        raise HTTPException(400, "Codice fiscale proprietario mancante nelle impostazioni proprietà")
+
+    # Get owner bank info
+    bank = await db.owner_bank_info.find_one(
+        {"user_id": user["user_id"], "codice_fiscale": cf}, {"_id": 0}
+    ) or {"iban": "", "banca": "", "swift": "", "next_receipt_num": 1}
+    if not bank.get("iban"):
+        raise HTTPException(400, "IBAN proprietario non configurato. Vai in Impostazioni → Dati Bancari per il CF " + cf)
+
+    # Capogruppo = first guest
+    guests = c.get("guests", [])
+    if not guests:
+        raise HTTPException(400, "Nessun ospite registrato per questo check-in")
+    g = guests[0]
+    capogruppo_nome = f"{g.get('cognome','')} {g.get('nome','')}".strip()
+    if g.get("is_foreign"):
+        capogruppo_res = g.get("paese_nome") or g.get("luogo_nascita") or ""
+    else:
+        capogruppo_res = g.get("luogo_nascita") or ""
+
+    # Imposta soggiorno from check-in calculation
+    is_calc = (c.get("results", {}).get("imposta_soggiorno") or {}).get("calculation") or {}
+    imposta = float(is_calc.get("totale_imposta", 0.0) or 0.0)
+
+    # Number management
+    next_num = int(bank.get("next_receipt_num", 1))
+    if body.numero_ricevuta and body.numero_ricevuta.strip():
+        numero = body.numero_ricevuta.strip()
+    else:
+        year = datetime.now(timezone.utc).year
+        numero = f"RL-{year}/{next_num:03d}"
+
+    totals = loc_compute(float(body.importo_locazione), imposta)
+    today_iso = datetime.now(timezone.utc).date().isoformat()
+
+    data = {
+        "numero": numero,
+        "data_emissione": today_iso,
+        "proprietario_nome": prop.get("proprietario", "").strip(),
+        "proprietario_indirizzo": f"{prop.get('indirizzo','')} {prop.get('cap','')} {prop.get('comune','')} ({prop.get('provincia','')})".strip(),
+        "proprietario_cf": cf,
+        "capogruppo_nome": capogruppo_nome,
+        "capogruppo_residenza": capogruppo_res,
+        "periodo_inizio": c["data_arrivo"],
+        "periodo_fine": c["data_partenza"],
+        "importo_locazione": totals["importo_locazione"],
+        "imposta_soggiorno": totals["imposta_soggiorno"],
+        "marca_bollo": totals["marca_bollo"],
+        "totale": totals["totale"],
+        "iban": bank.get("iban", ""),
+        "banca": bank.get("banca", ""),
+        "swift": bank.get("swift", ""),
+        "luogo_emissione": prop.get("comune", ""),
+    }
+    pdf_bytes = loc_render_pdf(data)
+    html_str = loc_render_html(data)
+
+    receipt_entry = {
+        **data,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "pdf_base64": base64.b64encode(pdf_bytes).decode(),
+        "html": html_str,
+    }
+    result = await db.checkins.find_one_and_update(
+        {"checkin_id": checkin_id},
+        {"$push": {"locazione_receipts": receipt_entry}},
+        return_document=True,
+        projection={"_id": 0, "locazione_receipts": 1},
+    )
+    new_index = len(result.get("locazione_receipts", [])) - 1 if result else 0
+
+    # If we auto-generated the number, increment next_receipt_num for that CF
+    if not (body.numero_ricevuta and body.numero_ricevuta.strip()):
+        await db.owner_bank_info.update_one(
+            {"user_id": user["user_id"], "codice_fiscale": cf},
+            {"$set": {"next_receipt_num": next_num + 1}},
+            upsert=True,
+        )
+
+    return {"ok": True, "index": new_index, "numero": numero, "totale": totals["totale"]}
+
+
+@api_router.get("/checkins/{checkin_id}/locazione-receipts")
+async def list_locazione_receipts(checkin_id: str, user=Depends(get_current_user)):
+    c = await db.checkins.find_one(
+        {"checkin_id": checkin_id, "user_id": user["user_id"]},
+        {"_id": 0, "locazione_receipts": 1},
+    )
+    if not c:
+        raise HTTPException(404, "Check-in non trovato")
+    receipts = c.get("locazione_receipts", [])
+    return [{k: v for k, v in r.items() if k not in ("pdf_base64", "html")} for r in receipts]
+
+
+@api_router.get("/checkins/{checkin_id}/locazione-receipts/{index}")
+async def download_locazione_receipt(
+    checkin_id: str, index: int, download: int = 0, user=Depends(get_current_user)
+):
+    c = await db.checkins.find_one(
+        {"checkin_id": checkin_id, "user_id": user["user_id"]}, {"_id": 0}
+    )
+    if not c:
+        raise HTTPException(404, "Check-in non trovato")
+    receipts = c.get("locazione_receipts", [])
+    if index < 0 or index >= len(receipts):
+        raise HTTPException(404, "Ricevuta non trovata")
+    pdf_b64 = receipts[index].get("pdf_base64")
+    if not pdf_b64:
+        raise HTTPException(404, "PDF non disponibile")
+    numero = receipts[index].get("numero", "RL")
+    disposition = "attachment" if download else "inline"
+    safe = numero.replace("/", "_").replace(" ", "_")
+    return StreamingResponse(
+        io.BytesIO(base64.b64decode(pdf_b64)),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'{disposition}; filename="ricevuta_locazione_{safe}.pdf"'},
+    )
+
+
+@api_router.get("/checkins/{checkin_id}/locazione-receipts/{index}/html", response_class=Response)
+async def view_locazione_html(checkin_id: str, index: int, user=Depends(get_current_user)):
+    c = await db.checkins.find_one(
+        {"checkin_id": checkin_id, "user_id": user["user_id"]}, {"_id": 0}
+    )
+    if not c:
+        raise HTTPException(404, "Check-in non trovato")
+    receipts = c.get("locazione_receipts", [])
+    if index < 0 or index >= len(receipts):
+        raise HTTPException(404, "Ricevuta non trovata")
+    html_str = receipts[index].get("html")
+    if not html_str:
+        raise HTTPException(404, "HTML non disponibile")
+    return Response(content=html_str, media_type="text/html")
+
+
+@api_router.delete("/checkins/{checkin_id}/locazione-receipts/{index}")
+async def delete_locazione_receipt(checkin_id: str, index: int, user=Depends(get_current_user)):
+    c = await db.checkins.find_one(
+        {"checkin_id": checkin_id, "user_id": user["user_id"]}, {"_id": 0}
+    )
+    if not c:
+        raise HTTPException(404, "Check-in non trovato")
+    receipts = c.get("locazione_receipts", []) or []
+    if index < 0 or index >= len(receipts):
+        raise HTTPException(404, "Ricevuta non trovata")
+    receipts.pop(index)
+    await db.checkins.update_one(
+        {"checkin_id": checkin_id, "user_id": user["user_id"]},
+        {"$set": {"locazione_receipts": receipts}},
+    )
+    return {"ok": True}
+
+
+@api_router.get("/owners/{cf}/locazione-receipts")
+async def list_locazione_by_owner(cf: str, user=Depends(get_current_user)):
+    """All locazione receipts across checkins for a given proprietario CF."""
+    cf = cf.upper().strip()
+    # Find properties owned by this CF
+    props = await db.properties.find(
+        {"user_id": user["user_id"], "codice_fiscale": cf}, {"_id": 0, "property_id": 1, "nome": 1}
+    ).to_list(500)
+    prop_ids = [p["property_id"] for p in props]
+    prop_names = {p["property_id"]: p.get("nome", "") for p in props}
+    if not prop_ids:
+        return []
+    cursor = db.checkins.find(
+        {"user_id": user["user_id"], "property_id": {"$in": prop_ids},
+         "locazione_receipts": {"$exists": True, "$ne": []}},
+        {"_id": 0, "checkin_id": 1, "property_id": 1, "data_arrivo": 1, "data_partenza": 1, "locazione_receipts": 1},
+    )
+    out = []
+    async for c in cursor:
+        for idx, r in enumerate(c.get("locazione_receipts", [])):
+            out.append({
+                "checkin_id": c["checkin_id"],
+                "property_id": c["property_id"],
+                "property_name": prop_names.get(c["property_id"], ""),
+                "index": idx,
+                "data_arrivo": c["data_arrivo"],
+                "data_partenza": c["data_partenza"],
+                "numero": r.get("numero"),
+                "data_emissione": r.get("data_emissione"),
+                "capogruppo_nome": r.get("capogruppo_nome"),
+                "importo_locazione": r.get("importo_locazione"),
+                "imposta_soggiorno": r.get("imposta_soggiorno"),
+                "marca_bollo": r.get("marca_bollo"),
+                "totale": r.get("totale"),
+                "generated_at": r.get("generated_at"),
+            })
+    out.sort(key=lambda x: x.get("data_emissione", ""), reverse=True)
+    return out
+
+
+# ====================================================================
+# OWNERS endpoints (existing)
+# ====================================================================
+
 @api_router.get("/owners")
 async def list_owners(user=Depends(get_current_user)):
     """List unique (proprietario, codice_fiscale) pairs from user's properties

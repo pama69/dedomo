@@ -69,6 +69,18 @@ export default function OwnerArchive() {
 
   const schedine = data?.schedine || [];
   const ricevute = data?.ricevute || [];
+  const [locazione, setLocazione] = useState([]);
+
+  // Load locazione receipts only if CF is present (not NOCF::)
+  useEffect(() => {
+    if (decodedId.startsWith("NOCF::")) {
+      setLocazione([]);
+      return;
+    }
+    api.get(`/owners/${encodeURIComponent(decodedId)}/locazione-receipts`)
+      .then((r) => setLocazione(r.data || []))
+      .catch(() => setLocazione([]));
+  }, [decodedId, data]);
 
   return (
     <Layout>
@@ -162,6 +174,15 @@ export default function OwnerArchive() {
           }`}
         >
           Schedine Alloggiati ({schedine.length})
+        </button>
+        <button
+          onClick={() => setTab("locazione")}
+          data-testid="tab-locazione"
+          className={`text-[10px] tracking-[0.25em] uppercase px-4 py-2 cursor-pointer transition-colors ${
+            tab === "locazione" ? "text-sky-300 border-b-2 border-sky-400" : "text-zinc-500 hover:text-zinc-300"
+          }`}
+        >
+          Ricevute Locazione ({locazione.length})
         </button>
       </div>
 
@@ -271,6 +292,62 @@ export default function OwnerArchive() {
                 >
                   ↓ Scarica PDF (se disponibile)
                 </button>
+              </div>
+            ))}
+          </div>
+        )
+      )}
+
+      {tab === "locazione" && !loading && (
+        locazione.length === 0 ? (
+          <p className="text-zinc-500 text-sm font-mono border border-dashed border-[#1E1E28] p-8 text-center">
+            Nessuna ricevuta di locazione per questo proprietario.
+          </p>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {locazione.map((r) => (
+              <div
+                key={`${r.checkin_id}-${r.index}`}
+                data-testid={`locazione-row-${r.checkin_id}-${r.index}`}
+                className="border border-sky-500/30 bg-sky-500/5 p-3 flex flex-col gap-2"
+              >
+                <div className="flex items-baseline justify-between flex-wrap gap-2">
+                  <span className="text-zinc-100 text-sm font-mono">
+                    {r.numero} · {r.data_emissione}
+                  </span>
+                  <span className="text-sky-300 text-sm font-mono font-bold">
+                    € {r.totale?.toFixed(2)}
+                  </span>
+                </div>
+                <div className="flex justify-between text-[10px] font-mono text-zinc-500 flex-wrap gap-2">
+                  <span>Capogruppo: <span className="text-zinc-300">{r.capogruppo_nome}</span></span>
+                  <span>{r.property_name}</span>
+                </div>
+                <div className="flex justify-between text-[10px] font-mono text-zinc-600 flex-wrap gap-2">
+                  <span>Locazione: € {r.importo_locazione?.toFixed(2)}</span>
+                  {r.imposta_soggiorno > 0 && <span>Imposta: € {r.imposta_soggiorno?.toFixed(2)}</span>}
+                  {r.marca_bollo > 0 && <span className="text-amber-500">Bollo: € {r.marca_bollo?.toFixed(2)}</span>}
+                </div>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => window.open(`${api.defaults.baseURL}/checkins/${r.checkin_id}/locazione-receipts/${r.index}/html`, "_blank", "noopener")}
+                    data-testid={`view-locazione-${r.checkin_id}-${r.index}`}
+                    className="text-[10px] tracking-[0.25em] uppercase text-sky-400 hover:text-sky-300 cursor-pointer"
+                  >
+                    🖨 Stampa
+                  </button>
+                  <button
+                    onClick={() => downloadFile(
+                      `/checkins/${r.checkin_id}/locazione-receipts/${r.index}?download=1`,
+                      `ricevuta_locazione_${r.numero.replace(/\//g, "_")}.pdf`,
+                    )}
+                    disabled={!!downloading}
+                    data-testid={`download-locazione-${r.checkin_id}-${r.index}`}
+                    className="text-[10px] tracking-[0.25em] uppercase text-zinc-300 hover:text-zinc-100 cursor-pointer disabled:opacity-50"
+                  >
+                    ↓ Scarica PDF
+                  </button>
+                </div>
               </div>
             ))}
           </div>

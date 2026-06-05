@@ -195,6 +195,8 @@ export default function Settings() {
           ))}
         </div>
       )}
+
+      <OwnerBankInfoSection properties={list} />
     </Layout>
   );
 }
@@ -956,3 +958,211 @@ function PersonalIcalField({ propertyId }) {
   );
 }
 
+
+
+// ============================================================
+// Owner Bank Info Section — per Codice Fiscale proprietario
+// ============================================================
+
+function OwnerBankInfoSection({ properties }) {
+  const [bankList, setBankList] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [editingCf, setEditingCf] = useState(null);
+
+  // Build unique CF set from properties (any CF that has been entered)
+  const cfMap = {};
+  for (const p of properties || []) {
+    const cf = (p.codice_fiscale || "").toUpperCase().trim();
+    if (!cf) continue;
+    if (!cfMap[cf]) {
+      cfMap[cf] = { codice_fiscale: cf, intestatario: p.proprietario || "" };
+    }
+  }
+  const cfs = Object.values(cfMap);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const r = await api.get("/owner-bank-info");
+      setBankList(r.data || []);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const getBank = (cf) => bankList.find((b) => b.codice_fiscale === cf) || null;
+
+  if (cfs.length === 0) return null;
+
+  return (
+    <div className="border-t border-[#1E1E28] pt-6 mt-6 flex flex-col gap-3">
+      <div>
+        <h3 className="text-2xl font-bold uppercase tracking-tight text-zinc-100" style={{ fontFamily: "'Cabinet Grotesk', sans-serif" }}>
+          Dati Bancari per Proprietario
+        </h3>
+        <p className="text-zinc-500 text-xs mt-1">
+          IBAN, Banca e SWIFT/BIC associati al codice fiscale del proprietario. Usati nelle ricevute di locazione.
+        </p>
+      </div>
+
+      {loading ? (
+        <p className="text-zinc-500 text-sm font-mono">Caricamento...</p>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {cfs.map((c) => {
+            const bank = getBank(c.codice_fiscale);
+            const hasIban = bank && bank.iban;
+            return (
+              <div
+                key={c.codice_fiscale}
+                data-testid={`owner-bank-row-${c.codice_fiscale}`}
+                className="bg-[#0E0E14] border border-[#1E1E28] p-4 flex items-center justify-between gap-4"
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium text-zinc-100">{c.intestatario || "—"}</p>
+                  <p className="text-[10px] tracking-[0.2em] uppercase text-zinc-500 mt-1 font-mono">
+                    CF {c.codice_fiscale}
+                  </p>
+                  {hasIban ? (
+                    <p className="text-[10px] font-mono text-emerald-400 mt-1 break-all">
+                      {bank.iban}
+                      {bank.banca && <span className="text-zinc-500"> · {bank.banca}</span>}
+                    </p>
+                  ) : (
+                    <p className="text-[10px] font-mono text-amber-500 mt-1">
+                      IBAN da configurare
+                    </p>
+                  )}
+                </div>
+                <button
+                  onClick={() => setEditingCf(c.codice_fiscale)}
+                  data-testid={`edit-bank-${c.codice_fiscale}`}
+                  className="text-[10px] tracking-[0.25em] uppercase text-zinc-400 hover:text-zinc-100 cursor-pointer shrink-0"
+                >
+                  {hasIban ? "Modifica" : "Configura"}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {editingCf && (
+        <OwnerBankInfoModal
+          cf={editingCf}
+          intestatario={cfMap[editingCf]?.intestatario || ""}
+          onClose={() => setEditingCf(null)}
+          onSaved={() => { setEditingCf(null); load(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+function OwnerBankInfoModal({ cf, intestatario, onClose, onSaved }) {
+  const [data, setData] = useState({
+    codice_fiscale: cf,
+    intestatario: intestatario || "",
+    iban: "",
+    banca: "",
+    swift: "",
+    next_receipt_num: 1,
+  });
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState("");
+
+  useEffect(() => {
+    let alive = true;
+    api.get(`/owner-bank-info/${cf}`).then((r) => {
+      if (alive) {
+        setData({
+          codice_fiscale: cf,
+          intestatario: r.data.intestatario || intestatario || "",
+          iban: r.data.iban || "",
+          banca: r.data.banca || "",
+          swift: r.data.swift || "",
+          next_receipt_num: r.data.next_receipt_num || 1,
+        });
+        setLoading(false);
+      }
+    }).catch(() => { setLoading(false); });
+    return () => { alive = false; };
+  }, [cf, intestatario]);
+
+  const save = async () => {
+    setErr("");
+    setSaving(true);
+    try {
+      await api.put(`/owner-bank-info/${cf}`, data);
+      onSaved && onSaved();
+    } catch (e) {
+      setErr(e.response?.data?.detail || "Errore salvataggio");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div
+      className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4"
+      data-testid={`bank-modal-${cf}`}
+      onClick={onClose}
+    >
+      <div
+        className="bg-[#05050A] border border-[#1E1E28] max-w-md w-full p-6 flex flex-col gap-4"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div>
+          <h3 className="text-lg font-bold uppercase text-zinc-100" style={{ fontFamily: "'Cabinet Grotesk', sans-serif" }}>
+            Dati Bancari
+          </h3>
+          <p className="text-[10px] tracking-[0.25em] uppercase text-zinc-500 font-mono mt-1">
+            CF: {cf}
+          </p>
+        </div>
+
+        {loading ? (
+          <p className="text-zinc-500 text-sm font-mono">Caricamento...</p>
+        ) : (
+          <>
+            <Field label="Intestatario" value={data.intestatario} onChange={(v) => setData({ ...data, intestatario: v })} testid="bank-intestatario" placeholder="Nome Cognome" mono={false} />
+            <Field label="IBAN" value={data.iban} onChange={(v) => setData({ ...data, iban: v.toUpperCase().replace(/\s/g, "") })} testid="bank-iban" placeholder="IT60X0542811101000000123456" />
+            <Field label="Nome Banca" value={data.banca} onChange={(v) => setData({ ...data, banca: v })} testid="bank-banca" placeholder="es. Intesa Sanpaolo" mono={false} />
+            <Field label="SWIFT / BIC" value={data.swift} onChange={(v) => setData({ ...data, swift: v.toUpperCase() })} testid="bank-swift" placeholder="es. BCITITMM" />
+            <Field
+              label="Prossimo Numero Ricevuta"
+              value={data.next_receipt_num}
+              onChange={(v) => setData({ ...data, next_receipt_num: parseInt(v) || 1 })}
+              testid="bank-next-num"
+              type="number"
+              placeholder="1"
+            />
+            {err && (
+              <p data-testid="bank-error" className="text-red-400 text-[10px] font-mono">{err}</p>
+            )}
+            <div className="flex gap-2 mt-2">
+              <button
+                onClick={save}
+                disabled={saving}
+                data-testid="bank-save"
+                className="flex-1 text-[10px] tracking-[0.25em] uppercase text-[#05050A] bg-zinc-100 hover:bg-white px-5 py-3 transition-colors cursor-pointer disabled:opacity-50"
+              >
+                {saving ? "Salvataggio..." : "Salva"}
+              </button>
+              <button
+                onClick={onClose}
+                data-testid="bank-cancel"
+                className="text-[10px] tracking-[0.25em] uppercase text-zinc-400 border border-[#1E1E28] hover:border-zinc-500 px-5 py-3 transition-colors cursor-pointer"
+              >
+                Annulla
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}

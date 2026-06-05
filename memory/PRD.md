@@ -52,6 +52,8 @@ Host che gestisce **più unità immobiliari** (anche di proprietari diversi), ac
 - [x] **Hard block check-in se credenziali Alloggiati o Ross1000 mancanti** (frontend + backend) — 2026-06-03
 - [x] **Manuale utente PDF** (13 pp, IT, tema scuro) — endpoint `/api/manual/download` + bottoni "Scarica Manuale" in Dashboard e Impostazioni — 2026-06-03
 - [x] **Pagina /help online** — guida consultabile in-app con TOC sticky, 8 capitoli, 12 screenshot embedded, link "Apri Guida Online" in Dashboard e Impostazioni — 2026-06-03
+- [x] **Ricevute di Locazione** — generazione PDF + HTML stampabile per ogni check-in, numero auto-incrementale per CF proprietario, marca da bollo automatica €2 se importo > €77,47, archivio singolo + cumulativo per CF, IBAN/Banca/SWIFT configurabili in Impostazioni per CF — 2026-06-05
+- [x] **Archivio lista**: mostra capogruppo (nome+cognome primo ospite) invece del numero di ospiti — 2026-06-05
 
 ## Backlog
 
