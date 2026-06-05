@@ -240,7 +240,7 @@ export default function OwnerArchive() {
             ))}
           </div>
         )
-      ) : (
+      ) : tab === "schedine" ? (
         // schedine tab
         schedine.length === 0 ? (
           <p className="text-zinc-500 text-sm font-mono border border-dashed border-[#1E1E28] p-8 text-center">
