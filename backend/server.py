@@ -1687,11 +1687,13 @@ async def create_locazione_receipt(checkin_id: str, body: LocazioneReceiptBody, 
     pdf_bytes = loc_render_pdf(data)
     html_str = loc_render_html(data)
 
+    import secrets as _secrets
     receipt_entry = {
         **data,
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "pdf_base64": base64.b64encode(pdf_bytes).decode(),
         "html": html_str,
+        "share_token": _secrets.token_urlsafe(24),
     }
     result = await db.checkins.find_one_and_update(
         {"checkin_id": checkin_id},
@@ -1720,8 +1722,51 @@ async def list_locazione_receipts(checkin_id: str, user=Depends(get_current_user
     )
     if not c:
         raise HTTPException(404, "Check-in non trovato")
-    receipts = c.get("locazione_receipts", [])
+    receipts = c.get("locazione_receipts", []) or []
+    # Backfill share_token for receipts that don't have one yet
+    import secrets as _secrets
+    dirty = False
+    for r in receipts:
+        if not r.get("share_token"):
+            r["share_token"] = _secrets.token_urlsafe(24)
+            dirty = True
+    if dirty:
+        await db.checkins.update_one(
+            {"checkin_id": checkin_id, "user_id": user["user_id"]},
+            {"$set": {"locazione_receipts": receipts}},
+        )
     return [{k: v for k, v in r.items() if k not in ("pdf_base64", "html")} for r in receipts]
+
+
+@api_router.get("/public/locazione/{token}")
+async def public_view_locazione(token: str):
+    """Public endpoint — anyone with the share_token can view the receipt PDF.
+    Used in mailto: links sent to guests. No auth required.
+    Token is random + cryptographic, 24 bytes → ~32 chars base64url."""
+    if not token or len(token) < 16:
+        raise HTTPException(404, "Ricevuta non trovata")
+    c = await db.checkins.find_one(
+        {"locazione_receipts.share_token": token},
+        {"_id": 0, "locazione_receipts": 1},
+    )
+    if not c:
+        raise HTTPException(404, "Ricevuta non trovata")
+    for r in c.get("locazione_receipts", []):
+        if r.get("share_token") == token:
+            pdf_b64 = r.get("pdf_base64")
+            if not pdf_b64:
+                raise HTTPException(404, "PDF non disponibile")
+            numero = r.get("numero", "RL")
+            safe = numero.replace("/", "_").replace(" ", "_")
+            return StreamingResponse(
+                io.BytesIO(base64.b64decode(pdf_b64)),
+                media_type="application/pdf",
+                headers={
+                    "Content-Disposition": f'inline; filename="ricevuta_locazione_{safe}.pdf"',
+                    "Cache-Control": "private, max-age=3600",
+                },
+            )
+    raise HTTPException(404, "Ricevuta non trovata")
 
 
 @api_router.get("/checkins/{checkin_id}/locazione-receipts/{index}")

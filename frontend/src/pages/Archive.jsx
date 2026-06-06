@@ -373,7 +373,7 @@ function DownloadReceiptBtn({ checkinId, index, numero, data, importo, onDeleted
             data-testid={`comune-receipt-preview-${checkinId}-${index}`}
           />
           <p className="text-zinc-500 text-[10px] font-mono leading-relaxed">
-            Tasto destro sull'immagine → "Salva immagine come..." per salvare la ricevuta.
+            Tasto destro sull&apos;immagine → &quot;Salva immagine come...&quot; per salvare la ricevuta.
             <br/>Oppure usa i pulsanti qui sotto.
           </p>
           <div className="flex gap-2 flex-wrap">
@@ -597,7 +597,7 @@ function RefreshReceiptsButton() {
         <p className="text-zinc-500 text-[10px] font-mono">{msg}</p>
       )}
       <p className="text-zinc-600 text-[10px] font-mono">
-        Recupero automatico ogni ora. Le ricevute sono disponibili 24h dopo l'invio.
+        Recupero automatico ogni ora. Le ricevute sono disponibili 24h dopo l&apos;invio.
       </p>
     </div>
   );
@@ -757,13 +757,14 @@ function LocazioneReceiptRow({ checkinId, index, receipt, onDeleted }) {
   const [deleting, setDeleting] = useState(false);
   const [err, setErr] = useState("");
   const [confirmDel, setConfirmDel] = useState(false);
+  const [emailOpen, setEmailOpen] = useState(false);
 
   const numero = receipt.numero || "";
   const totale = receipt.totale || 0;
   const dataEm = receipt.data_emissione || "";
+  const shareToken = receipt.share_token || "";
 
   const printReceipt = () => {
-    // Open the HTML in a new window — uses the in-app print button.
     const url = `${api.defaults.baseURL}/checkins/${checkinId}/locazione-receipts/${index}/html`;
     window.open(url, "_blank", "noopener");
   };
@@ -832,6 +833,14 @@ function LocazioneReceiptRow({ checkinId, index, receipt, onDeleted }) {
             ✓ Salva PDF
           </a>
         )}
+        <button
+          type="button"
+          onClick={() => setEmailOpen(true)}
+          data-testid={`loc-email-${checkinId}-${index}`}
+          className="text-center border border-amber-500/40 hover:border-amber-400 text-amber-400 px-3 py-2 uppercase tracking-widest text-[10px] cursor-pointer"
+        >
+          ✉ Invia
+        </button>
         {!confirmDel ? (
           <button
             type="button"
@@ -862,7 +871,160 @@ function LocazioneReceiptRow({ checkinId, index, receipt, onDeleted }) {
           </div>
         )}
       </div>
+      {emailOpen && (
+        <SendReceiptByEmailModal
+          receipt={receipt}
+          shareToken={shareToken}
+          onClose={() => setEmailOpen(false)}
+        />
+      )}
       {err && <p className="text-[10px] text-red-400 font-mono">{err}</p>}
+    </div>
+  );
+}
+
+function SendReceiptByEmailModal({ receipt, shareToken, onClose }) {
+  const [email, setEmail] = useState("");
+  const [propietario, setPropietario] = useState(receipt.proprietario_nome || "");
+
+  const numero = receipt.numero || "";
+  const periodoStart = receipt.periodo_inizio
+    ? new Date(receipt.periodo_inizio).toLocaleDateString("it-IT")
+    : "";
+  const periodoEnd = receipt.periodo_fine
+    ? new Date(receipt.periodo_fine).toLocaleDateString("it-IT")
+    : "";
+  const totale = (receipt.totale || 0).toFixed(2);
+  // Public link to the PDF
+  const origin = window.location.origin;
+  const publicLink = shareToken
+    ? `${origin}/api/public/locazione/${shareToken}`
+    : "(link non disponibile — rigenera la ricevuta)";
+
+  const subject = `Ricevuta di locazione ${numero}`;
+  const body = [
+    `Gentile ${receipt.capogruppo_nome || "Cliente"},`,
+    "",
+    `in allegato la ricevuta di locazione per il soggiorno dal ${periodoStart} al ${periodoEnd}.`,
+    "",
+    `Numero ricevuta: ${numero}`,
+    `Totale: € ${totale}`,
+    "",
+    `Scarica la ricevuta da questo link:`,
+    publicLink,
+    "",
+    "Cordiali saluti,",
+    propietario || "",
+  ].join("\n");
+
+  const mailto = `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+
+  const sendMail = () => {
+    if (!email) return;
+    window.location.href = mailto;
+    setTimeout(onClose, 800);
+  };
+
+  const copyLink = () => {
+    if (!shareToken) return;
+    navigator.clipboard?.writeText(publicLink).catch(() => {});
+  };
+
+  return (
+    <div
+      className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4"
+      data-testid={`email-modal-${receipt.numero}`}
+      onClick={onClose}
+    >
+      <div
+        className="bg-[#05050A] border border-amber-500/40 max-w-lg w-full p-6 flex flex-col gap-4"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div>
+          <h3 className="text-lg font-bold uppercase text-amber-300" style={{ fontFamily: "'Cabinet Grotesk', sans-serif" }}>
+            ✉ Invia Ricevuta al Cliente
+          </h3>
+          <p className="text-[10px] tracking-[0.25em] uppercase text-zinc-500 font-mono mt-1">
+            {numero} · {receipt.capogruppo_nome}
+          </p>
+        </div>
+
+        <p className="text-zinc-400 text-[11px] leading-relaxed">
+          Si aprirà il tuo programma email predefinito (Gmail web, Outlook, Mail) con oggetto e
+          testo già compilati. La mail verrà spedita <strong className="text-zinc-200">dal tuo indirizzo</strong>.
+          Il cliente troverà nel corpo della mail un link diretto per scaricare il PDF.
+        </p>
+
+        <label className="flex flex-col gap-1">
+          <span className="text-[10px] tracking-widest uppercase text-zinc-500">Email del cliente</span>
+          <input
+            type="email"
+            autoFocus
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="cliente@email.it"
+            data-testid="email-input"
+            className="bg-[#0E0E14] border border-[#1E1E28] focus:border-amber-500 px-3 py-2 text-zinc-100 outline-none font-mono"
+          />
+        </label>
+
+        <label className="flex flex-col gap-1">
+          <span className="text-[10px] tracking-widest uppercase text-zinc-500">Firma (proprietario)</span>
+          <input
+            type="text"
+            value={propietario}
+            onChange={(e) => setPropietario(e.target.value)}
+            data-testid="email-firma"
+            className="bg-[#0E0E14] border border-[#1E1E28] focus:border-amber-500 px-3 py-2 text-zinc-100 outline-none font-mono"
+          />
+        </label>
+
+        <details className="border border-[#1E1E28] p-3 text-[10px]">
+          <summary className="text-zinc-400 cursor-pointer uppercase tracking-widest">
+            Anteprima testo email
+          </summary>
+          <pre className="text-zinc-300 mt-2 whitespace-pre-wrap break-words text-[11px] font-mono">
+{body}
+          </pre>
+        </details>
+
+        {shareToken && (
+          <div className="flex gap-2 items-center text-[10px] font-mono">
+            <span className="text-zinc-500 shrink-0">Link PDF pubblico:</span>
+            <span className="text-amber-300 break-all flex-1 truncate" title={publicLink}>
+              {publicLink}
+            </span>
+            <button
+              type="button"
+              onClick={copyLink}
+              data-testid="email-copy-link"
+              className="border border-[#1E1E28] hover:border-zinc-500 text-zinc-400 px-2 py-1 cursor-pointer shrink-0"
+            >
+              Copia
+            </button>
+          </div>
+        )}
+
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={sendMail}
+            disabled={!email}
+            data-testid="email-send"
+            className="flex-1 text-center bg-amber-500 hover:bg-amber-400 text-[#05050A] px-4 py-3 uppercase tracking-widest text-[10px] cursor-pointer disabled:opacity-50 font-bold"
+          >
+            Apri Programma Email
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            data-testid="email-cancel"
+            className="text-center border border-[#1E1E28] hover:border-zinc-500 text-zinc-400 px-4 py-3 uppercase tracking-widest text-[10px] cursor-pointer"
+          >
+            Annulla
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
