@@ -118,7 +118,7 @@ export default function Archive() {
 
           <div className="flex flex-col gap-3">
             {monthsForProperty(activeProperty).map((mon) => {
-              const expanded = expandedMonths[`${activeProperty}::${mon.key}`];
+              const monthExpanded = expandedMonths[`${activeProperty}::${mon.key}`];
               return (
                 <div key={mon.key} className="flex flex-col gap-2" data-testid={`archive-month-${mon.key}`}>
                   <button
@@ -130,9 +130,9 @@ export default function Archive() {
                     <span className="text-[11px] tracking-[0.25em] uppercase text-zinc-300 font-mono">
                       {mon.label} <span className="text-zinc-600">· {mon.items.length} invio/i</span>
                     </span>
-                    <span className="text-zinc-500 text-xs font-mono">{expanded ? "▼" : "▶"}</span>
+                    <span className="text-zinc-500 text-xs font-mono">{monthExpanded ? "▼" : "▶"}</span>
                   </button>
-                  {expanded && mon.items.map((c) => {
+                  {monthExpanded && mon.items.map((c) => {
                     const aw = c.results?.alloggiati_web;
                     const r1k = c.results?.ross1000;
                     const is_ = c.results?.imposta_soggiorno;
