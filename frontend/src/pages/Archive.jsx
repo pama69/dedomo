@@ -185,14 +185,20 @@ export default function Archive() {
                         </div>
                       )}
                       <div className="flex flex-col gap-2 mt-2">
-                        {is_?.calculation && (
-                          <GenerateReceiptButton
-                            checkinId={c.checkin_id}
-                            guests={c.guests}
-                            importo={is_.calculation.totale_imposta}
-                            onGenerated={() => window.location.reload()}
-                          />
-                        )}
+                        {(() => {
+                          const prop = properties.find((p) => p.property_id === c.property_id);
+                          const istEnabled = prop?.imposta_soggiorno?.enabled;
+                          const importoCalc = is_?.calculation?.totale_imposta ?? 0;
+                          if (!istEnabled && !is_?.calculation) return null;
+                          return (
+                            <GenerateReceiptButton
+                              checkinId={c.checkin_id}
+                              guests={c.guests}
+                              importo={importoCalc}
+                              onGenerated={() => window.location.reload()}
+                            />
+                          );
+                        })()}
                         <GenerateLocazioneButton
                           checkinId={c.checkin_id}
                           guests={c.guests}

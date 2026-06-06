@@ -1340,7 +1340,28 @@ async def create_comune_receipt(
     is_result = c.get("results", {}).get("imposta_soggiorno", {})
     calc = is_result.get("calculation")
     if not calc:
-        raise HTTPException(400, "Nessun calcolo imposta di soggiorno per questo check-in")
+        # Fallback: recompute on-the-fly if property has imposta enabled
+        # (covers check-ins made before the tax was configured for this property)
+        is_cfg = prop.get("imposta_soggiorno", {}) or {}
+        if is_cfg.get("enabled"):
+            try:
+                calc = calcola_imposta(
+                    guests=c.get("guests", []),
+                    tariffa=float(is_cfg.get("tariffa_per_notte", 0)),
+                    max_notti=int(is_cfg.get("max_notti_tassabili", 7)),
+                    esenti_under=int(is_cfg.get("esenti_under_anni", 12)),
+                    data_arrivo=c["data_arrivo"],
+                    data_partenza=c["data_partenza"],
+                )
+                # Persist for future use
+                await db.checkins.update_one(
+                    {"checkin_id": checkin_id, "user_id": user["user_id"]},
+                    {"$set": {"results.imposta_soggiorno": {"success": True, "calculation": calc, "mode": "RECOMPUTED"}}},
+                )
+            except Exception:
+                calc = None
+    if not calc:
+        raise HTTPException(400, "Nessun calcolo imposta di soggiorno per questo check-in. Abilita l'imposta nelle Impostazioni della proprietà.")
 
     guests = c.get("guests", [])
     idx = max(0, min(body.ospite_index, len(guests) - 1))
