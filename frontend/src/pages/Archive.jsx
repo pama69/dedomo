@@ -60,6 +60,18 @@ export default function Archive() {
     }));
   };
 
+  const reloadCheckin = async (checkinId) => {
+    try {
+      const r = await api.get(`/checkins/${checkinId}`);
+      setItems((prev) => prev.map((x) => (x.checkin_id === checkinId ? r.data : x)));
+    } catch (e) {
+      try {
+        const r = await api.get("/checkins");
+        setItems(r.data);
+      } catch (_) { /* noop */ }
+    }
+  };
+
   const toggleMonth = (key) => {
     setExpandedMonths((s) => ({ ...s, [key]: !s[key] }));
   };
@@ -195,7 +207,7 @@ export default function Archive() {
                               checkinId={c.checkin_id}
                               guests={c.guests}
                               importo={importoCalc}
-                              onGenerated={() => window.location.reload()}
+                              onGenerated={() => reloadCheckin(c.checkin_id)}
                             />
                           );
                         })()}
@@ -203,7 +215,7 @@ export default function Archive() {
                           checkinId={c.checkin_id}
                           guests={c.guests}
                           imposta={is_?.calculation?.totale_imposta || 0}
-                          onGenerated={() => window.location.reload()}
+                          onGenerated={() => reloadCheckin(c.checkin_id)}
                         />
                         {c.locazione_receipts && c.locazione_receipts.length > 0 && (
                           <div className="flex flex-col gap-1 border border-sky-500/30 p-3 bg-sky-500/5">
@@ -214,7 +226,7 @@ export default function Archive() {
                                 checkinId={c.checkin_id}
                                 index={idx}
                                 receipt={rc}
-                                onDeleted={() => window.location.reload()}
+                                onDeleted={() => reloadCheckin(c.checkin_id)}
                               />
                             ))}
                           </div>
@@ -227,10 +239,8 @@ export default function Archive() {
                                 key={idx}
                                 checkinId={c.checkin_id}
                                 index={idx}
-                                numero={rc.numero}
-                                data={rc.data}
-                                importo={rc.importo}
-                                onDeleted={() => window.location.reload()}
+                                receipt={rc}
+                                onDeleted={() => reloadCheckin(c.checkin_id)}
                               />
                             ))}
                           </div>
@@ -299,13 +309,19 @@ function downloadBlob(blob, filename) {
   reader.readAsDataURL(blob);
 }
 
-function DownloadReceiptBtn({ checkinId, index, numero, data, importo, onDeleted }) {
+function DownloadReceiptBtn({ checkinId, index, receipt, onDeleted }) {
+  const numero = receipt?.numero || "";
+  const data = receipt?.data || "";
+  const importo = receipt?.importo || 0;
+  const shareToken = receipt?.share_token || "";
+
   const [open, setOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [busy, setBusy] = useState("");
   const [err, setErr] = useState("");
   const [pdfUrl, setPdfUrl] = useState("");
   const [pngUrl, setPngUrl] = useState("");
+  const [emailOpen, setEmailOpen] = useState(false);
 
   const toggle = () => setOpen((v) => !v);
 
@@ -425,6 +441,14 @@ function DownloadReceiptBtn({ checkinId, index, numero, data, importo, onDeleted
             )}
             <button
               type="button"
+              onClick={() => setEmailOpen(true)}
+              data-testid={`comune-receipt-email-${checkinId}-${index}`}
+              className="text-center border border-amber-500/40 hover:border-amber-400 text-amber-400 px-4 py-2 uppercase tracking-widest text-[10px] cursor-pointer"
+            >
+              ✉ Invia
+            </button>
+            <button
+              type="button"
               onClick={remove}
               disabled={deleting}
               data-testid={`comune-receipt-delete-${checkinId}-${index}`}
@@ -441,8 +465,158 @@ function DownloadReceiptBtn({ checkinId, index, numero, data, importo, onDeleted
               {err}
             </p>
           )}
+          {emailOpen && (
+            <SendComuneReceiptByEmailModal
+              receipt={receipt}
+              shareToken={shareToken}
+              onClose={() => setEmailOpen(false)}
+            />
+          )}
         </div>
       )}
+    </div>
+  );
+}
+
+function SendComuneReceiptByEmailModal({ receipt, shareToken, onClose }) {
+  const [email, setEmail] = useState("");
+  const [firma, setFirma] = useState("");
+
+  const numero = receipt?.numero || "";
+  const ospite = receipt?.ospite_nome || "Cliente";
+  const importo = (receipt?.importo || 0).toFixed(2);
+  const dataR = receipt?.data ? new Date(receipt.data).toLocaleDateString("it-IT") : "";
+  const periodoStart = receipt?.data_arrivo
+    ? new Date(receipt.data_arrivo).toLocaleDateString("it-IT")
+    : "";
+  const periodoEnd = receipt?.data_partenza
+    ? new Date(receipt.data_partenza).toLocaleDateString("it-IT")
+    : "";
+
+  const origin = window.location.origin;
+  const publicLink = shareToken
+    ? `${origin}/api/public/comune-receipt/${shareToken}`
+    : "(link non disponibile — rigenera la ricevuta)";
+
+  const subject = `Ricevuta Imposta di Soggiorno N. ${numero}`;
+  const bodyLines = [
+    `Gentile ${ospite},`,
+    "",
+    `in allegato la ricevuta dell'imposta di soggiorno per il soggiorno${periodoStart ? ` dal ${periodoStart} al ${periodoEnd}` : ""}.`,
+    "",
+    `Numero ricevuta: ${numero}`,
+    `Data: ${dataR}`,
+    `Importo: € ${importo}`,
+    "",
+    "Scarica la ricevuta da questo link:",
+    publicLink,
+    "",
+    "Cordiali saluti,",
+    firma || "",
+  ];
+  const body = bodyLines.join("\n");
+  const mailto = `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+
+  const sendMail = () => {
+    if (!email) return;
+    window.location.href = mailto;
+    setTimeout(onClose, 800);
+  };
+  const copyLink = () => {
+    if (!shareToken) return;
+    navigator.clipboard?.writeText(publicLink).catch(() => {});
+  };
+
+  return (
+    <div
+      className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4"
+      data-testid={`comune-email-modal-${numero}`}
+      onClick={onClose}
+    >
+      <div
+        className="bg-[#05050A] border border-amber-500/40 max-w-lg w-full p-6 flex flex-col gap-4"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div>
+          <h3 className="text-lg font-bold uppercase text-amber-300" style={{ fontFamily: "'Cabinet Grotesk', sans-serif" }}>
+            ✉ Invia Ricevuta al Cliente
+          </h3>
+          <p className="text-[10px] tracking-[0.25em] uppercase text-zinc-500 font-mono mt-1">
+            N. {numero} · {ospite} · € {importo}
+          </p>
+        </div>
+        <p className="text-zinc-400 text-[11px] leading-relaxed">
+          Si aprirà il tuo programma email predefinito con oggetto e testo già compilati.
+          La mail verrà spedita <strong className="text-zinc-200">dal tuo indirizzo</strong>.
+          Il cliente troverà nel corpo della mail un link diretto per scaricare il PDF.
+        </p>
+        <label className="flex flex-col gap-1">
+          <span className="text-[10px] tracking-widest uppercase text-zinc-500">Email del cliente</span>
+          <input
+            type="email"
+            autoFocus
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="cliente@email.it"
+            data-testid="comune-email-input"
+            className="bg-[#0E0E14] border border-[#1E1E28] focus:border-amber-500 px-3 py-2 text-zinc-100 outline-none font-mono"
+          />
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="text-[10px] tracking-widest uppercase text-zinc-500">Firma</span>
+          <input
+            type="text"
+            value={firma}
+            onChange={(e) => setFirma(e.target.value)}
+            placeholder="Nome host"
+            data-testid="comune-email-firma"
+            className="bg-[#0E0E14] border border-[#1E1E28] focus:border-amber-500 px-3 py-2 text-zinc-100 outline-none font-mono"
+          />
+        </label>
+        <details className="border border-[#1E1E28] p-3 text-[10px]">
+          <summary className="text-zinc-400 cursor-pointer uppercase tracking-widest">
+            Anteprima testo email
+          </summary>
+          <pre className="text-zinc-300 mt-2 whitespace-pre-wrap break-words text-[11px] font-mono">
+{body}
+          </pre>
+        </details>
+        {shareToken && (
+          <div className="flex gap-2 items-center text-[10px] font-mono">
+            <span className="text-zinc-500 shrink-0">Link PDF pubblico:</span>
+            <span className="text-amber-300 break-all flex-1 truncate" title={publicLink}>
+              {publicLink}
+            </span>
+            <button
+              type="button"
+              onClick={copyLink}
+              data-testid="comune-email-copy-link"
+              className="border border-[#1E1E28] hover:border-zinc-500 text-zinc-400 px-2 py-1 cursor-pointer shrink-0"
+            >
+              Copia
+            </button>
+          </div>
+        )}
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={sendMail}
+            disabled={!email}
+            data-testid="comune-email-send"
+            className="flex-1 text-center bg-amber-500 hover:bg-amber-400 text-[#05050A] px-4 py-3 uppercase tracking-widest text-[10px] cursor-pointer disabled:opacity-50 font-bold"
+          >
+            Apri Programma Email
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            data-testid="comune-email-cancel"
+            className="text-center border border-[#1E1E28] hover:border-zinc-500 text-zinc-400 px-4 py-3 uppercase tracking-widest text-[10px] cursor-pointer"
+          >
+            Annulla
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
