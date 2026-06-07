@@ -2,7 +2,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import api from "@/lib/api";
-import BottomNav from "@/components/BottomNav";
+import TopNavMenu from "@/components/TopNavMenu";
 import NotificationsBell from "@/components/NotificationsBell";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -56,12 +56,12 @@ export default function Layout({ children }) {
           >
             Esci
           </button>
+          <TopNavMenu />
         </div>
       </header>
-      <main className="w-full max-w-3xl mx-auto pb-24 pt-8 px-4 sm:px-6 flex flex-col gap-8">
+      <main className="w-full max-w-3xl mx-auto pb-12 pt-8 px-4 sm:px-6 flex flex-col gap-8">
         {children}
       </main>
-      <BottomNav />
     </div>
   );
 }
