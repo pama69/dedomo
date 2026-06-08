@@ -296,20 +296,6 @@ export default function Archive() {
                         </div>
                       )}
                       <div className="flex flex-col gap-2 mt-2">
-                        {(() => {
-                          const prop = properties.find((p) => p.property_id === c.property_id);
-                          const istEnabled = prop?.imposta_soggiorno?.enabled;
-                          const importoCalc = is_?.calculation?.totale_imposta ?? 0;
-                          if (!istEnabled && !is_?.calculation) return null;
-                          return (
-                            <GenerateReceiptButton
-                              checkinId={c.checkin_id}
-                              guests={c.guests}
-                              importo={importoCalc}
-                              onGenerated={() => reloadCheckin(c.checkin_id)}
-                            />
-                          );
-                        })()}
                         <GenerateLocazioneButton
                           checkinId={c.checkin_id}
                           guests={c.guests}
@@ -330,9 +316,23 @@ export default function Archive() {
                             ))}
                           </div>
                         )}
+                        {(() => {
+                          const prop = properties.find((p) => p.property_id === c.property_id);
+                          const istEnabled = prop?.imposta_soggiorno?.enabled;
+                          const importoCalc = is_?.calculation?.totale_imposta ?? 0;
+                          if (!istEnabled && !is_?.calculation) return null;
+                          return (
+                            <GenerateReceiptButton
+                              checkinId={c.checkin_id}
+                              guests={c.guests}
+                              importo={importoCalc}
+                              onGenerated={() => reloadCheckin(c.checkin_id)}
+                            />
+                          );
+                        })()}
                         {c.comune_receipts && c.comune_receipts.length > 0 && (
-                          <div className="flex flex-col gap-1 border border-[#1E1E28] p-3">
-                            <span className="text-[10px] tracking-[0.25em] uppercase text-zinc-500 mb-1">Ricevute Imposta di Soggiorno</span>
+                          <div className="flex flex-col gap-1 border border-amber-500/30 p-3 bg-amber-500/5">
+                            <span className="text-[10px] tracking-[0.25em] uppercase text-amber-400 mb-1">Ricevute Imposta di Soggiorno</span>
                             {c.comune_receipts.map((rc, idx) => (
                               <DownloadReceiptBtn
                                 key={idx}
@@ -755,7 +755,7 @@ function GenerateReceiptButton({ checkinId, guests, importo, onGenerated }) {
         data-testid={`gen-receipt-${checkinId}`}
         className="text-center border border-amber-500/40 hover:bg-amber-500/10 hover:border-amber-400 text-amber-400 px-4 py-3 uppercase tracking-widest text-[10px] cursor-pointer transition-colors"
       >
-        + Genera Ricevuta Imposta (€ {importo?.toFixed(2)})
+        Genera Ricevuta Imposta
       </button>
     );
   }
