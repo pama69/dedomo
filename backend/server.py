@@ -1337,6 +1337,13 @@ async def create_comune_receipt(
     if not prop:
         raise HTTPException(404, "Proprietà non trovata")
 
+    # Enforce: receipt number must be digits only
+    import re as _re
+    numero_clean = _re.sub(r"\D", "", body.numero_ricevuta or "")
+    if not numero_clean:
+        raise HTTPException(400, "Numero ricevuta non valido (solo cifre)")
+    body.numero_ricevuta = numero_clean
+
     is_result = c.get("results", {}).get("imposta_soggiorno", {})
     calc = is_result.get("calculation")
     if not calc:
@@ -1963,10 +1970,14 @@ async def comune_receipts_monthly_summary(cf: str, user=Depends(get_current_user
             agg["totale_imposta"] += float(r.get("importo", 0) or 0)
             agg["receipts_count"] += 1
 
-    # Finalize: compute primo/ultimo by natural number ordering of receipts
+    # Finalize: compute primo/ultimo by NUMERIC ordering of receipt numbers
+    def _num_key(s):
+        digits = "".join(ch for ch in str(s) if ch.isdigit())
+        return int(digits) if digits else 0
+
     result = []
     for mkey, agg in months.items():
-        nums = sorted(agg.pop("receipts"))
+        nums = sorted(agg.pop("receipts"), key=_num_key)
         agg["primo"] = nums[0] if nums else ""
         agg["ultimo"] = nums[-1] if nums else ""
         agg["totale_imposta"] = round(agg["totale_imposta"], 2)

@@ -630,11 +630,12 @@ function GenerateReceiptButton({ checkinId, guests, importo, onGenerated }) {
   const [error, setError] = useState("");
 
   const submit = async () => {
-    if (!numero.trim()) { setError("Numero ricevuta obbligatorio"); return; }
+    const cleaned = (numero || "").replace(/\D/g, "");
+    if (!cleaned) { setError("Numero ricevuta obbligatorio (solo cifre)"); return; }
     setLoading(true); setError("");
     try {
       await api.post(`/checkins/${checkinId}/comune-receipt`, {
-        numero_ricevuta: numero,
+        numero_ricevuta: cleaned,
         data_ricevuta: data,
         ospite_index: ospiteIdx,
       });
@@ -667,9 +668,11 @@ function GenerateReceiptButton({ checkinId, guests, importo, onGenerated }) {
         <span className="text-[10px] tracking-[0.25em] uppercase text-zinc-500">Numero Ricevuta</span>
         <input
           type="text"
+          inputMode="numeric"
+          pattern="[0-9]*"
           value={numero}
-          onChange={(e) => setNumero(e.target.value)}
-          placeholder="Es. 2026/001"
+          onChange={(e) => setNumero(e.target.value.replace(/\D/g, ""))}
+          placeholder="Es. 1"
           autoFocus
           data-testid={`gen-receipt-numero-${checkinId}`}
           className="bg-transparent border border-[#1E1E28] px-3 py-2 text-zinc-100 placeholder:text-zinc-600 focus:border-zinc-300 outline-none text-sm font-mono"
