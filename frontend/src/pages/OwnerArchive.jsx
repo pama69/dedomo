@@ -11,8 +11,9 @@ export default function OwnerArchive() {
   const [error, setError] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
-  const [tab, setTab] = useState("ricevute"); // ricevute | schedine
+  const [tab, setTab] = useState("ricevute"); // ricevute | schedine | locazione
   const [downloading, setDownloading] = useState("");
+  const [showMonthlySummary, setShowMonthlySummary] = useState(false);
 
   const reload = async () => {
     setLoading(true);
@@ -191,13 +192,17 @@ export default function OwnerArchive() {
       ) : error ? (
         <p className="text-red-500 text-sm font-mono">{error}</p>
       ) : tab === "ricevute" ? (
-        ricevute.length === 0 ? (
-          <p className="text-zinc-500 text-sm font-mono border border-dashed border-[#1E1E28] p-8 text-center">
-            Nessuna ricevuta nel periodo selezionato.
-          </p>
-        ) : (
-          <div className="flex flex-col gap-2">
-            <div className="flex justify-end">
+        <>
+          <div className="flex justify-end gap-3 mb-2">
+            <button
+              onClick={() => setShowMonthlySummary(true)}
+              disabled={decodedId.startsWith("NOCF::")}
+              data-testid="open-monthly-summary"
+              className="text-[10px] tracking-[0.25em] uppercase text-sky-400 hover:text-sky-300 cursor-pointer disabled:opacity-50"
+            >
+              📊 Riepilogo Mensile
+            </button>
+            {ricevute.length > 0 && (
               <button
                 onClick={() => downloadZip("ricevute")}
                 disabled={!!downloading}
@@ -206,40 +211,54 @@ export default function OwnerArchive() {
               >
                 ↓ ZIP Ricevute
               </button>
-            </div>
-            {ricevute.map((r) => (
-              <div
-                key={`${r.checkin_id}-${r.receipt_index}`}
-                data-testid={`ricevuta-row-${r.checkin_id}-${r.receipt_index}`}
-                className="border border-[#1E1E28] p-3 flex flex-col gap-2"
-              >
-                <div className="flex items-baseline justify-between flex-wrap gap-2">
-                  <span className="text-zinc-100 text-sm font-mono">
-                    N. {r.numero} · {r.data}
-                  </span>
-                  <span className="text-emerald-500 text-sm font-mono">
-                    € {r.importo?.toFixed(2)}
-                  </span>
-                </div>
-                <div className="flex justify-between text-[10px] font-mono text-zinc-500">
-                  <span>Capogruppo: <span className="text-zinc-300">{r.capogruppo || r.ospite_nome}</span></span>
-                  <span>{r.property_name}</span>
-                </div>
-                <button
-                  onClick={() => downloadFile(
-                    `/checkins/${r.checkin_id}/comune-receipts/${r.receipt_index}`,
-                    `ricevuta_${r.numero}.pdf`,
-                  )}
-                  disabled={!!downloading}
-                  data-testid={`download-ricevuta-${r.checkin_id}-${r.receipt_index}`}
-                  className="self-start text-[10px] tracking-[0.25em] uppercase text-zinc-300 hover:text-zinc-100 cursor-pointer disabled:opacity-50"
-                >
-                  ↓ Scarica PDF
-                </button>
-              </div>
-            ))}
+            )}
           </div>
-        )
+          {ricevute.length === 0 ? (
+            <p className="text-zinc-500 text-sm font-mono border border-dashed border-[#1E1E28] p-8 text-center">
+              Nessuna ricevuta nel periodo selezionato.
+            </p>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {ricevute.map((r) => (
+                <div
+                  key={`${r.checkin_id}-${r.receipt_index}`}
+                  data-testid={`ricevuta-row-${r.checkin_id}-${r.receipt_index}`}
+                  className="border border-[#1E1E28] p-3 flex flex-col gap-2"
+                >
+                  <div className="flex items-baseline justify-between flex-wrap gap-2">
+                    <span className="text-zinc-100 text-sm font-mono">
+                      N. {r.numero} · {r.data}
+                    </span>
+                    <span className="text-emerald-500 text-sm font-mono">
+                      € {r.importo?.toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-[10px] font-mono text-zinc-500">
+                    <span>Capogruppo: <span className="text-zinc-300">{r.capogruppo || r.ospite_nome}</span></span>
+                    <span>{r.property_name}</span>
+                  </div>
+                  <button
+                    onClick={() => downloadFile(
+                      `/checkins/${r.checkin_id}/comune-receipts/${r.receipt_index}`,
+                      `ricevuta_${r.numero}.pdf`,
+                    )}
+                    disabled={!!downloading}
+                    data-testid={`download-ricevuta-${r.checkin_id}-${r.receipt_index}`}
+                    className="self-start text-[10px] tracking-[0.25em] uppercase text-zinc-300 hover:text-zinc-100 cursor-pointer disabled:opacity-50"
+                  >
+                    ↓ Scarica PDF
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+          {showMonthlySummary && (
+            <MonthlySummaryModal
+              cf={decodedId}
+              onClose={() => setShowMonthlySummary(false)}
+            />
+          )}
+        </>
       ) : tab === "schedine" ? (
         // schedine tab
         schedine.length === 0 ? (
@@ -248,7 +267,7 @@ export default function OwnerArchive() {
             <br />
             <span className="text-zinc-600 text-[10px]">
               Le ricevute Alloggiati Web sono disponibili solo per invii in modalità PRODUZIONE,
-              24h dopo l'invio.
+              24h dopo l&apos;invio.
             </span>
           </p>
         ) : (
@@ -356,3 +375,108 @@ export default function OwnerArchive() {
     </Layout>
   );
 }
+
+function MonthlySummaryModal({ cf, onClose }) {
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState("");
+
+  useEffect(() => {
+    let alive = true;
+    api.get(`/owners/${encodeURIComponent(cf)}/comune-receipts/monthly-summary`)
+      .then((r) => { if (alive) { setRows(r.data || []); setLoading(false); } })
+      .catch((e) => { if (alive) { setErr(e.response?.data?.detail || "Errore caricamento"); setLoading(false); } });
+    return () => { alive = false; };
+  }, [cf]);
+
+  const totals = rows.reduce(
+    (acc, r) => ({
+      persone: acc.persone + (r.persone_paganti || 0),
+      notti: acc.notti + (r.notti_totali || 0),
+      imposta: acc.imposta + (r.totale_imposta || 0),
+      ricevute: acc.ricevute + (r.receipts_count || 0),
+    }),
+    { persone: 0, notti: 0, imposta: 0, ricevute: 0 },
+  );
+
+  return (
+    <div
+      className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4"
+      data-testid="monthly-summary-modal"
+      onClick={onClose}
+    >
+      <div
+        className="bg-[#05050A] border border-sky-500/40 max-w-3xl w-full p-6 flex flex-col gap-4 max-h-[90vh] overflow-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex justify-between items-baseline">
+          <div>
+            <h3 className="text-lg font-bold uppercase text-sky-300" style={{ fontFamily: "'Cabinet Grotesk', sans-serif" }}>
+              📊 Riepilogo Mensile — Imposta di Soggiorno
+            </h3>
+            <p className="text-[10px] tracking-[0.25em] uppercase text-zinc-500 font-mono mt-1">
+              Solo ricevute con trasmissione Alloggiati Web in PROD
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            data-testid="monthly-summary-close"
+            className="text-zinc-400 hover:text-zinc-100 cursor-pointer text-xl"
+          >
+            ✕
+          </button>
+        </div>
+
+        {loading ? (
+          <p className="text-zinc-500 text-sm font-mono">Caricamento...</p>
+        ) : err ? (
+          <p className="text-red-400 text-sm font-mono">{err}</p>
+        ) : rows.length === 0 ? (
+          <p className="text-zinc-500 text-sm font-mono border border-dashed border-[#1E1E28] p-6 text-center">
+            Nessuna ricevuta in modalità PROD con trasmissione Alloggiati Web andata a buon fine.
+          </p>
+        ) : (
+          <div className="flex flex-col gap-2">
+            <div className="grid grid-cols-[1.4fr_repeat(5,1fr)] gap-2 text-[9px] tracking-[0.2em] uppercase text-zinc-500 font-mono border-b border-[#1E1E28] pb-2">
+              <span>Mese / Anno</span>
+              <span className="text-right">Prima Ric.</span>
+              <span className="text-right">Ultima Ric.</span>
+              <span className="text-right">Pers. Pag.</span>
+              <span className="text-right">Notti Tot.</span>
+              <span className="text-right">Imposta €</span>
+            </div>
+            {rows.map((r) => (
+              <div
+                key={r.month_key}
+                data-testid={`monthly-row-${r.month_key}`}
+                className="grid grid-cols-[1.4fr_repeat(5,1fr)] gap-2 text-[11px] font-mono py-2 border-b border-[#1E1E28]/40 hover:bg-[#0E0E14] items-baseline"
+              >
+                <span className="text-zinc-100">{r.month_label}</span>
+                <span className="text-right text-zinc-300 truncate" title={r.primo}>{r.primo}</span>
+                <span className="text-right text-zinc-300 truncate" title={r.ultimo}>{r.ultimo}</span>
+                <span className="text-right text-zinc-300">{r.persone_paganti}</span>
+                <span className="text-right text-zinc-300">{r.notti_totali}</span>
+                <span className="text-right text-emerald-400 font-bold">€ {r.totale_imposta.toFixed(2)}</span>
+              </div>
+            ))}
+            <div
+              data-testid="monthly-totals"
+              className="grid grid-cols-[1.4fr_repeat(5,1fr)] gap-2 text-[11px] font-mono py-3 border-t-2 border-sky-500/50 bg-sky-500/5 items-baseline mt-2"
+            >
+              <span className="text-sky-300 font-bold uppercase tracking-widest text-[10px]">TOTALE</span>
+              <span className="text-right text-zinc-500">—</span>
+              <span className="text-right text-zinc-500">—</span>
+              <span className="text-right text-zinc-100 font-bold">{totals.persone}</span>
+              <span className="text-right text-zinc-100 font-bold">{totals.notti}</span>
+              <span className="text-right text-emerald-300 font-bold">€ {totals.imposta.toFixed(2)}</span>
+            </div>
+            <p className="text-[10px] text-zinc-500 font-mono mt-2">
+              {totals.ricevute} ricevute · raggruppate per data emissione
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+

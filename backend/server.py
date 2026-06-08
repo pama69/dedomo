@@ -1890,6 +1890,92 @@ async def delete_locazione_receipt(checkin_id: str, index: int, user=Depends(get
     return {"ok": True}
 
 
+@api_router.get("/owners/{cf}/comune-receipts/monthly-summary")
+async def comune_receipts_monthly_summary(cf: str, user=Depends(get_current_user)):
+    """Monthly aggregate of Imposta di Soggiorno receipts for a given owner CF.
+    Only counts receipts whose parent checkin was submitted in PROD mode AND
+    where the Alloggiati Web transmission succeeded.
+
+    Returns array of {month_key, month_label, primo, ultimo, persone_paganti,
+                      notti_totali, totale_imposta, receipts_count} sorted desc.
+    """
+    cf = cf.upper().strip()
+    props = await db.properties.find(
+        {"user_id": user["user_id"], "codice_fiscale": cf},
+        {"_id": 0, "property_id": 1, "nome": 1},
+    ).to_list(500)
+    prop_ids = [p["property_id"] for p in props]
+    if not prop_ids:
+        return []
+
+    cursor = db.checkins.find(
+        {
+            "user_id": user["user_id"],
+            "property_id": {"$in": prop_ids},
+            "mode": "PROD",
+            "results.alloggiati_web.success": True,
+            "comune_receipts": {"$exists": True, "$ne": []},
+        },
+        {
+            "_id": 0,
+            "checkin_id": 1,
+            "data_arrivo": 1,
+            "data_partenza": 1,
+            "guests": 1,
+            "results": 1,
+            "comune_receipts": 1,
+        },
+    )
+
+    months = {}  # key "YYYY-MM" → aggregator dict
+    months_it = [
+        "Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno",
+        "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre",
+    ]
+    async for c in cursor:
+        calc = (c.get("results", {}).get("imposta_soggiorno") or {}).get("calculation") or {}
+        breakdown = calc.get("breakdown", []) or []
+        # Per-checkin paying counters (used for each receipt of this checkin)
+        paying_guests = sum(1 for b in breakdown if not b.get("esente"))
+        paying_nights = sum(int(b.get("notti_tassabili", 0) or 0) for b in breakdown if not b.get("esente"))
+
+        for r in c.get("comune_receipts", []) or []:
+            # Date for monthly grouping: use receipt "data" (data ricevuta), fallback generated_at
+            dstr = r.get("data") or r.get("generated_at", "")[:10]
+            if not dstr or len(dstr) < 7:
+                continue
+            mkey = dstr[:7]  # "YYYY-MM"
+            if mkey not in months:
+                y, m = mkey.split("-")
+                months[mkey] = {
+                    "month_key": mkey,
+                    "month_label": f"{months_it[int(m) - 1]} {y}",
+                    "receipts": [],
+                    "persone_paganti": 0,
+                    "notti_totali": 0,
+                    "totale_imposta": 0.0,
+                    "receipts_count": 0,
+                }
+            agg = months[mkey]
+            agg["receipts"].append(r.get("numero", ""))
+            agg["persone_paganti"] += paying_guests
+            agg["notti_totali"] += paying_nights
+            agg["totale_imposta"] += float(r.get("importo", 0) or 0)
+            agg["receipts_count"] += 1
+
+    # Finalize: compute primo/ultimo by natural number ordering of receipts
+    result = []
+    for mkey, agg in months.items():
+        nums = sorted(agg.pop("receipts"))
+        agg["primo"] = nums[0] if nums else ""
+        agg["ultimo"] = nums[-1] if nums else ""
+        agg["totale_imposta"] = round(agg["totale_imposta"], 2)
+        result.append(agg)
+
+    result.sort(key=lambda x: x["month_key"], reverse=True)
+    return result
+
+
 @api_router.get("/owners/{cf}/locazione-receipts")
 async def list_locazione_by_owner(cf: str, user=Depends(get_current_user)):
     """All locazione receipts across checkins for a given proprietario CF."""
