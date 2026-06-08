@@ -1427,36 +1427,42 @@ async def create_comune_receipt(
     max_notti = max(1, int((prop.get("imposta_soggiorno") or {}).get("max_notti_tassabili", 7)))
     paying_total = min(stay_nights, max_notti)
 
-    # Build list of (year, month) for each PAYING night (in order from arrival)
-    months_seq = []
+    # Build list of (year, month, date) for each PAYING night (in order from arrival)
+    paying_dates = []
     cur = arr
     for _i in range(paying_total):
-        months_seq.append((cur.year, cur.month))
+        paying_dates.append(cur)
         cur += _timedelta(days=1)
 
-    # Group → preserve order of first appearance, count nights per month
+    # Group consecutive paying nights by (year, month), tracking the calendar range
     month_groups = []
-    for ym in months_seq:
+    for d in paying_dates:
+        ym = (d.year, d.month)
         if month_groups and month_groups[-1]["ym"] == ym:
             month_groups[-1]["nights"] += 1
+            month_groups[-1]["end"] = d  # last paying night in this month
         else:
-            month_groups.append({"ym": ym, "nights": 1})
+            month_groups.append({"ym": ym, "nights": 1, "start": d, "end": d})
 
     tariffa = float((prop.get("imposta_soggiorno") or {}).get("tariffa_per_notte", 0))
 
     base_num = int(body.numero_ricevuta)
     generated = []
+    # All receipts use the START-OF-STAY date as emission date (user requirement).
+    emission_date = c["data_arrivo"]
     for offset, mg in enumerate(month_groups):
         nights_in_month = mg["nights"]
-        # importo per this slice = tariffa × paying-guests × nights_in_this_month
-        # n_adulti_paganti remains the same group across the stay.
         importo_slice = round(tariffa * n_adulti_paganti * nights_in_month, 2)
         pernottamenti_slice = n_adulti_paganti * nights_in_month
         numero_slice = str(base_num + offset)
+        # Period shown on this receipt = the actual paying nights for this month.
+        # "checkout" line = day AFTER the last paying night (so the period reads naturally).
+        slice_start = mg["start"].isoformat()
+        slice_end = (mg["end"] + _timedelta(days=1)).isoformat()
 
         pdf_slice = generate_comune_receipt(
             numero_ricevuta=numero_slice,
-            data_ricevuta=body.data_ricevuta,
+            data_ricevuta=emission_date,
             comune_nome=prop.get("comune", "—"),
             property_name=prop.get("nome", ""),
             property_address=f"{prop.get('indirizzo','')} {prop.get('cap','')}".strip(),
@@ -1466,8 +1472,8 @@ async def create_comune_receipt(
             ospite_nome_cognome=ospite_nome,
             ospite_residenza=ospite_res,
             importo=importo_slice,
-            data_arrivo=c["data_arrivo"],
-            data_partenza=c["data_partenza"],
+            data_arrivo=slice_start,
+            data_partenza=slice_end,
             pernottamenti=pernottamenti_slice,
             n_adulti=n_adulti_paganti,
             n_esenti=n_esenti,
@@ -1478,12 +1484,12 @@ async def create_comune_receipt(
         import secrets as _secrets
         entry = {
             "numero": numero_slice,
-            "data": body.data_ricevuta,
+            "data": emission_date,
             "ospite_index": idx,
             "ospite_nome": ospite_nome,
             "importo": importo_slice,
-            "data_arrivo": c["data_arrivo"],
-            "data_partenza": c["data_partenza"],
+            "data_arrivo": slice_start,
+            "data_partenza": slice_end,
             "month_year": f"{mg['ym'][0]}-{mg['ym'][1]:02d}",
             "notti_pagate": nights_in_month,
             "generated_at": datetime.now(timezone.utc).isoformat(),
