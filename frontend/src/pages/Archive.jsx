@@ -414,18 +414,19 @@ function DownloadReceiptBtn({ checkinId, index, receipt, onDeleted }) {
   const importo = receipt?.importo || 0;
   const shareToken = receipt?.share_token || "";
 
-  const [open, setOpen] = useState(false);
-  const [deleting, setDeleting] = useState(false);
   const [busy, setBusy] = useState("");
-  const [err, setErr] = useState("");
   const [pdfUrl, setPdfUrl] = useState("");
-  const [pngUrl, setPngUrl] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const [err, setErr] = useState("");
+  const [confirmDel, setConfirmDel] = useState(false);
   const [emailOpen, setEmailOpen] = useState(false);
 
-  const toggle = () => setOpen((v) => !v);
+  const printReceipt = () => {
+    // Use HTML preview endpoint (window.print friendly)
+    const url = `${api.defaults.baseURL}/checkins/${checkinId}/comune-receipts/${index}?download=0`;
+    window.open(url, "_blank", "noopener");
+  };
 
-  // Two-step: fetch file via axios → store blob URL in state → render <a download>
-  // which the user clicks directly. Guaranteed to work in any Chrome configuration.
   const preparePdf = async () => {
     setErr("");
     setPdfUrl("");
@@ -441,138 +442,101 @@ function DownloadReceiptBtn({ checkinId, index, receipt, onDeleted }) {
     }
   };
 
-  const preparePng = async () => {
-    setErr("");
-    setPngUrl("");
-    setBusy("png");
-    try {
-      const r = await api.get(`/checkins/${checkinId}/comune-receipts/${index}/preview`, {
-        responseType: "blob",
-        params: { download: 1 },
-      });
-      const blob = new Blob([r.data], { type: "image/png" });
-      setPngUrl(URL.createObjectURL(blob));
-    } catch (e) {
-      setErr("Impossibile preparare il PNG.");
-    } finally {
-      setBusy("");
-    }
-  };
-
   const remove = async () => {
-    if (!window.confirm(`Eliminare la ricevuta N. ${numero}? Potrai poi generarne una nuova con dati corretti.`)) return;
     setDeleting(true);
     try {
       await api.delete(`/checkins/${checkinId}/comune-receipts/${index}`);
       onDeleted && onDeleted();
     } catch (e) {
-      setErr(`Errore eliminazione: ${e.response?.data?.detail || e.message}`);
-    } finally {
+      setErr(e.response?.data?.detail || "Errore eliminazione");
       setDeleting(false);
     }
   };
 
-  const previewSrc = `${api.defaults.baseURL}/checkins/${checkinId}/comune-receipts/${index}/preview`;
-
   return (
-    <div className="flex flex-col gap-2">
-      <button
-        type="button"
-        onClick={toggle}
-        data-testid={`comune-receipt-${checkinId}-${index}`}
-        className="flex justify-between items-center text-[10px] font-mono text-zinc-300 hover:text-zinc-100 hover:bg-[#15151C] px-2 py-2 cursor-pointer"
-      >
-        <span>N. {numero} — {data}</span>
-        <span className="text-emerald-500">€ {importo?.toFixed(2)} {open ? "▲" : "▼"}</span>
-      </button>
-      {open && (
-        <div className="flex flex-col gap-2">
-          <img
-            src={previewSrc}
-            alt={`Ricevuta ${numero}`}
-            className="w-full border border-[#1E1E28] bg-white"
-            data-testid={`comune-receipt-preview-${checkinId}-${index}`}
-          />
-          <p className="text-zinc-500 text-[10px] font-mono leading-relaxed">
-            Tasto destro sull&apos;immagine → &quot;Salva immagine come...&quot; per salvare la ricevuta.
-            <br/>Oppure usa i pulsanti qui sotto.
-          </p>
-          <div className="flex gap-2 flex-wrap">
-            {!pngUrl ? (
-              <button
-                type="button"
-                onClick={preparePng}
-                disabled={!!busy}
-                data-testid={`comune-receipt-png-${checkinId}-${index}`}
-                className="flex-1 text-center border border-emerald-500/40 hover:border-emerald-400 text-emerald-400 px-4 py-2 uppercase tracking-widest text-[10px] cursor-pointer disabled:opacity-50"
-              >
-                {busy === "png" ? "Preparo PNG…" : "↓ Prepara PNG"}
-              </button>
-            ) : (
-              <a
-                href={pngUrl}
-                download={`ricevuta_${numero}.png`}
-                data-testid={`comune-receipt-png-link-${checkinId}-${index}`}
-                className="flex-1 text-center border border-emerald-400 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-200 px-4 py-2 uppercase tracking-widest text-[10px] cursor-pointer animate-pulse no-underline"
-              >
-                ✓ CLICCA QUI PER SALVARE PNG
-              </a>
-            )}
-            {!pdfUrl ? (
-              <button
-                type="button"
-                onClick={preparePdf}
-                disabled={!!busy}
-                data-testid={`comune-receipt-download-${checkinId}-${index}`}
-                className="flex-1 text-center border border-[#1E1E28] hover:border-zinc-500 text-zinc-400 px-4 py-2 uppercase tracking-widest text-[10px] cursor-pointer disabled:opacity-50"
-              >
-                {busy === "pdf" ? "Preparo PDF…" : "↓ Prepara PDF"}
-              </button>
-            ) : (
-              <a
-                href={pdfUrl}
-                download={`ricevuta_comune_${numero}.pdf`}
-                data-testid={`comune-receipt-download-link-${checkinId}-${index}`}
-                className="flex-1 text-center border border-emerald-400 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-200 px-4 py-2 uppercase tracking-widest text-[10px] cursor-pointer animate-pulse no-underline"
-              >
-                ✓ CLICCA QUI PER SALVARE PDF
-              </a>
-            )}
-            <button
-              type="button"
-              onClick={() => setEmailOpen(true)}
-              data-testid={`comune-receipt-email-${checkinId}-${index}`}
-              className="text-center border border-amber-500/40 hover:border-amber-400 text-amber-400 px-4 py-2 uppercase tracking-widest text-[10px] cursor-pointer"
-            >
-              ✉ Invia
-            </button>
+    <div className="flex flex-col gap-2 border-t border-amber-500/20 pt-2">
+      <div className="flex justify-between items-center text-[10px] font-mono">
+        <div className="flex flex-col">
+          <span className="text-zinc-100">N. {numero}</span>
+          <span className="text-zinc-500">{data} · {receipt?.ospite_nome || ""}</span>
+        </div>
+        <span className="text-amber-400 font-bold">€ {importo?.toFixed(2)}</span>
+      </div>
+      <div className="flex gap-2 flex-wrap">
+        <button
+          type="button"
+          onClick={printReceipt}
+          data-testid={`comune-receipt-print-${checkinId}-${index}`}
+          className="flex-1 text-center border border-amber-500/40 hover:border-amber-400 text-amber-400 px-3 py-2 uppercase tracking-widest text-[10px] cursor-pointer"
+        >
+          🖨 Stampa
+        </button>
+        {!pdfUrl ? (
+          <button
+            type="button"
+            onClick={preparePdf}
+            disabled={!!busy}
+            data-testid={`comune-receipt-download-${checkinId}-${index}`}
+            className="flex-1 text-center border border-[#1E1E28] hover:border-zinc-500 text-zinc-400 px-3 py-2 uppercase tracking-widest text-[10px] cursor-pointer disabled:opacity-50"
+          >
+            {busy === "pdf" ? "..." : "↓ Prepara PDF"}
+          </button>
+        ) : (
+          <a
+            href={pdfUrl}
+            download={`ricevuta_comune_${numero}.pdf`}
+            data-testid={`comune-receipt-pdf-link-${checkinId}-${index}`}
+            className="flex-1 text-center border border-emerald-400 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-200 px-3 py-2 uppercase tracking-widest text-[10px] cursor-pointer animate-pulse no-underline"
+          >
+            ✓ Salva PDF
+          </a>
+        )}
+        <button
+          type="button"
+          onClick={() => setEmailOpen(true)}
+          data-testid={`comune-receipt-email-${checkinId}-${index}`}
+          className="text-center border border-amber-500/40 hover:border-amber-400 text-amber-400 px-3 py-2 uppercase tracking-widest text-[10px] cursor-pointer"
+        >
+          ✉ Invia
+        </button>
+        {!confirmDel ? (
+          <button
+            type="button"
+            onClick={() => setConfirmDel(true)}
+            data-testid={`comune-receipt-delete-${checkinId}-${index}`}
+            className="text-center border border-red-500/40 hover:border-red-400 text-red-400 px-3 py-2 uppercase tracking-widest text-[10px] cursor-pointer"
+          >
+            Elimina
+          </button>
+        ) : (
+          <div className="flex gap-1">
             <button
               type="button"
               onClick={remove}
               disabled={deleting}
-              data-testid={`comune-receipt-delete-${checkinId}-${index}`}
-              className="text-center border border-red-500/40 hover:border-red-400 text-red-400 px-4 py-2 uppercase tracking-widest text-[10px] cursor-pointer disabled:opacity-50"
+              data-testid={`comune-receipt-delete-confirm-${checkinId}-${index}`}
+              className="text-center bg-red-500 hover:bg-red-400 text-white px-3 py-2 uppercase tracking-widest text-[10px] cursor-pointer disabled:opacity-50"
             >
-              {deleting ? "..." : "Elimina/Rigenera"}
+              {deleting ? "..." : "Conferma"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setConfirmDel(false)}
+              className="text-center border border-[#1E1E28] text-zinc-400 px-2 py-2 uppercase tracking-widest text-[10px] cursor-pointer"
+            >
+              ✕
             </button>
           </div>
-          {err && (
-            <p
-              data-testid={`comune-receipt-error-${checkinId}-${index}`}
-              className="text-[10px] font-mono px-2 py-1 text-red-400 bg-red-500/10 border border-red-500/30"
-            >
-              {err}
-            </p>
-          )}
-          {emailOpen && (
-            <SendComuneReceiptByEmailModal
-              receipt={receipt}
-              shareToken={shareToken}
-              onClose={() => setEmailOpen(false)}
-            />
-          )}
-        </div>
+        )}
+      </div>
+      {emailOpen && (
+        <SendComuneReceiptByEmailModal
+          receipt={receipt}
+          shareToken={shareToken}
+          onClose={() => setEmailOpen(false)}
+        />
       )}
+      {err && <p className="text-[10px] text-red-400 font-mono">{err}</p>}
     </div>
   );
 }

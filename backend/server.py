@@ -1621,43 +1621,6 @@ async def delete_comune_receipt(
     return {"ok": True, "remaining": len(new_receipts)}
 
 
-@api_router.get("/checkins/{checkin_id}/comune-receipts/{index}/preview")
-async def preview_comune_receipt(
-    checkin_id: str, index: int, download: int = 0, user=Depends(get_current_user)
-):
-    """Render archived municipal receipt as a PNG image (firewall-safe).
-    Add ?download=1 to force download instead of inline display."""
-    import fitz  # PyMuPDF
-    c = await db.checkins.find_one(
-        {"checkin_id": checkin_id, "user_id": user["user_id"]}, {"_id": 0}
-    )
-    if not c:
-        raise HTTPException(404, "Check-in non trovato")
-    receipts = c.get("comune_receipts", [])
-    if index < 0 or index >= len(receipts):
-        raise HTTPException(404, "Ricevuta non trovata")
-    pdf_b64 = receipts[index].get("pdf_base64")
-    if not pdf_b64:
-        raise HTTPException(404, "PDF non disponibile")
-
-    pdf_bytes = base64.b64decode(pdf_b64)
-    doc = fitz.open(stream=pdf_bytes, filetype="pdf")
-    page = doc[0]
-    pix = page.get_pixmap(dpi=180)
-    png_bytes = pix.tobytes("png")
-    doc.close()
-
-    numero = receipts[index].get("numero", "ricevuta")
-    headers = {"Cache-Control": "no-store"}
-    if download:
-        headers["Content-Disposition"] = f'attachment; filename="ricevuta_{numero}.png"'
-    return StreamingResponse(
-        io.BytesIO(png_bytes),
-        media_type="image/png",
-        headers=headers,
-    )
-
-
 @api_router.get("/properties/{property_id}/comune-receipts")
 async def property_comune_receipts(
     property_id: str, user=Depends(get_current_user)
