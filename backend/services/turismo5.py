@@ -87,9 +87,19 @@ def build_movimentazione_xml(
             arrivi_el = SubElement(mov, "arrivi")
             for a in arrivi:
                 ae = SubElement(arrivi_el, "arrivo")
+                # Order MUST follow the official Turismo 5 v3 WSDL (arrivoBean):
+                # idswh, tipoalloggiato, idcapo, cognome, nome, sesso, cittadinanza,
+                # statoresidenza, luogoresidenza, datanascita, statonascita,
+                # comunenascita, tipoturismo, mezzotrasporto, canaleprenotazione,
+                # titolostudio, professione, esenzioneimposta
                 SubElement(ae, "idswh").text = str(a.get("idswh", ""))
                 SubElement(ae, "tipoalloggiato").text = str(a.get("tipoalloggiato", "16"))
-                SubElement(ae, "idcapo").text = str(a.get("idcapo", ""))
+                # idcapo is optional - only set when present (familiare/gruppo)
+                idcapo_val = str(a.get("idcapo", "") or "")
+                if idcapo_val:
+                    SubElement(ae, "idcapo").text = idcapo_val
+                SubElement(ae, "cognome").text = (a.get("cognome", "") or "").upper()[:50]
+                SubElement(ae, "nome").text = (a.get("nome", "") or "").upper()[:30]
                 SubElement(ae, "sesso").text = a.get("sesso", "")
                 SubElement(ae, "cittadinanza").text = a.get("cittadinanza", "")
                 SubElement(ae, "statoresidenza").text = a.get("statoresidenza", "")
@@ -97,9 +107,10 @@ def build_movimentazione_xml(
                 SubElement(ae, "datanascita").text = _fmt_date(a.get("datanascita", ""))
                 SubElement(ae, "statonascita").text = a.get("statonascita", "")
                 SubElement(ae, "comunenascita").text = a.get("comunenascita", "")
-                SubElement(ae, "tipoturismo").text = a.get("tipoturismo", "")
-                SubElement(ae, "mezzotrasporto").text = a.get("mezzotrasporto", "")
-                SubElement(ae, "canaleprenotazione").text = a.get("canaleprenotazione", "")
+                # tipoturismo / mezzotrasporto are required: default to "Non specificato"
+                SubElement(ae, "tipoturismo").text = a.get("tipoturismo") or "Non specificato"
+                SubElement(ae, "mezzotrasporto").text = a.get("mezzotrasporto") or "Non specificato"
+                SubElement(ae, "canaleprenotazione").text = a.get("canaleprenotazione") or "Non specificato"
 
         partenze = m.get("partenze", [])
         if partenze:

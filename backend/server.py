@@ -924,6 +924,8 @@ async def checkin_submit(body: CheckinSubmit, user=Depends(get_current_user)):
                 "idswh": f"{body.property_id[:8]}-{body.data_arrivo}-{i+1}",
                 "tipoalloggiato": tipo_alloggiato,
                 "idcapo": idcapo_field,
+                "cognome": g.cognome,
+                "nome": g.nome,
                 "sesso": g.sesso,
                 "cittadinanza": g.cittadinanza or ITALIA_CODE,
                 "statoresidenza": g.cittadinanza or ITALIA_CODE,
@@ -933,9 +935,10 @@ async def checkin_submit(body: CheckinSubmit, user=Depends(get_current_user)):
                 "statonascita": g.stato_nascita or ITALIA_CODE,
                 # comunenascita: only for italians (comune ISTAT), empty for foreigners
                 "comunenascita": "" if g.is_foreign else (g.codice_comune_nascita or ""),
-                "tipoturismo": "",
-                "mezzotrasporto": "",
-                "canaleprenotazione": "",
+                # Required defaults per Turismo 5 v3 spec
+                "tipoturismo": "Non specificato",
+                "mezzotrasporto": "Non specificato",
+                "canaleprenotazione": "Non specificato",
             })
 
         # Build partenze list for the movimento on data_partenza
