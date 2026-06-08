@@ -1308,6 +1308,34 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+class BulkDeleteCheckinsBody(BaseModel):
+    checkin_ids: List[str]
+
+
+@api_router.post("/checkins/bulk-delete")
+async def bulk_delete_test_checkins(body: BulkDeleteCheckinsBody, user=Depends(get_current_user)):
+    """Bulk-delete TEST-mode check-ins that have BOTH Alloggiati Web and
+    Turismo 5 / Ross1000 attempts recorded. PROD check-ins are never deleted."""
+    if not body.checkin_ids:
+        return {"deleted": 0, "skipped": []}
+    cursor = db.checkins.find(
+        {"user_id": user["user_id"], "checkin_id": {"$in": body.checkin_ids}},
+        {"_id": 0, "checkin_id": 1, "mode": 1, "results": 1},
+    )
+    to_delete, skipped = [], []
+    async for c in cursor:
+        aw = (c.get("results") or {}).get("alloggiati_web") or {}
+        t5 = (c.get("results") or {}).get("ross1000") or {}
+        if c.get("mode") == "TEST" and aw and t5:
+            to_delete.append(c["checkin_id"])
+        else:
+            skipped.append(c["checkin_id"])
+    res = await db.checkins.delete_many(
+        {"user_id": user["user_id"], "checkin_id": {"$in": to_delete}}
+    )
+    return {"deleted": res.deleted_count, "skipped": skipped}
+
+
 class ComuneReceiptRequest(BaseModel):
     numero_ricevuta: str
     data_ricevuta: str  # YYYY-MM-DD

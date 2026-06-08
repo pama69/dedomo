@@ -21,6 +21,45 @@ export default function Archive() {
   const [expanded, setExpanded] = useState(null);
   const [activeProperty, setActiveProperty] = useState(null);
   const [expandedMonths, setExpandedMonths] = useState({}); // { "<prop>::<month>": true } — opt-in
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkConfirm, setBulkConfirm] = useState(false);
+  const [bulkMsg, setBulkMsg] = useState("");
+
+  const isDeletable = (c) => {
+    if (c.mode !== "TEST") return false;
+    const aw = c.results?.alloggiati_web;
+    const t5 = c.results?.ross1000;
+    return !!(aw && t5);
+  };
+
+  const toggleSelect = (id) => {
+    setSelectedIds((s) => {
+      const n = new Set(s);
+      if (n.has(id)) n.delete(id); else n.add(id);
+      return n;
+    });
+  };
+
+  const bulkDelete = async () => {
+    if (selectedIds.size === 0) return;
+    setBulkBusy(true);
+    setBulkMsg("");
+    try {
+      const ids = Array.from(selectedIds);
+      const r = await api.post("/checkins/bulk-delete", { checkin_ids: ids });
+      setSelectedIds(new Set());
+      setBulkConfirm(false);
+      setBulkMsg(`${r.data.deleted} check-in eliminati.${r.data.skipped?.length ? ` ${r.data.skipped.length} saltati.` : ""}`);
+      const fresh = await api.get("/checkins");
+      setItems(fresh.data);
+      setTimeout(() => setBulkMsg(""), 5000);
+    } catch (e) {
+      setBulkMsg(`Errore: ${e.response?.data?.detail || e.message}`);
+    } finally {
+      setBulkBusy(false);
+    }
+  };
 
   useEffect(() => {
     Promise.all([
@@ -129,6 +168,48 @@ export default function Archive() {
           </div>
 
           <div className="flex flex-col gap-3">
+            {selectedIds.size > 0 && (
+              <div data-testid="bulk-action-bar" className="bg-amber-500/10 border border-amber-500/40 px-4 py-3 flex items-center justify-between gap-3">
+                <span className="text-amber-300 text-[11px] font-mono">
+                  {selectedIds.size} selezionato/i (solo TEST con AW + T5)
+                </span>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => { setSelectedIds(new Set()); setBulkConfirm(false); }}
+                    data-testid="bulk-clear"
+                    className="text-[10px] tracking-[0.25em] uppercase text-zinc-400 hover:text-zinc-100 border border-[#1E1E28] hover:border-zinc-500 px-3 py-2 cursor-pointer"
+                  >
+                    Deseleziona
+                  </button>
+                  {!bulkConfirm ? (
+                    <button
+                      type="button"
+                      onClick={() => setBulkConfirm(true)}
+                      data-testid="bulk-delete"
+                      className="text-[10px] tracking-[0.25em] uppercase text-red-400 hover:text-red-300 border border-red-500/40 hover:border-red-400 px-3 py-2 cursor-pointer"
+                    >
+                      🗑 Elimina selezionati
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={bulkDelete}
+                      disabled={bulkBusy}
+                      data-testid="bulk-delete-confirm"
+                      className="text-[10px] tracking-[0.25em] uppercase text-white bg-red-500 hover:bg-red-400 px-3 py-2 cursor-pointer disabled:opacity-50"
+                    >
+                      {bulkBusy ? "Eliminazione..." : "Conferma eliminazione"}
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+            {bulkMsg && (
+              <p data-testid="bulk-msg" className={`text-[11px] font-mono px-3 py-2 border ${bulkMsg.toLowerCase().startsWith("errore") ? "text-red-400 border-red-500/40 bg-red-500/10" : "text-emerald-400 border-emerald-500/40 bg-emerald-500/10"}`}>
+                {bulkMsg}
+              </p>
+            )}
             {monthsForProperty(activeProperty).map((mon) => {
               const monthExpanded = expandedMonths[`${activeProperty}::${mon.key}`];
               return (
@@ -149,36 +230,54 @@ export default function Archive() {
                     const r1k = c.results?.ross1000;
                     const is_ = c.results?.imposta_soggiorno;
                     const isOpen = expanded === c.checkin_id;
+                    const deletable = isDeletable(c);
+                    const isSelected = selectedIds.has(c.checkin_id);
                     return (
                       <div
                         key={c.checkin_id}
                         data-testid={`archive-row-${c.checkin_id}`}
-                        className="bg-[#0E0E14] border border-[#1E1E28] ml-3"
+                        className={`bg-[#0E0E14] border ml-3 transition-colors ${isSelected ? "border-amber-500/60" : "border-[#1E1E28]"}`}
                       >
-                        <button
-                          onClick={() => setExpanded(isOpen ? null : c.checkin_id)}
-                          className="w-full p-4 flex justify-between items-center text-left cursor-pointer hover:bg-[#15151C] transition-colors"
-                        >
-                          <div>
-                            <p className="font-medium text-zinc-100">
-                              {new Date(c.data_arrivo).toLocaleDateString("it-IT")} → {new Date(c.data_partenza).toLocaleDateString("it-IT")}
-                            </p>
-                            <p className="text-[10px] tracking-[0.2em] uppercase text-zinc-500 mt-1 font-mono">
-                              {c.guests?.[0]
-                                ? `${c.guests[0].cognome || ''} ${c.guests[0].nome || ''}`.trim()
-                                : "—"}
-                              {c.guests?.length > 1 && (
-                                <span className="text-zinc-600"> (+{c.guests.length - 1})</span>
-                              )}
-                              {" · "}[{c.mode}] · {new Date(c.created_at).toLocaleString("it-IT")}
-                            </p>
-                          </div>
-                          <div className="flex gap-2 font-mono text-[10px]">
-                            <Tag ok={aw?.success} skipped={aw?.skipped} label="AW" />
-                            <Tag ok={r1k?.success} skipped={r1k?.skipped} label="T5" />
-                            <Tag ok={is_?.success} skipped={is_?.skipped} label="IS" />
-                          </div>
-                        </button>
+                        <div className="flex items-stretch">
+                          {deletable && (
+                            <label
+                              className="flex items-center px-3 border-r border-[#1E1E28] cursor-pointer hover:bg-[#15151C]"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => toggleSelect(c.checkin_id)}
+                                data-testid={`select-checkin-${c.checkin_id}`}
+                                className="accent-amber-500 w-4 h-4 cursor-pointer"
+                              />
+                            </label>
+                          )}
+                          <button
+                            onClick={() => setExpanded(isOpen ? null : c.checkin_id)}
+                            className="flex-1 p-4 flex justify-between items-center text-left cursor-pointer hover:bg-[#15151C] transition-colors"
+                          >
+                            <div>
+                              <p className="font-medium text-zinc-100">
+                                {new Date(c.data_arrivo).toLocaleDateString("it-IT")} → {new Date(c.data_partenza).toLocaleDateString("it-IT")}
+                              </p>
+                              <p className="text-[10px] tracking-[0.2em] uppercase text-zinc-500 mt-1 font-mono">
+                                {c.guests?.[0]
+                                  ? `${c.guests[0].cognome || ''} ${c.guests[0].nome || ''}`.trim()
+                                  : "—"}
+                                {c.guests?.length > 1 && (
+                                  <span className="text-zinc-600"> (+{c.guests.length - 1})</span>
+                                )}
+                                {" · "}[{c.mode}] · {new Date(c.created_at).toLocaleString("it-IT")}
+                              </p>
+                            </div>
+                            <div className="flex gap-2 font-mono text-[10px]">
+                              <Tag ok={aw?.success} skipped={aw?.skipped} label="AW" />
+                              <Tag ok={r1k?.success} skipped={r1k?.skipped} label="T5" />
+                              <Tag ok={is_?.success} skipped={is_?.skipped} label="IS" />
+                            </div>
+                          </button>
+                        </div>
 
                         {isOpen && (
                           <div className="border-t border-[#1E1E28] p-4 flex flex-col gap-3 font-mono text-xs">
