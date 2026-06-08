@@ -1409,66 +1409,105 @@ async def create_comune_receipt(
     else:
         ospite_res = g.get("luogo_nascita") or "—"
 
-    nights = calc.get("nights", 1)
-    totale = calc.get("totale_imposta", 0.0)
     breakdown = calc.get("breakdown", []) or []
     n_adulti_paganti = sum(1 for b in breakdown if not b.get("esente"))
     n_esenti = sum(1 for b in breakdown if b.get("esente"))
-    # Total taxed nights = sum of "notti_tassabili" for paying guests
-    n_pernottamenti = sum(int(b.get("notti_tassabili", 0)) for b in breakdown if not b.get("esente"))
-    # If no breakdown (degenerate case), fallback to len(guests) × nights
     if not breakdown and guests:
         n_adulti_paganti = len(guests)
-        n_pernottamenti = n_adulti_paganti * nights
 
-    pdf_bytes = generate_comune_receipt(
-        numero_ricevuta=body.numero_ricevuta,
-        data_ricevuta=body.data_ricevuta,
-        comune_nome=prop.get("comune", "—"),
-        property_name=prop.get("nome", ""),
-        property_address=f"{prop.get('indirizzo','')} {prop.get('cap','')}".strip(),
-        property_comune=f"{prop.get('comune','')} ({prop.get('provincia','')})",
-        proprietario=prop.get("proprietario", ""),
-        codice_fiscale=prop.get("codice_fiscale", ""),
-        ospite_nome_cognome=ospite_nome,
-        ospite_residenza=ospite_res,
-        importo=totale,
-        data_arrivo=c["data_arrivo"],
-        data_partenza=c["data_partenza"],
-        pernottamenti=n_pernottamenti,
-        n_adulti=n_adulti_paganti,
-        n_esenti=n_esenti,
-        comune_piva=body.comune_piva,
-        comune_pec=body.comune_pec,
-    )
+    # ============================================================
+    # Multi-month split: if stay spans more than one calendar month,
+    # we generate one separate receipt per month containing paying
+    # nights. Numbering starts at body.numero_ricevuta then +1, +2…
+    # ============================================================
+    from datetime import date as _date, timedelta as _timedelta
+    arr = _date.fromisoformat(c["data_arrivo"])
+    dep = _date.fromisoformat(c["data_partenza"])
+    stay_nights = max(1, (dep - arr).days)
+    max_notti = max(1, int((prop.get("imposta_soggiorno") or {}).get("max_notti_tassabili", 7)))
+    paying_total = min(stay_nights, max_notti)
 
-    # Archive entry in the checkin record
-    import secrets as _secrets
-    receipt_entry = {
-        "numero": body.numero_ricevuta,
-        "data": body.data_ricevuta,
-        "ospite_index": idx,
-        "ospite_nome": ospite_nome,
-        "importo": totale,
-        "data_arrivo": c["data_arrivo"],
-        "data_partenza": c["data_partenza"],
-        "generated_at": datetime.now(timezone.utc).isoformat(),
-        "pdf_base64": base64.b64encode(pdf_bytes).decode(),
-        "share_token": _secrets.token_urlsafe(24),
-    }
-    result = await db.checkins.find_one_and_update(
-        {"checkin_id": checkin_id},
-        {"$push": {"comune_receipts": receipt_entry}},
-        return_document=True,
-        projection={"_id": 0, "comune_receipts": 1},
+    # Build list of (year, month) for each PAYING night (in order from arrival)
+    months_seq = []
+    cur = arr
+    for _i in range(paying_total):
+        months_seq.append((cur.year, cur.month))
+        cur += _timedelta(days=1)
+
+    # Group → preserve order of first appearance, count nights per month
+    month_groups = []
+    for ym in months_seq:
+        if month_groups and month_groups[-1]["ym"] == ym:
+            month_groups[-1]["nights"] += 1
+        else:
+            month_groups.append({"ym": ym, "nights": 1})
+
+    tariffa = float((prop.get("imposta_soggiorno") or {}).get("tariffa_per_notte", 0))
+
+    base_num = int(body.numero_ricevuta)
+    generated = []
+    for offset, mg in enumerate(month_groups):
+        nights_in_month = mg["nights"]
+        # importo per this slice = tariffa × paying-guests × nights_in_this_month
+        # n_adulti_paganti remains the same group across the stay.
+        importo_slice = round(tariffa * n_adulti_paganti * nights_in_month, 2)
+        pernottamenti_slice = n_adulti_paganti * nights_in_month
+        numero_slice = str(base_num + offset)
+
+        pdf_slice = generate_comune_receipt(
+            numero_ricevuta=numero_slice,
+            data_ricevuta=body.data_ricevuta,
+            comune_nome=prop.get("comune", "—"),
+            property_name=prop.get("nome", ""),
+            property_address=f"{prop.get('indirizzo','')} {prop.get('cap','')}".strip(),
+            property_comune=f"{prop.get('comune','')} ({prop.get('provincia','')})",
+            proprietario=prop.get("proprietario", ""),
+            codice_fiscale=prop.get("codice_fiscale", ""),
+            ospite_nome_cognome=ospite_nome,
+            ospite_residenza=ospite_res,
+            importo=importo_slice,
+            data_arrivo=c["data_arrivo"],
+            data_partenza=c["data_partenza"],
+            pernottamenti=pernottamenti_slice,
+            n_adulti=n_adulti_paganti,
+            n_esenti=n_esenti,
+            comune_piva=body.comune_piva,
+            comune_pec=body.comune_pec,
+        )
+
+        import secrets as _secrets
+        entry = {
+            "numero": numero_slice,
+            "data": body.data_ricevuta,
+            "ospite_index": idx,
+            "ospite_nome": ospite_nome,
+            "importo": importo_slice,
+            "data_arrivo": c["data_arrivo"],
+            "data_partenza": c["data_partenza"],
+            "month_year": f"{mg['ym'][0]}-{mg['ym'][1]:02d}",
+            "notti_pagate": nights_in_month,
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "pdf_base64": base64.b64encode(pdf_slice).decode(),
+            "share_token": _secrets.token_urlsafe(24),
+        }
+        await db.checkins.update_one(
+            {"checkin_id": checkin_id},
+            {"$push": {"comune_receipts": entry}},
+        )
+        generated.append({"numero": numero_slice, "month": entry["month_year"], "notti": nights_in_month, "importo": importo_slice})
+
+    # Get new indices after all pushes
+    refreshed = await db.checkins.find_one(
+        {"checkin_id": checkin_id}, {"_id": 0, "comune_receipts": 1}
     )
-    new_index = len(result.get("comune_receipts", [])) - 1 if result else 0
+    total_now = len(refreshed.get("comune_receipts", []))
 
     return {
         "ok": True,
-        "index": new_index,
-        "numero": body.numero_ricevuta,
-        "download_url": f"/api/checkins/{checkin_id}/comune-receipts/{new_index}",
+        "split": len(generated) > 1,
+        "receipts": generated,
+        "first_index": total_now - len(generated),
+        "last_index": total_now - 1,
     }
 
 
@@ -1970,16 +2009,20 @@ async def comune_receipts_monthly_summary(cf: str, user=Depends(get_current_user
     async for c in cursor:
         calc = (c.get("results", {}).get("imposta_soggiorno") or {}).get("calculation") or {}
         breakdown = calc.get("breakdown", []) or []
-        # Per-checkin paying counters (used for each receipt of this checkin)
         paying_guests = sum(1 for b in breakdown if not b.get("esente"))
-        paying_nights = sum(int(b.get("notti_tassabili", 0) or 0) for b in breakdown if not b.get("esente"))
 
         for r in c.get("comune_receipts", []) or []:
-            # Date for monthly grouping: use receipt "data" (data ricevuta), fallback generated_at
-            dstr = r.get("data") or r.get("generated_at", "")[:10]
-            if not dstr or len(dstr) < 7:
+            # Date for monthly grouping: prefer the receipt's month_year if present
+            # (set when stay spans multiple months → 1 receipt per month),
+            # else fall back to "data" (data ricevuta), else generated_at.
+            mkey = r.get("month_year")
+            if not mkey:
+                dstr = r.get("data") or r.get("generated_at", "")[:10]
+                if not dstr or len(dstr) < 7:
+                    continue
+                mkey = dstr[:7]
+            if len(mkey) < 7:
                 continue
-            mkey = dstr[:7]  # "YYYY-MM"
             if mkey not in months:
                 y, m = mkey.split("-")
                 months[mkey] = {
@@ -1994,7 +2037,12 @@ async def comune_receipts_monthly_summary(cf: str, user=Depends(get_current_user
             agg = months[mkey]
             agg["receipts"].append(r.get("numero", ""))
             agg["persone_paganti"] += paying_guests
-            agg["notti_totali"] += paying_nights
+            # Cumulative paying calendar nights for this month
+            if "notti_pagate" in r:
+                agg["notti_totali"] += int(r.get("notti_pagate", 0) or 0)
+            else:
+                # Old (whole-stay) receipts: sum from breakdown
+                agg["notti_totali"] += sum(int(b.get("notti_tassabili", 0) or 0) for b in breakdown if not b.get("esente"))
             agg["totale_imposta"] += float(r.get("importo", 0) or 0)
             agg["receipts_count"] += 1
 
