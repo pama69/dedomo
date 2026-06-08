@@ -3303,6 +3303,86 @@ async def fetch_alloggiati_receipts():
             logger.error(f"[receipts-job] error on {c.get('checkin_id')}: {e}")
 
 
+async def daily_ross1000_zero_movement():
+    """Daily at 23:59 (Europe/Rome): for every PROD property with ross1000 enabled
+    that didn't transmit any check-in TODAY, send a "zero movement" payload."""
+    from datetime import date as _date
+    today = _date.today()
+    today_iso = today.isoformat()
+
+    cursor = db.properties.find(
+        {"mode": "PROD", "ross1000.enabled": True},
+        {"_id": 0, "property_id": 1, "user_id": 1, "nome": 1, "ross1000": 1},
+    )
+    async for p in cursor:
+        try:
+            # Check if any checkin for this property transmitted Ross1000 today
+            already = await db.checkins.find_one(
+                {
+                    "property_id": p["property_id"],
+                    "user_id": p["user_id"],
+                    "mode": "PROD",
+                    "results.ross1000.success": True,
+                    "$or": [
+                        {"results.ross1000.submitted_at": {"$regex": f"^{today_iso}"}},
+                        {"data_arrivo": today_iso},
+                    ],
+                },
+                {"_id": 0, "checkin_id": 1},
+            )
+            if already:
+                continue
+
+            # Skip if a zero-movement was already sent today
+            existing = await db.ross1000_zero_movements.find_one(
+                {"property_id": p["property_id"], "date": today_iso}
+            )
+            if existing:
+                continue
+
+            r1k_cfg = p.get("ross1000") or {}
+            payload = {
+                "rentals": [p.get("nome", "")],
+                "arrival_guest_count": 0,
+                "departure_guest_count": 0,
+                "result": {
+                    "arrivi": None,
+                    "partenze": None,
+                    "prenotazioni": None,
+                    "retifiche": None,
+                },
+            }
+
+            try:
+                from services.ross1000 import submit_to_endpoint as _ross_submit
+                result = _ross_submit(
+                    endpoint_url=r1k_cfg.get("endpoint_url", ""),
+                    username=r1k_cfg.get("utente", ""),
+                    password=r1k_cfg.get("password", ""),
+                    format_type=r1k_cfg.get("format_type", "rest_json"),
+                    payload=payload,
+                    test_mode=False,
+                )
+            except Exception as e:
+                result = {"success": False, "message": f"Errore client: {e}"}
+
+            await db.ross1000_zero_movements.insert_one(
+                {
+                    "property_id": p["property_id"],
+                    "user_id": p["user_id"],
+                    "date": today_iso,
+                    "payload": payload,
+                    "result": result,
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                }
+            )
+            logger.info(
+                f"[ross1000-zero] property={p.get('nome')} success={result.get('success')}"
+            )
+        except Exception as e:
+            logger.error(f"[ross1000-zero] error on property {p.get('property_id')}: {e}")
+
+
 @app.on_event("startup")
 async def startup_scheduler():
     global scheduler
@@ -3327,6 +3407,12 @@ async def startup_scheduler():
         refresh_ical_caches, "date",
         run_date=datetime.now(timezone.utc) + timedelta(seconds=45),
         id="ical_refresh_initial",
+    )
+    # Daily at 23:59 Europe/Rome — send Ross1000 zero-movement for inactive properties
+    scheduler.add_job(
+        daily_ross1000_zero_movement,
+        "cron", hour=23, minute=59,
+        id="ross1000_zero_daily",
     )
     scheduler.start()
     logger.info("[scheduler] started")
