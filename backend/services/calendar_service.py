@@ -49,33 +49,69 @@ def fetch_ical_events(url: str, timeout: int = 10) -> List[Dict[str, Any]]:
     return events
 
 
+def _ascii_safe(text: str) -> str:
+    """Strip non-ASCII characters that some iCal parsers (Airbnb) reject.
+
+    Replaces common typographic chars and falls back to ascii-only.
+    """
+    if not text:
+        return ""
+    replacements = {"·": "-", "–": "-", "—": "-", "’": "'", "“": '"', "”": '"'}
+    for k, v in replacements.items():
+        text = text.replace(k, v)
+    return text.encode("ascii", "ignore").decode("ascii").strip() or "Reserved"
+
+
 def build_personal_ical(
     property_name: str,
     bookings: List[Dict[str, Any]],
 ) -> str:
-    """Build an iCal calendar from a list of manual bookings.
+    """Build an Airbnb-compatible iCal calendar from a list of manual bookings.
 
     Each booking dict expected: {booking_id, start, end, notes}.
+    Output conforms to RFC 5545 with the extra hints Airbnb requires:
+      - METHOD:PUBLISH on the VCALENDAR
+      - STATUS:CONFIRMED + TRANSP:OPAQUE on each VEVENT (blocks the dates)
+      - ASCII-safe SUMMARY field
     """
+    safe_name = _ascii_safe(property_name) or "Property"
+
     cal = Calendar()
     cal.add("prodid", "-//Dedomo//Personal Calendar//IT")
     cal.add("version", "2.0")
-    cal.add("name", f"Dedomo · {property_name}")
-    cal.add("x-wr-calname", f"Dedomo · {property_name}")
+    cal.add("method", "PUBLISH")
     cal.add("calscale", "GREGORIAN")
+    cal.add("name", f"Dedomo - {safe_name}")
+    cal.add("x-wr-calname", f"Dedomo - {safe_name}")
+    cal.add("x-wr-timezone", "Europe/Rome")
+
+    now_utc = datetime.now(timezone.utc)
+
     for b in bookings:
         ev = Event()
-        ev.add("uid", f"{b['booking_id']}@dedomo")
         try:
             start = date.fromisoformat(b["start"])
             end = date.fromisoformat(b["end"])
         except (ValueError, KeyError):
             continue
+        ev.add("uid", f"{b['booking_id']}@dedomo")
+        ev.add("dtstamp", now_utc)
+        ev.add("created", now_utc)
+        ev.add("last-modified", now_utc)
         ev.add("dtstart", start)
         ev.add("dtend", end)
-        ev.add("summary", f"Dedomo · {property_name}")
-        if b.get("notes"):
-            ev.add("description", b["notes"])
-        ev.add("dtstamp", datetime.now(timezone.utc))
+        # Airbnb-friendly: must mark as confirmed + opaque to actually block dates
+        ev.add("status", "CONFIRMED")
+        ev.add("transp", "OPAQUE")
+        # Summary: keep ASCII-only. Include "Reserved" so external platforms
+        # (Airbnb in particular) recognize this as a blocking booking.
+        notes = _ascii_safe(b.get("notes") or "")
+        if notes:
+            ev.add("summary", f"Reserved - {safe_name} ({notes})")
+            ev.add("description", notes)
+        else:
+            ev.add("summary", f"Reserved - {safe_name}")
+            ev.add("description", f"Manual booking on {safe_name}")
         cal.add_component(ev)
+
     return cal.to_ical().decode("utf-8")
