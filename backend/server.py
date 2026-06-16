@@ -2812,7 +2812,9 @@ async def calendar_personal_url(property_id: str, user=Depends(get_current_user)
 
 
 # Public (no auth) endpoint — protected by token in URL
-@api_router.get("/calendar/export/{property_id}/{token}.ics")
+# Allow HEAD too: Airbnb / Booking / Vrbo / Google Calendar do a HEAD first
+# to validate the URL and read Last-Modified before subscribing.
+@api_router.api_route("/calendar/export/{property_id}/{token}.ics", methods=["GET", "HEAD"])
 async def calendar_export_ics(property_id: str, token: str):
     p = await db.properties.find_one(
         {"property_id": property_id}, {"_id": 0}
@@ -2829,10 +2831,16 @@ async def calendar_export_ics(property_id: str, token: str):
         property_name=p.get("nome", "Dedomo"),
         bookings=bookings,
     )
+    # Last-Modified helps caching clients (Airbnb especially)
+    last_mod = datetime.now(timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
     return Response(
         content=ical_text,
         media_type="text/calendar; charset=utf-8",
-        headers={"Cache-Control": "no-store"},
+        headers={
+            "Cache-Control": "no-store",
+            "Last-Modified": last_mod,
+            "Content-Disposition": f'inline; filename="{property_id}.ics"',
+        },
     )
 
 
