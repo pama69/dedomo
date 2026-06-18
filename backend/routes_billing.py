@@ -12,7 +12,7 @@ from __future__ import annotations
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Body
 from pydantic import BaseModel
 
 from services import billing as billing_svc
@@ -20,16 +20,28 @@ from services import billing as billing_svc
 logger = logging.getLogger(__name__)
 
 
+# Pydantic models MUST be defined at module level (not inside a closure)
+# otherwise FastAPI/Pydantic 2.13 can't resolve the ForwardRef and the request
+# body gets interpreted as query parameters (returns 422 "field required").
+class CheckoutBody(BaseModel):
+    num_properties: int
+    origin_url: str  # frontend window.location.origin
+
+
+class PortalBody(BaseModel):
+    return_url: str
+
+
 def build_billing_router(db, get_current_user, get_admin_user) -> APIRouter:
     router = APIRouter()
 
     # --------------- CHECKOUT ---------------
-    class CheckoutBody(BaseModel):
-        num_properties: int
-        origin_url: str  # frontend window.location.origin
 
     @router.post("/billing/create-checkout-session")
-    async def create_checkout(body: CheckoutBody, user=Depends(get_current_user)):
+    async def create_checkout(
+        body: CheckoutBody = Body(...),
+        user=Depends(get_current_user),
+    ):
         if body.num_properties < 1 or body.num_properties > billing_svc.MAX_PAID_PROPERTIES:
             raise HTTPException(400, f"num_properties deve essere tra 1 e {billing_svc.MAX_PAID_PROPERTIES}")
         if user.get("unlimited"):
@@ -57,11 +69,11 @@ def build_billing_router(db, get_current_user, get_admin_user) -> APIRouter:
             raise HTTPException(500, f"Errore verifica pagamento: {str(e)}")
 
     # --------------- CUSTOMER PORTAL ---------------
-    class PortalBody(BaseModel):
-        return_url: str
-
     @router.post("/billing/customer-portal")
-    async def customer_portal(body: PortalBody, user=Depends(get_current_user)):
+    async def customer_portal(
+        body: PortalBody = Body(...),
+        user=Depends(get_current_user),
+    ):
         try:
             url = await billing_svc.create_portal_session(db, user, body.return_url)
             return {"url": url}
