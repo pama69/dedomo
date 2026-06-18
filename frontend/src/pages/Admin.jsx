@@ -181,6 +181,7 @@ function UserDetailModal({ userId, onClose, onChanged }) {
   const [loading, setLoading] = useState(true);
   const [toggling, setToggling] = useState(false);
   const [confirmToggle, setConfirmToggle] = useState(false);
+  const [unlimitedToggling, setUnlimitedToggling] = useState(false);
   const [error, setError] = useState("");
 
   const load = async () => {
@@ -226,6 +227,28 @@ function UserDetailModal({ userId, onClose, onChanged }) {
     if (!iso) return "—";
     try { return new Date(iso).toLocaleDateString("it-IT"); } catch { return iso; }
   };
+
+  const toggleUnlimited = async () => {
+    setUnlimitedToggling(true);
+    setError("");
+    try {
+      const r = await api.post(`/admin/user/${userId}/toggle-unlimited`);
+      const newVal = !!r.data?.unlimited;
+      setData((prev) => prev ? ({
+        ...prev,
+        user: { ...prev.user, unlimited: newVal },
+      }) : prev);
+      onChanged && onChanged();
+      setError(newVal ? "✓ Account reso ILLIMITATO" : "✓ Account riportato a piano standard");
+      setTimeout(() => setError(""), 3000);
+    } catch (e) {
+      const msg = e.response?.data?.detail || e.message || `HTTP ${e.response?.status || "?"}`;
+      setError(`Errore: ${msg}`);
+    } finally {
+      setUnlimitedToggling(false);
+    }
+  };
+
 
   return (
     <div
@@ -286,6 +309,22 @@ function UserDetailModal({ userId, onClose, onChanged }) {
                     <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-zinc-100 transition-all ${data.user.disabled ? "left-0.5" : "right-0.5"}`} />
                   </div>
                   {toggling ? "..." : (data.user.disabled ? "Riattiva" : "Disabilita")}
+                </button>
+                <button
+                  onClick={toggleUnlimited}
+                  disabled={unlimitedToggling}
+                  data-testid="admin-user-toggle-unlimited"
+                  title="Account illimitato: bypassa pagamenti e quota proprietà"
+                  className={`flex items-center gap-2 px-3 py-2 border text-[10px] uppercase tracking-[0.25em] cursor-pointer transition-colors disabled:opacity-50 ${
+                    data.user.unlimited
+                      ? "border-amber-500/60 hover:bg-amber-500/10 text-amber-400"
+                      : "border-[#1E1E28] hover:border-amber-500 text-zinc-400 hover:text-amber-400"
+                  }`}
+                >
+                  <div className={`w-8 h-4 rounded-full relative transition-colors ${data.user.unlimited ? "bg-amber-500/40" : "bg-[#1E1E28]"}`}>
+                    <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-zinc-100 transition-all ${data.user.unlimited ? "right-0.5" : "left-0.5"}`} />
+                  </div>
+                  {unlimitedToggling ? "..." : (data.user.unlimited ? "Illimitato ON" : "Illimitato OFF")}
                 </button>
               </div>
             </div>

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import Layout from "@/components/Layout";
 import api from "@/lib/api";
+import PaywallModal from "@/components/PaywallModal";
 
 const emptyGuest = () => ({
   cognome: "",
@@ -38,6 +39,7 @@ export default function Checkin() {
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
+  const [paywall, setPaywall] = useState(null); // {reason, used, limit, paid} | null
 
   useEffect(() => {
     api.get("/properties").then((r) => setProperties(r.data));
@@ -529,7 +531,18 @@ export default function Checkin() {
       setResult(r.data);
       setStep(5);
     } catch (e) {
+      const status = e.response?.status;
       const detail = e.response?.data?.detail;
+      // 402 = paywall (quota exceeded)
+      if (status === 402 && detail && typeof detail === "object") {
+        setPaywall({
+          reason: detail.error || "quota_trial_exceeded",
+          used: detail.used,
+          limit: detail.limit,
+          paid: detail.paid,
+        });
+        return;
+      }
       let msg = "Errore invio";
       if (typeof detail === "string") {
         msg = detail;
@@ -711,6 +724,12 @@ export default function Checkin() {
       {step === 3 && renderStep3()}
       {step === 4 && renderStep4()}
       {step === 5 && renderStep5()}
+      <PaywallModal
+        open={!!paywall}
+        reason={paywall?.reason}
+        details={paywall || {}}
+        onClose={() => setPaywall(null)}
+      />
     </Layout>
   );
 }

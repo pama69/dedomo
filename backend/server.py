@@ -59,6 +59,8 @@ from services.retry_service import (
     is_due_for_retry,
     MAX_ATTEMPTS,
 )
+from services import billing as billing_svc
+from routes_billing import build_billing_router
 
 
 ROOT_DIR = Path(__file__).parent
@@ -134,8 +136,26 @@ class SessionRequest(BaseModel):
     session_id: str
 
 
+# IPs that are always allowed to register multiple users (admin/dev override)
+LOCAL_IP_WHITELIST = {"127.0.0.1", "::1", "localhost"}
+SUPERUSER_EMAILS = set(
+    e.strip().lower() for e in os.environ.get("SUPERUSER_EMAILS", "").split(",") if e.strip()
+)
+
+
+def _client_ip(request: Request) -> str:
+    """Extract client IP, honouring X-Forwarded-For (proxy/Cloudflare)."""
+    xff = request.headers.get("x-forwarded-for", "")
+    if xff:
+        return xff.split(",")[0].strip()
+    cf = request.headers.get("cf-connecting-ip", "")
+    if cf:
+        return cf.strip()
+    return request.client.host if request.client else ""
+
+
 @api_router.post("/auth/session")
-async def auth_session(req: SessionRequest, response: Response):
+async def auth_session(req: SessionRequest, request: Request, response: Response):
     """Exchange Emergent session_id for our session_token."""
     try:
         r = requests.get(
@@ -153,6 +173,9 @@ async def auth_session(req: SessionRequest, response: Response):
     existing = await db.users.find_one({"email": email}, {"_id": 0})
     if existing and existing.get("disabled"):
         raise HTTPException(status_code=403, detail="UTENTE DISABILITATO")
+
+    client_ip = _client_ip(request)
+
     if existing:
         user_id = existing["user_id"]
         await db.users.update_one(
@@ -160,16 +183,53 @@ async def auth_session(req: SessionRequest, response: Response):
             {"$set": {"name": data.get("name"), "picture": data.get("picture")}},
         )
     else:
+        # NEW REGISTRATION: IP rate limit
+        # Block if another (different) user already registered from this IP,
+        # except: localhost/whitelist OR superuser emails OR ip in admin whitelist
+        allow_ip_override = (
+            (client_ip in LOCAL_IP_WHITELIST)
+            or ((email or "").lower() in SUPERUSER_EMAILS)
+            or ((email or "").lower() in ADMIN_EMAILS)
+        )
+        if not allow_ip_override and client_ip:
+            other_reg = await db.ip_registrations.find_one({"ip": client_ip})
+            if other_reg:
+                # Allow override if admin has whitelisted this IP
+                wl = await db.ip_whitelist.find_one({"ip": client_ip})
+                if not wl:
+                    raise HTTPException(
+                        status_code=409,
+                        detail=(
+                            "Registrazione non consentita: è già stato creato "
+                            "un account da questo indirizzo IP. Contatta il supporto "
+                            "se ritieni si tratti di un errore."
+                        ),
+                    )
         user_id = f"user_{uuid.uuid4().hex[:12]}"
+        # Auto-grant unlimited on superuser email
+        is_super = (email or "").lower() in SUPERUSER_EMAILS
         await db.users.insert_one(
             {
                 "user_id": user_id,
                 "email": email,
                 "name": data.get("name"),
                 "picture": data.get("picture"),
+                "registration_ip": client_ip,
+                "unlimited": is_super,
                 "created_at": datetime.now(timezone.utc).isoformat(),
             }
         )
+        if client_ip:
+            await db.ip_registrations.insert_one({
+                "ip": client_ip,
+                "user_id": user_id,
+                "email": email,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            })
+
+    # Safety net: ensure superuser email is always flagged unlimited
+    if (email or "").lower() in SUPERUSER_EMAILS:
+        await db.users.update_one({"user_id": user_id}, {"$set": {"unlimited": True}})
 
     session_token = data["session_token"]
     expires_at = datetime.now(timezone.utc) + timedelta(days=7)
@@ -208,6 +268,7 @@ async def auth_me(user: Dict[str, Any] = Depends(get_current_user)):
         "name": user.get("name"),
         "picture": user.get("picture"),
         "is_admin": (user.get("email") or "").lower() in ADMIN_EMAILS,
+        "unlimited": bool(user.get("unlimited", False)),
     }
 
 
@@ -299,6 +360,21 @@ async def list_properties(user=Depends(get_current_user)):
 
 @api_router.post("/properties")
 async def create_property(body: PropertyCreate, user=Depends(get_current_user)):
+    # QUOTA CHECK: if user is on paid plan, hard-cap at sub.quantity
+    if not user.get("unlimited"):
+        sub = await db.subscriptions.find_one({"user_id": user["user_id"]})
+        sub_active = bool(sub and sub.get("status") in ("active", "trialing", "past_due"))
+        if sub_active:
+            paid_qty = int(sub.get("quantity") or 0)
+            current = await db.properties.count_documents({"user_id": user["user_id"]})
+            if current >= paid_qty:
+                raise HTTPException(
+                    status_code=402,
+                    detail=(
+                        f"Hai raggiunto il limite di {paid_qty} proprietà del tuo "
+                        "piano. Effettua l'upgrade per aggiungerne altre."
+                    ),
+                )
     prop = Property(user_id=user["user_id"], **body.model_dump())
     await db.properties.insert_one(prop.model_dump())
     return prop.model_dump()
@@ -831,6 +907,43 @@ async def checkin_submit(body: CheckinSubmit, user=Depends(get_current_user)):
     part = datetime.fromisoformat(body.data_partenza)
     giorni = max(1, (part - arr).days)
     test_mode = prop.get("mode", "TEST") == "TEST"
+
+    # ---------- BILLING QUOTA GATE (PROD only) ----------
+    # TEST submissions are free / unlimited.
+    if not test_mode and not user.get("unlimited"):
+        sub = await db.subscriptions.find_one({"user_id": user["user_id"]})
+        sub_active = bool(sub and sub.get("status") in ("active", "trialing", "past_due"))
+        if sub_active:
+            paid_qty = int(sub.get("quantity") or 0)
+            prop_count = await db.properties.count_documents({"user_id": user["user_id"]})
+            if prop_count > paid_qty:
+                raise HTTPException(
+                    status_code=402,
+                    detail={
+                        "error": "quota_properties_exceeded",
+                        "message": (
+                            f"Hai {prop_count} proprietà ma il tuo piano ne copre {paid_qty}. "
+                            "Effettua l'upgrade prima di inviare."
+                        ),
+                        "paid": paid_qty,
+                        "used": prop_count,
+                    },
+                )
+        else:
+            used = await db.checkins.count_documents({"user_id": user["user_id"], "mode": "PROD"})
+            if used >= billing_svc.TRIAL_SUBMISSIONS:
+                raise HTTPException(
+                    status_code=402,
+                    detail={
+                        "error": "quota_trial_exceeded",
+                        "message": (
+                            f"Hai esaurito i {billing_svc.TRIAL_SUBMISSIONS} invii gratuiti. "
+                            "Sottoscrivi un piano per continuare."
+                        ),
+                        "used": used,
+                        "limit": billing_svc.TRIAL_SUBMISSIONS,
+                    },
+                )
 
     results: Dict[str, Any] = {"test_mode": test_mode}
 
@@ -2572,6 +2685,8 @@ async def admin_user_detail(user_id: str, admin=Depends(get_admin_user)):
             "created_at": u.get("created_at"),
             "disabled": bool(u.get("disabled", False)),
             "disabled_at": u.get("disabled_at"),
+            "unlimited": bool(u.get("unlimited", False)),
+            "registration_ip": u.get("registration_ip"),
         },
         "stats": {
             "checkins_total": ck_total,
@@ -3397,6 +3512,24 @@ async def daily_ross1000_zero_movement():
 @app.on_event("startup")
 async def startup_scheduler():
     global scheduler
+    # ---------- BILLING BOOTSTRAP ----------
+    # Idempotently create Stripe Product/Price/TaxRate, ensure super-user flag
+    try:
+        await billing_svc.ensure_stripe_resources(db)
+    except Exception as e:
+        logger.warning(f"[startup] stripe resources init failed: {e}")
+    try:
+        # Promote configured superuser emails to unlimited
+        super_emails = SUPERUSER_EMAILS
+        if super_emails:
+            await db.users.update_many(
+                {"email": {"$in": list(super_emails)}},
+                {"$set": {"unlimited": True}},
+            )
+            logger.info(f"[startup] superuser flag set for {super_emails}")
+    except Exception as e:
+        logger.warning(f"[startup] superuser bootstrap failed: {e}")
+
     scheduler = AsyncIOScheduler(timezone="Europe/Rome")
     # Run every hour, plus once at startup after 60s
     scheduler.add_job(fetch_alloggiati_receipts, "interval", hours=1, id="aw_receipts")
@@ -3431,3 +3564,7 @@ async def startup_scheduler():
 
 # Include all routes AFTER they are all defined
 app.include_router(api_router)
+
+# Billing router (Stripe Checkout subscriptions)
+billing_router = build_billing_router(db, get_current_user, get_admin_user)
+app.include_router(billing_router, prefix="/api")

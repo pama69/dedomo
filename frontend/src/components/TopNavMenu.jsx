@@ -6,6 +6,7 @@ const items = [
   { to: "/calendar", label: "Calendario", testid: "nav-calendar-tab" },
   { to: "/archive", label: "Archivio", testid: "nav-archive-tab" },
   { to: "/settings", label: "Impostazioni", testid: "nav-settings-tab" },
+  { to: "/billing/pricing", label: "Abbonamento", testid: "nav-billing-tab" },
 ];
 
 export default function TopNavMenu() {
