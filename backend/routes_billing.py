@@ -92,38 +92,65 @@ def build_billing_router(db, get_current_user, get_admin_user) -> APIRouter:
         await db.users.update_one({"user_id": user_id}, {"$set": {"unlimited": new_val}})
         return {"ok": True, "unlimited": new_val}
 
-    # --------------- WEBHOOK (best effort) ---------------
-    # The Emergent test proxy may not deliver webhooks. Polling is the primary
-    # mechanism. This endpoint is exposed for production deployments with real
-    # Stripe keys where webhook events can be configured.
+    # --------------- WEBHOOK ---------------
+    # When STRIPE_WEBHOOK_SECRET is set we verify the Stripe-Signature header.
+    # Without a secret we fall back to parsing the JSON unverified (dev only).
     @router.post("/webhook/stripe")
     async def stripe_webhook(request: Request):
+        import os, stripe as stripe_sdk
         try:
             payload = await request.body()
             sig = request.headers.get("Stripe-Signature", "")
-            # Without configured webhook secret we don't verify the signature.
-            import json
-            try:
-                event = json.loads(payload.decode("utf-8"))
-            except Exception:
-                return {"received": False}
-            etype = event.get("type")
-            obj = (event.get("data") or {}).get("object") or {}
+            webhook_secret = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
+            if webhook_secret:
+                billing_svc._init_stripe()
+                try:
+                    event = stripe_sdk.Webhook.construct_event(
+                        payload, sig, webhook_secret,
+                    )
+                except stripe_sdk.error.SignatureVerificationError as e:
+                    logger.warning(f"[webhook] invalid signature: {e}")
+                    raise HTTPException(400, "Invalid signature")
+            else:
+                import json
+                try:
+                    event = json.loads(payload.decode("utf-8"))
+                except Exception:
+                    return {"received": False}
+
+            etype = event.get("type") if isinstance(event, dict) else event["type"]
+            obj = (event.get("data") if isinstance(event, dict) else event["data"]).get("object") or {}
 
             if etype == "checkout.session.completed":
                 sid = obj.get("id")
                 if sid:
                     try:
                         await billing_svc.get_checkout_status(db, sid)
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.exception(f"[webhook] checkout.session.completed processing failed: {e}")
             elif etype in ("customer.subscription.updated", "customer.subscription.deleted"):
                 sub_id = obj.get("id")
                 if sub_id:
                     sub = await db.subscriptions.find_one({"stripe_subscription_id": sub_id})
                     if sub:
                         await billing_svc.sync_subscription_from_stripe(db, sub["user_id"])
+                    # If deleted: also flip status to canceled locally
+                    if etype == "customer.subscription.deleted" and sub:
+                        await db.subscriptions.update_one(
+                            {"stripe_subscription_id": sub_id},
+                            {"$set": {"status": "canceled", "updated_at": billing_svc._now_iso()}},
+                        )
+            elif etype == "invoice.payment_failed":
+                # Mark the subscription past_due
+                sub_id = obj.get("subscription")
+                if sub_id:
+                    await db.subscriptions.update_one(
+                        {"stripe_subscription_id": sub_id},
+                        {"$set": {"status": "past_due", "updated_at": billing_svc._now_iso()}},
+                    )
             return {"received": True, "type": etype}
+        except HTTPException:
+            raise
         except Exception as e:
             logger.exception("[billing] webhook error")
             return {"received": False, "error": str(e)}
