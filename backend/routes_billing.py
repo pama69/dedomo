@@ -10,8 +10,6 @@ Endpoints:
 """
 from __future__ import annotations
 import logging
-from typing import Optional
-
 from fastapi import APIRouter, Depends, HTTPException, Request, Body
 from pydantic import BaseModel
 
@@ -109,7 +107,8 @@ def build_billing_router(db, get_current_user, get_admin_user) -> APIRouter:
     # Without a secret we fall back to parsing the JSON unverified (dev only).
     @router.post("/webhook/stripe")
     async def stripe_webhook(request: Request):
-        import os, stripe as stripe_sdk
+        import os
+        import stripe as stripe_sdk
         try:
             payload = await request.body()
             sig = request.headers.get("Stripe-Signature", "")

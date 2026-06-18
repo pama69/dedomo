@@ -192,7 +192,7 @@ function UserDetailModal({ userId, onClose, onChanged }) {
     } finally { setLoading(false); }
   };
 
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [userId]);
+  useEffect(() => { load(); }, [userId]);
 
   const toggleDisabled = async () => {
     setToggling(true);
@@ -457,7 +457,7 @@ function UsersTab() {
     } catch {/* */} finally { setLoading(false); }
   };
 
-  useEffect(() => { reload(); /* eslint-disable-next-line */ }, []);
+  useEffect(() => { reload(); }, []);
 
   const fmtDate = (iso) => {
     if (!iso) return "—";

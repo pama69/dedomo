@@ -31,7 +31,7 @@ export default function OwnerArchive() {
     }
   };
 
-  useEffect(() => { reload(); /* eslint-disable-next-line */ }, [decodedId]);
+  useEffect(() => { reload(); }, [decodedId]);
 
   const downloadFile = async (url, filename) => {
     setDownloading(filename);

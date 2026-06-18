@@ -47,7 +47,7 @@ export default function PaywallModal({ open, reason, onClose, details = {} }) {
             <>
               Hai <b className="text-zinc-100">{details.used}</b> proprietà ma il tuo piano ne copre{" "}
               <b className="text-zinc-100">{details.paid}</b>.<br />
-              Effettua l'upgrade per inviare con tutte le proprietà.
+              Effettua l&apos;upgrade per inviare con tutte le proprietà.
             </>
           ) : (
             <>

@@ -95,7 +95,6 @@ def draw_steps(c, steps, x, y, width):
         text_w = width - 10 * mm
         words = s.split()
         line = ""
-        first = True
         for w in words:
             test = (line + " " + w).strip()
             if c.stringWidth(test, "Helvetica", 9.5) > text_w:

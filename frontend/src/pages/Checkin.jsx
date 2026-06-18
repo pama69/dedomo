@@ -182,7 +182,10 @@ export default function Checkin() {
         copy[activeGuestIdx] = { ...(copy[activeGuestIdx] || emptyGuest()), _doc_preview: previewUrl };
         return copy;
       });
-    } catch {}
+    } catch (previewErr) {
+      // Doc preview is non-critical (used for thumbnail). Log and continue.
+      console.warn("doc preview generation failed:", previewErr);
+    }
     try {
       const { base64: b64, mime } = await compressImage(file);
       const r = await api.post("/ocr/document", {
@@ -899,7 +902,6 @@ function ComuneNascitaField({ luogoNascita, comuneCode, provSigla, notFound, pro
   useEffect(() => {
     const c = cleanQuery(luogoNascita);
     if (c !== query) setQuery(c);
-    // eslint-disable-next-line
   }, [luogoNascita]);
 
   useEffect(() => {
@@ -922,7 +924,6 @@ function ComuneNascitaField({ luogoNascita, comuneCode, provSigla, notFound, pro
       }
     }, 250);
     return () => clearTimeout(handle);
-    // eslint-disable-next-line
   }, [query, focused, propertyId]);
 
   const pick = (c) => {
@@ -1012,7 +1013,6 @@ function PaeseField({ paeseNome, statoCode, propertyId, onChange }) {
   // Sync external value (e.g. from OCR) into local query when paeseNome changes
   useEffect(() => {
     if (paeseNome && paeseNome !== query) setQuery(paeseNome);
-    // eslint-disable-next-line
   }, [paeseNome]);
 
   // Debounced live search
@@ -1036,7 +1036,6 @@ function PaeseField({ paeseNome, statoCode, propertyId, onChange }) {
       }
     }, 250);
     return () => clearTimeout(handle);
-    // eslint-disable-next-line
   }, [query, focused, propertyId]);
 
   const pick = (c) => {

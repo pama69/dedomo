@@ -4,7 +4,7 @@ Backend per invio dati ospiti case vacanza ai portali Alloggiati Web,
 Ross 1000 e Imposta di Soggiorno comunale.
 """
 
-from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, Depends, UploadFile, File
+from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, Depends
 from fastapi.responses import StreamingResponse
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from dotenv import load_dotenv
@@ -2419,8 +2419,6 @@ async def shutdown_db_client():
 @api_router.get("/admin/overview")
 async def admin_overview(admin=Depends(get_admin_user)):
     """Aggregate metrics across all users, properties, checkins."""
-    from datetime import date as _date
-
     now = datetime.now(timezone.utc)
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     week_ago = now - timedelta(days=7)

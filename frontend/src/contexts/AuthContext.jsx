@@ -31,7 +31,11 @@ export function AuthProvider({ children }) {
   const logout = async () => {
     try {
       await api.post("/auth/logout");
-    } catch {}
+    } catch (e) {
+      // Best-effort: even if the server-side logout fails (e.g. expired session),
+      // we still clear the local user state below.
+      console.warn("logout API failed (clearing local session anyway):", e?.message);
+    }
     setUser(null);
   };
 

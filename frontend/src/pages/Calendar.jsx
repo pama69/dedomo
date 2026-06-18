@@ -51,7 +51,7 @@ export default function Calendar() {
     } catch { /* */ } finally { setLoading(false); }
   };
 
-  useEffect(() => { reload(); /* eslint-disable-next-line */ }, [rangeFrom, rangeTo]);
+  useEffect(() => { reload(); }, [rangeFrom, rangeTo]);
 
   const forceRefresh = async () => {
     setRefreshing(true);

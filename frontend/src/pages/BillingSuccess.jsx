@@ -53,7 +53,6 @@ export default function BillingSuccess() {
     };
     poll();
     return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]);
 
   return (
