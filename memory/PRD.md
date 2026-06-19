@@ -1,6 +1,6 @@
 # PRD — Dedomo / Ospitalo
 
-> **Ultimo aggiornamento:** 2026-06-03
+> **Ultimo aggiornamento:** 2026-06-19
 
 ## Problema originale
 Tool web per host di case vacanza italiane: comunicazione obbligatoria ospiti a **Alloggiati Web** (Polizia di Stato, SOAP), **Ross 1000 / Turismo 5** (Regione, SOAP), generazione **Imposta di Soggiorno** PDF, sincronizzazione **iCal** (Booking/Airbnb/Vrbo), **Super Admin** panel, OCR documenti via **GPT-4o-mini Vision** (Emergent LLM Key).
@@ -9,68 +9,68 @@ Tool web per host di case vacanza italiane: comunicazione obbligatoria ospiti a 
 Host che gestisce **più unità immobiliari** (anche di proprietari diversi), accede con Google, configura credenziali separate per ogni struttura, fa check-in rapidi multipli.
 
 ## Stack tecnologico
-- **Backend**: FastAPI + Motor + MongoDB, APScheduler, Zeep (SOAP), ReportLab, icalendar, PyMuPDF
+- **Backend**: FastAPI + Motor + MongoDB, APScheduler, Zeep (SOAP), ReportLab, icalendar, PyMuPDF, Stripe SDK
 - **Frontend**: React 19 + TailwindCSS + react-router-dom v7
 - **Auth**: Emergent Google OAuth (managed) — cookie httpOnly + Authorization Bearer
 - **OCR**: GPT-4o-mini Vision via Emergent Universal LLM Key (`emergentintegrations`)
-- **Image compression**: client-side max 1600px prima upload OCR
+- **Pagamenti**: Stripe Checkout (subscription mode, EUR, Tax Rate manuale IVA 22%)
 
 ## Architettura
 ```
 /app/
 ├── backend/
-│   ├── server.py (FastAPI main: auth, checkins, SOAP routing, admin, calendar, scheduler)
+│   ├── server.py (FastAPI main: auth, checkins, SOAP, admin, calendar, scheduler)
+│   ├── routes_billing.py (Stripe Checkout/Portal/Webhook)
 │   └── services/
-│       ├── alloggiati_web.py (SOAP client + cache Luoghi/Paesi)
-│       ├── ross1000.py / turismo5.py (SOAP v2 XML)
-│       ├── ocr_service.py (GPT-4o-mini Vision)
-│       ├── pdf_service.py (ReportLab Imposta Soggiorno)
-│       ├── calendar_service.py (iCal parsing/export)
-│       └── retry_service.py (transient SOAP retry job)
+│       ├── alloggiati_web.py · ross1000.py · turismo5.py
+│       ├── ocr_service.py · pdf_service.py · locazione_pdf.py
+│       ├── calendar_service.py · retry_service.py
+│       └── billing.py (Stripe wrapper)
 └── frontend/src/pages/
-    ├── Login.jsx · AuthCallback.jsx · Dashboard.jsx
-    ├── Checkin.jsx (wizard 5 step + OCR)
-    ├── Settings.jsx (credenziali per struttura)
-    ├── Archive.jsx · OwnerArchive.jsx · Owners.jsx
-    ├── Calendar.jsx (iCal multi-OTA)
-    └── Admin.jsx (super-admin panel)
+    ├── Login.jsx · Dashboard.jsx · Checkin.jsx (wizard 5 step)
+    ├── Settings.jsx · Archive.jsx · OwnerArchive.jsx · Owners.jsx
+    ├── Calendar.jsx · Admin.jsx · Help.jsx
+    ├── Pricing.jsx · BillingSuccess.jsx
+    └── components/PaywallModal.jsx · PrivacyModal.jsx · Layout.jsx
 ```
 
 ## Funzionalità implementate
-- [x] Login Google (Emergent Auth)
+- [x] Login Google (Emergent Auth) + IP rate-limit registrazione + admin whitelist
 - [x] CRUD strutture multi-proprietà, modalità TEST/PROD per struttura
-- [x] Wizard check-in con OCR (compressione client-side + GPT-4o-mini)
-- [x] Alloggiati Web SOAP: GenerateToken + Test/Send + Ricevuta PDF + cache Luoghi
+- [x] Wizard check-in con OCR (compressione client-side + GPT-4o-mini Vision)
+- [x] Alloggiati Web SOAP + Ricevuta PDF + cache Luoghi
 - [x] Turismo 5 / Ross 1000 SOAP v2 (Abruzzo) + retry automatico
-- [x] Imposta di Soggiorno: calcolo + ricevuta PDF brandizzata (proprietario, CF, breakdown esenti)
-- [x] Mapping automatico ospite straniero (cittadinanza, stato nascita via Luoghi)
-- [x] Autocomplete comuni / paesi fast da cache memoria
+- [x] Imposta di Soggiorno: calcolo + ricevuta PDF brandizzata
+- [x] Ricevute di Locazione PDF + numerazione auto per CF + marca da bollo €2
+- [x] Layout ricevute Imposta e Locazione **allineato**: `[Stampa] [Prepara PDF] [Invia] [Elimina]` — 2026-06-19 ✅
 - [x] iCal sync (Booking/Airbnb/Vrbo) import + export Personal + prenotazioni manuali
-- [x] Super Admin (`/admin`): metriche, lista utenti, disabilita/abilita inline
+- [x] iCal export: HEAD method supportato (compatibile Airbnb/Booking/Vrbo) — 2026-06-16
+- [x] Super Admin (`/admin`): metriche, lista utenti, disabilita/abilita + **toggle Illimitato** — 2026-06-17
 - [x] Background scheduler: PDF fetch, iCal refresh, retry errori transient
-- [x] Niente `window.confirm()` / niente download `blob:` diretti (sandbox iframe)
-- [x] **Hard block check-in se credenziali Alloggiati o Ross1000 mancanti** (frontend + backend) — 2026-06-03
-- [x] **Manuale utente PDF** (13 pp, IT, tema scuro) — endpoint `/api/manual/download` + bottoni "Scarica Manuale" in Dashboard e Impostazioni — 2026-06-03
-- [x] **Pagina /help online** — guida consultabile in-app con TOC sticky, 8 capitoli, 12 screenshot embedded, link "Apri Guida Online" in Dashboard e Impostazioni — 2026-06-03
-- [x] **Ricevute di Locazione** — generazione PDF + HTML stampabile per ogni check-in, numero auto-incrementale per CF proprietario, marca da bollo automatica €2 se importo > €77,47, archivio singolo + cumulativo per CF, IBAN/Banca/SWIFT configurabili in Impostazioni per CF — 2026-06-05
-- [x] **Archivio lista**: mostra capogruppo (nome+cognome primo ospite) invece del numero di ospiti — 2026-06-05
+- [x] **Stripe Subscription**: piani annuali (1ª €19.99, 2ª-10ª €9.99) + IVA 22% + Customer Portal + webhook firmato — 2026-06-17
+- [x] **Quota gating**: 5 invii PROD gratuiti, paywall modal su HTTP 402 — 2026-06-17
+- [x] **Superuser pama69@gmail.com** auto-flagged `unlimited` — 2026-06-17
+- [x] **Privacy Consent GDPR**: checkbox obbligatorio in Step 4 check-in, modale con informativa completa, timestamp salvato in DB (server + client) — 2026-06-19
+- [x] **Turismo 5 XML fix**: aggiunti `cognome/nome` e default `tipoturismo/mezzotrasporto` — 2026-06-10
 
 ## Backlog
 
 ### P1
-- [ ] Refactor `server.py` (2740 righe) in `/app/backend/routers/` (auth, properties, checkins, calendar, admin, alloggiati, turismo5)
-- [ ] Refactor `Checkin.jsx` (1167 righe) in sotto-componenti per step
-- [ ] Test end-to-end con credenziali reali Alloggiati + Turismo 5 in modalità PROD
+- [ ] Refactor `server.py` (3500+ righe) in `/app/backend/routes/`
+- [ ] Refactor `Checkin.jsx` (1200+ righe) in sotto-componenti per step
+- [ ] Configurare custom domain `www.dedomo.it` su Ionos (in corso)
 
 ### P2
-- [ ] Notifiche email su esito invio (Resend)
-- [ ] Dashboard analytics (occupazione, fatturato imposta)
-- [ ] Storno/correzione schedine già inviate
+- [ ] Notifiche email (Resend) su esito invio + reminder rinnovo abbonamento
+- [ ] Dashboard analytics admin (MRR/churn/proprietà attive)
+- [ ] Stripe Tax automatico (sostituire Tax Rate manuale 22%)
 - [ ] Import ospiti CSV/Excel
+- [ ] Landing Page Builder per ogni proprietà (sottodominio + CNAME)
 
 ### P3
 - [ ] PWA installabile mobile-first
 - [ ] Multi-utente con ruoli (operatore/admin)
+- [ ] Storno/correzione schedine già inviate
 
 ## Test credentials
 Vedi `/app/memory/test_credentials.md`. L'app NON gestisce password — Google OAuth via Emergent.
@@ -78,6 +78,7 @@ Vedi `/app/memory/test_credentials.md`. L'app NON gestisce password — Google O
 ## Note critiche per agent
 - **NIENTE `window.confirm()`**: usare modal inline custom (sandbox iframe lo blocca)
 - **NIENTE download blob: diretti**: usare `data:` URL o XHR fetch
-- Admin protetto da whitelist email in `ADMIN_EMAILS` (.env)
-- APScheduler attivo: PDF fetch, iCal sync, retry SOAP transient
-- **Check-in bloccato senza credenziali**: frontend disabilita "CONTINUA →" allo step 2; backend `/api/checkin/submit` ritorna `400 missing_credentials`
+- **Modelli Pydantic SEMPRE a livello modulo**, mai dentro closure (Pydantic 2.13 + FastAPI rompe il forwarding)
+- **Stripe key LIVE in produzione**: cambi richiedono ricreazione di Product/Price/TaxRate (clear `app_config.stripe_resources`)
+- **iCal endpoint deve supportare HEAD** (Airbnb/Booking/Vrbo lo richiedono)
+- **Privacy consent obbligatorio** per `/api/checkin/submit` — validato prima di property lookup
