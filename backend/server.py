@@ -822,11 +822,17 @@ class GuestData(BaseModel):
     paese_nome: str = ""  # Italian country name (for display/receipt, e.g. "ALBANIA")
 
 
+class PrivacyConsent(BaseModel):
+    accepted: bool
+    accepted_at: Optional[str] = None  # ISO timestamp from client
+
+
 class CheckinSubmit(BaseModel):
     property_id: str
     data_arrivo: str  # YYYY-MM-DD
     data_partenza: str  # YYYY-MM-DD
     guests: List[GuestData]
+    privacy_consent: Optional[PrivacyConsent] = None
 
 
 def _guest_to_schedina(
@@ -878,6 +884,24 @@ async def checkin_submit(body: CheckinSubmit, user=Depends(get_current_user)):
     Submit guest check-in data to all portals (Alloggiati Web, Ross 1000, Imposta Soggiorno).
     Returns per-portal results.
     """
+    # ---------- PRIVACY CONSENT (GDPR) ----------
+    # Must be checked BEFORE any property/data lookup. We store the server-side
+    # timestamp as proof of accountability (art. 5.2 GDPR).
+    if not body.privacy_consent or not body.privacy_consent.accepted:
+        raise HTTPException(
+            400,
+            {
+                "error": "privacy_consent_required",
+                "message": "Devi accettare l'informativa privacy per procedere con l'invio.",
+            },
+        )
+    privacy_consent_record = {
+        "accepted": True,
+        "accepted_at_client": body.privacy_consent.accepted_at,
+        "accepted_at_server": datetime.now(timezone.utc).isoformat(),
+        "policy_version": "2026-02-IT-v1",
+    }
+
     prop = await db.properties.find_one(
         {"property_id": body.property_id, "user_id": user["user_id"]}, {"_id": 0}
     )
@@ -1175,6 +1199,7 @@ async def checkin_submit(body: CheckinSubmit, user=Depends(get_current_user)):
         "guests": [g.model_dump() for g in body.guests],
         "mode": prop.get("mode", "TEST"),
         "results": results,
+        "privacy_consent": privacy_consent_record,
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     await db.checkins.insert_one(record)

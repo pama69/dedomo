@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import Layout from "@/components/Layout";
 import api from "@/lib/api";
 import PaywallModal from "@/components/PaywallModal";
+import PrivacyModal from "@/components/PrivacyModal";
 
 const emptyGuest = () => ({
   cognome: "",
@@ -40,6 +41,10 @@ export default function Checkin() {
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
   const [paywall, setPaywall] = useState(null); // {reason, used, limit, paid} | null
+  // Privacy consent (GDPR) — required before submission
+  const [privacyAccepted, setPrivacyAccepted] = useState(false);
+  const [privacyAcceptedAt, setPrivacyAcceptedAt] = useState("");
+  const [showPrivacyModal, setShowPrivacyModal] = useState(false);
 
   useEffect(() => {
     api.get("/properties").then((r) => setProperties(r.data));
@@ -520,6 +525,11 @@ export default function Checkin() {
 
   // ============ STEP 4: review ============
   const submit = async () => {
+    // Hard guard: cannot submit without privacy consent
+    if (!privacyAccepted || !privacyAcceptedAt) {
+      setError("Devi accettare l'informativa privacy per procedere.");
+      return;
+    }
     setSubmitting(true);
     setError("");
     try {
@@ -530,6 +540,10 @@ export default function Checkin() {
         data_arrivo: dataArrivo,
         data_partenza: dataPartenza,
         guests: cleanGuests,
+        privacy_consent: {
+          accepted: true,
+          accepted_at: privacyAcceptedAt,
+        },
       });
       setResult(r.data);
       setStep(5);
@@ -625,13 +639,66 @@ export default function Checkin() {
             [ ERR ] {error}
           </p>
         )}
+
+        {/* GDPR Privacy Consent — required before submission */}
+        <div
+          className={`border p-4 flex items-start gap-3 transition-colors ${
+            privacyAccepted
+              ? "border-emerald-500/40 bg-emerald-500/5"
+              : "border-amber-500/40 bg-amber-500/5"
+          }`}
+          data-testid="privacy-consent-box"
+        >
+          <button
+            type="button"
+            role="checkbox"
+            aria-checked={privacyAccepted}
+            onClick={() => {
+              if (privacyAccepted) {
+                setPrivacyAccepted(false);
+                setPrivacyAcceptedAt("");
+              } else {
+                setPrivacyAccepted(true);
+                setPrivacyAcceptedAt(new Date().toISOString());
+              }
+            }}
+            data-testid="privacy-consent-checkbox"
+            className={`shrink-0 w-6 h-6 border-2 flex items-center justify-center cursor-pointer transition-colors ${
+              privacyAccepted
+                ? "bg-emerald-500 border-emerald-500"
+                : "bg-transparent border-amber-500/70 hover:border-amber-400"
+            }`}
+          >
+            {privacyAccepted && <span className="text-black font-bold text-sm leading-none">✓</span>}
+          </button>
+          <div className="flex flex-col gap-1 text-[11px] text-zinc-300">
+            <button
+              type="button"
+              onClick={() => setShowPrivacyModal(true)}
+              data-testid="privacy-consent-open-link"
+              className="text-left text-zinc-100 underline decoration-amber-400/50 underline-offset-2 hover:decoration-amber-400 cursor-pointer text-[12px]"
+            >
+              Accetto Regolamento Privacy
+            </button>
+            <span className="text-zinc-500 text-[10px]">
+              Clicca sul testo per leggere l&apos;informativa completa. Obbligatorio per procedere.
+            </span>
+            {privacyAccepted && privacyAcceptedAt && (
+              <span className="text-emerald-400 text-[10px] font-mono mt-1" data-testid="privacy-consent-timestamp">
+                ✓ Accettato il {new Date(privacyAcceptedAt).toLocaleString("it-IT")}
+              </span>
+            )}
+          </div>
+        </div>
+
         <div className="flex gap-3 mt-4">
           <BackBtn onClick={() => setStep(3)} />
           <button
             onClick={submit}
-            disabled={submitting}
+            disabled={submitting || !privacyAccepted}
             data-testid="submit-portals-button"
-            className="flex-1 bg-zinc-100 hover:bg-white text-[#05050A] font-medium px-6 py-4 uppercase tracking-widest text-xs transition-all active:scale-[0.98] cursor-pointer disabled:opacity-50"
+            title={!privacyAccepted ? "Devi accettare l'informativa privacy" : ""}
+            className="flex-1 bg-zinc-100 hover:bg-white text-[#05050A] font-medium px-6 py-4 uppercase tracking-widest text-xs transition-all active:scale-[0.98] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {submitting ? "Invio in corso..." : "Invia ai Portali"}
           </button>
@@ -732,6 +799,10 @@ export default function Checkin() {
         reason={paywall?.reason}
         details={paywall || {}}
         onClose={() => setPaywall(null)}
+      />
+      <PrivacyModal
+        open={showPrivacyModal}
+        onClose={() => setShowPrivacyModal(false)}
       />
     </Layout>
   );
