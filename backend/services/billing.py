@@ -62,6 +62,8 @@ def _init_stripe():
     stripe.api_key = api_key
     if "sk_test_emergent" in api_key:
         stripe.api_base = "https://integrations.emergentagent.com/stripe"
+    else:
+        stripe.api_base = "https://api.stripe.com"
     _refresh_env()
 
 

@@ -1,6 +1,6 @@
 """
 OCR service - extracts guest data from photos of Italian/foreign ID documents.
-Uses gpt-4o-mini vision via Emergent LLM Key. Handles MRZ codes natively.
+Uses gpt-4o-mini vision via OpenAI API. Handles MRZ codes natively.
 gpt-4o-mini is ~5x cheaper than gpt-5.2 with comparable accuracy on documents.
 """
 
@@ -9,7 +9,7 @@ import json
 import base64
 import re
 from typing import Dict, Any
-from emergentintegrations.llm.chat import LlmChat, UserMessage, ImageContent
+from openai import AsyncOpenAI
 
 
 SYSTEM_PROMPT = """Sei un esperto OCR specializzato in documenti italiani ed esteri: Carta d'Identità (CIE/CIE elettronica/cartacea), Passaporto, Patente di Guida.
@@ -50,33 +50,39 @@ REGOLE:
 
 async def extract_document_data(image_base64: str, mime_type: str = "image/jpeg") -> Dict[str, Any]:
     """Send image to vision model and return structured data."""
-    api_key = os.environ.get("EMERGENT_LLM_KEY")
+    api_key = os.environ.get("OPENAI_API_KEY") or os.environ.get("EMERGENT_LLM_KEY")
     if not api_key:
-        return {"error": "EMERGENT_LLM_KEY non configurata"}
+        return {"error": "OPENAI_API_KEY non configurata"}
 
-    # Strip data URL prefix if present
     if "," in image_base64 and image_base64.startswith("data:"):
         image_base64 = image_base64.split(",", 1)[1]
 
-    chat = LlmChat(
-        api_key=api_key,
-        session_id=f"ocr-{base64.b64encode(os.urandom(6)).decode()}",
-        system_message=SYSTEM_PROMPT,
-    ).with_model("openai", "gpt-4o-mini")
-
-    image_content = ImageContent(image_base64=image_base64)
+    client = AsyncOpenAI(api_key=api_key)
 
     try:
-        response = await chat.send_message(
-            UserMessage(
-                text="Estrai i dati anagrafici da questo documento e restituisci SOLO il JSON richiesto.",
-                file_contents=[image_content],
-            )
+        response = await client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "Estrai i dati anagrafici da questo documento e restituisci SOLO il JSON richiesto."},
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:{mime_type};base64,{image_base64}",
+                                "detail": "high",
+                            },
+                        },
+                    ],
+                },
+            ],
+            max_tokens=1000,
+            temperature=0,
         )
 
-        # Parse JSON from response (strip markdown if present)
-        text = response.strip()
-        # Remove ```json ... ``` wrapper if present
+        text = response.choices[0].message.content.strip()
         match = re.search(r"\{[\s\S]*\}", text)
         if match:
             text = match.group(0)
@@ -84,6 +90,6 @@ async def extract_document_data(image_base64: str, mime_type: str = "image/jpeg"
         data = json.loads(text)
         return {"success": True, "data": data}
     except json.JSONDecodeError as e:
-        return {"success": False, "error": f"Risposta non valida: {str(e)}", "raw": response if 'response' in dir() else ""}
+        return {"success": False, "error": f"Risposta non valida: {str(e)}", "raw": text if 'text' in dir() else ""}
     except Exception as e:
         return {"success": False, "error": f"Errore OCR: {str(e)}"}

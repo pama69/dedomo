@@ -5,7 +5,8 @@ Ross 1000 e Imposta di Soggiorno comunale.
 """
 
 from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, Depends
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, FileResponse, HTMLResponse
+from fastapi.staticfiles import StaticFiles
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
@@ -72,6 +73,11 @@ db = client[os.environ["DB_NAME"]]
 
 app = FastAPI(title="Dedomo API")
 api_router = APIRouter(prefix="/api")
+
+
+@api_router.get("/health")
+async def health():
+    return {"status": "ok"}
 
 
 # ====================================================================
@@ -3591,3 +3597,15 @@ app.include_router(api_router)
 # Billing router (Stripe Checkout subscriptions)
 billing_router = build_billing_router(db, get_current_user, get_admin_user)
 app.include_router(billing_router, prefix="/api")
+
+# ── Serve React frontend (self-hosted deploy) ──
+FRONTEND_DIR = ROOT_DIR / "frontend_build"
+if FRONTEND_DIR.exists():
+    app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR / "static")), name="frontend-static")
+
+    @app.get("/{full_path:path}")
+    async def serve_spa(full_path: str):
+        file_path = FRONTEND_DIR / full_path
+        if file_path.is_file():
+            return FileResponse(str(file_path))
+        return FileResponse(str(FRONTEND_DIR / "index.html"))
