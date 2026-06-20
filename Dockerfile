@@ -3,7 +3,7 @@ FROM node:20-slim AS frontend
 RUN corepack enable
 WORKDIR /app/frontend
 COPY frontend/package.json ./
-RUN npm install --legacy-peer-deps
+RUN npm install --legacy-peer-deps && npm install ajv@^6.12.6 --legacy-peer-deps --no-save
 COPY frontend/ ./
 RUN npm run build
 
