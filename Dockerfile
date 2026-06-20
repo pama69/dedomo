@@ -1,9 +1,8 @@
 # ── Stage 1: build React frontend ──
-FROM node:20-slim AS frontend
-RUN corepack enable
+FROM node:18-slim AS frontend
 WORKDIR /app/frontend
 COPY frontend/package.json ./
-RUN npm install --legacy-peer-deps && npm install ajv@^6.12.6 --legacy-peer-deps --no-save
+RUN npm install --legacy-peer-deps
 COPY frontend/ ./
 RUN npm run build
 
