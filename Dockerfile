@@ -1,12 +1,11 @@
 # ── Stage 1: build React frontend ──
 FROM node:20-slim AS frontend
+RUN corepack enable
 WORKDIR /app/frontend
-COPY frontend/package.json frontend/yarn.lock* frontend/package-lock.json* ./
-RUN if [ -f yarn.lock ]; then yarn install --frozen-lockfile; \
-    else npm ci; fi
+COPY frontend/package.json ./
+RUN npm install
 COPY frontend/ ./
-RUN if [ -f yarn.lock ]; then yarn build; \
-    else npm run build; fi
+RUN npm run build
 
 # ── Stage 2: Python backend + static frontend ──
 FROM python:3.12-slim
