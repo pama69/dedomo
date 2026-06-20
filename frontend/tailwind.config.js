@@ -43,9 +43,25 @@ module.exports = {
   				DEFAULT: 'hsl(var(--destructive))',
   				foreground: 'hsl(var(--destructive-foreground))'
   			},
+  			success: {
+  				DEFAULT: 'hsl(var(--success))',
+  				foreground: 'hsl(var(--success-foreground))'
+  			},
+  			warning: {
+  				DEFAULT: 'hsl(var(--warning))',
+  				foreground: 'hsl(var(--warning-foreground))'
+  			},
   			border: 'hsl(var(--border))',
   			input: 'hsl(var(--input))',
   			ring: 'hsl(var(--ring))',
+  			surface:  'hsl(var(--surface))',
+  			elevated: 'hsl(var(--elevated))',
+  			text: {
+  				primary:   'hsl(var(--text-primary))',
+  				secondary: 'hsl(var(--text-secondary))',
+  				muted:     'hsl(var(--text-muted))',
+  				disabled:  'hsl(var(--text-disabled))',
+  			},
   			chart: {
   				'1': 'hsl(var(--chart-1))',
   				'2': 'hsl(var(--chart-2))',

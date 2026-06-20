@@ -10,10 +10,14 @@
 html, body {
   margin: 0;
   background-color: #05050A;
-  color: #F4F4F5;
+  color: #F0F0F4;
   font-family: "Geist", -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 15px;
+  line-height: 1.6;
+  letter-spacing: -0.01em;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
 .font-mono, code {
@@ -21,8 +25,8 @@ html, body {
 }
 
 ::selection {
-  background-color: #F4F4F5;
-  color: #05050A;
+  background-color: rgba(16, 185, 129, 0.25);
+  color: #F0F0F4;
 }
 
 /* Hide number input arrows */
@@ -34,16 +38,57 @@ input[type="number"]::-webkit-outer-spin-button {
 
 @layer base {
   :root {
-    --background: 0 0% 2%;
-    --foreground: 0 0% 96%;
-    --card: 0 0% 5%;
-    --card-foreground: 0 0% 96%;
-    --primary: 0 0% 96%;
-    --primary-foreground: 0 0% 2%;
-    --border: 240 6% 14%;
-    --input: 240 6% 14%;
-    --ring: 0 0% 96%;
-    --radius: 0;
+    /* ── Base surfaces ── */
+    --background:          0 0% 2%;        /* #050508 */
+    --foreground:          0 0% 96%;       /* #F0F0F4 */
+    --card:                240 5% 7%;      /* #0F0F18 */
+    --card-foreground:     0 0% 96%;
+    --popover:             240 5% 9%;
+    --popover-foreground:  0 0% 96%;
+
+    /* ── Brand / interactive ── */
+    --primary:             0 0% 96%;
+    --primary-foreground:  0 0% 2%;
+    --secondary:           240 5% 11%;     /* #181824 */
+    --secondary-foreground:0 0% 80%;
+    --muted:               240 5% 11%;
+    --muted-foreground:    220 9% 55%;     /* #8892A4 */
+    --accent:              160 84% 39%;    /* #10B981 */
+    --accent-foreground:   0 0% 100%;
+    --destructive:         0 72% 60%;      /* #F87171 */
+    --destructive-foreground: 0 0% 100%;
+
+    /* ── Borders & inputs ── */
+    --border:              240 6% 16%;     /* #1E1E2C */
+    --input:               240 6% 16%;
+    --ring:                160 84% 39%;    /* #10B981 focus ring */
+
+    /* ── Border radius ── */
+    --radius: 0.5rem;                      /* era 0 — ora 8px */
+
+    /* ── Text hierarchy (4 livelli) ── */
+    --text-primary:        0 0% 97%;       /* #F7F7F8 — titoli, label attivi */
+    --text-secondary:      220 9% 65%;     /* #9EA8BB — testo normale */
+    --text-muted:          220 8% 46%;     /* #6B7585 — placeholder, metadati */
+    --text-disabled:       220 7% 30%;     /* #464E5A — disabilitato */
+
+    /* ── Surface layers ── */
+    --surface:             240 5% 7%;      /* #0F0F18 — card, sidebar */
+    --elevated:            240 5% 11%;     /* #181824 — modal, dropdown */
+    --border-subtle:       240 6% 12%;     /* #141420 */
+
+    /* ── Semantic / success ── */
+    --success:             160 84% 39%;    /* #10B981 */
+    --success-foreground:  0 0% 100%;
+    --warning:             38 92% 50%;     /* #FBBF24 */
+    --warning-foreground:  0 0% 100%;
+
+    /* ── Charts ── */
+    --chart-1: 160 84% 39%;
+    --chart-2: 217 91% 60%;
+    --chart-3: 38 92% 50%;
+    --chart-4: 0 72% 60%;
+    --chart-5: 280 65% 60%;
   }
 }
 
@@ -52,10 +97,10 @@ input[type="number"]::-webkit-outer-spin-button {
   body { @apply bg-background text-foreground; }
 }
 
-/* OCR scanning blink animation: black ↔ magenta */
+/* OCR scanning blink: verde Dedomo invece di magenta */
 @keyframes ocr-blink {
-  0%, 100% { color: #f4f4f5; }
-  50% { color: #ff00ff; text-shadow: 0 0 8px rgba(255, 0, 255, 0.6); }
+  0%, 100% { color: #F0F0F4; text-shadow: none; }
+  50%       { color: #10B981; text-shadow: 0 0 10px rgba(16, 185, 129, 0.5); }
 }
 .animate-ocr-blink {
   animation: ocr-blink 0.9s ease-in-out infinite;
@@ -66,3 +111,30 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   filter: invert(0.7);
   cursor: pointer;
 }
+
+/* Gerarchia testi — classi utility aggiuntive */
+.text-primary-content  { color: hsl(var(--text-primary)); }
+.text-secondary-content{ color: hsl(var(--text-secondary)); }
+.text-muted-content    { color: hsl(var(--text-muted)); }
+.text-disabled-content { color: hsl(var(--text-disabled)); }
+
+/* Superfici aggiuntive */
+.bg-surface  { background-color: hsl(var(--surface)); }
+.bg-elevated { background-color: hsl(var(--elevated)); }
+
+/* Tabelle — padding e hover coerenti */
+.table-dedomo th {
+  padding: 10px 16px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  font-weight: 500;
+  color: hsl(var(--text-muted));
+}
+.table-dedomo td {
+  padding: 12px 16px;
+  line-height: 1.5;
+  border-bottom: 1px solid hsl(var(--border-subtle));
+}
+.table-dedomo tr:last-child td { border-bottom: none; }
+.table-dedomo tr:hover td { background: rgba(255,255,255,0.02); }
