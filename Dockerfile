@@ -13,7 +13,7 @@ FROM python:3.12-slim
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libxml2-dev libxslt1-dev gcc g++ && \
+    libxml2-dev libxslt-dev gcc g++ build-essential && \
     rm -rf /var/lib/apt/lists/*
 
 COPY backend/requirements.txt ./
