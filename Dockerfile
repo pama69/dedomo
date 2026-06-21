@@ -5,6 +5,7 @@ COPY frontend/package.json frontend/yarn.lock ./
 RUN yarn install --frozen-lockfile --ignore-engines
 COPY frontend/ ./
 ENV CI=false
+ENV REACT_APP_BACKEND_URL=""
 RUN yarn build
 
 # ── Stage 2: Python backend + static frontend ──
