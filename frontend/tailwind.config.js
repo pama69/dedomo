@@ -13,6 +13,22 @@ module.exports = {
   			sm: 'calc(var(--radius) - 4px)'
   		},
   		colors: {
+  			/* zinc ritoccato per il tema scuro Dedomo: mid-tone più chiare =
+  			   label e testo secondario più leggibili. 50-200 invariati (bottoni
+  			   chiari), 800-950 invariati (superfici). */
+  			zinc: {
+  				50:  '#fafafa',
+  				100: '#f4f4f5',
+  				200: '#e6e7eb',
+  				300: '#ccd1dc',
+  				400: '#a6adbd',
+  				500: '#828b9c',
+  				600: '#646c7c',
+  				700: '#3f3f46',
+  				800: '#27272a',
+  				900: '#18181b',
+  				950: '#09090b',
+  			},
   			background: 'hsl(var(--background))',
   			foreground: 'hsl(var(--foreground))',
   			card: {
