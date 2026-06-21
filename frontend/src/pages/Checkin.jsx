@@ -812,27 +812,27 @@ export default function Checkin() {
 function StepHeader({ n, label }) {
   return (
     <div className="flex items-baseline gap-4 border-b border-border pb-4">
-      <span className="text-[10px] tracking-[0.3em] uppercase text-zinc-500 font-mono">/{n}</span>
-      <h2
-        className="text-2xl font-bold uppercase tracking-tight text-zinc-100"
-        style={{ fontFamily: "'Cabinet Grotesk', sans-serif" }}
+      <span
+        className="text-sm font-mono font-semibold"
+        style={{ color: "hsl(var(--accent))" }}
       >
-        {label}
-      </h2>
+        /{n}
+      </span>
+      <h2 className="typo-h1">{label}</h2>
     </div>
   );
 }
 
 function TextField({ label, value, onChange, testid, type = "text" }) {
   return (
-    <label className="flex flex-col gap-1">
-      <span className="text-[10px] tracking-[0.25em] uppercase text-zinc-500">{label}</span>
+    <label className="flex flex-col gap-1.5">
+      <span className="typo-meta">{label}</span>
       <input
         type={type}
         data-testid={testid}
         value={value ?? ""}
         onChange={(e) => onChange(e.target.value)}
-        className="bg-transparent border border-border px-4 py-3 text-zinc-100 placeholder:text-zinc-600 focus:border-zinc-300 focus:ring-1 focus:ring-zinc-300 outline-none transition-all w-full font-mono text-sm"
+        className="input-modern font-mono"
       />
     </label>
   );
@@ -844,13 +844,13 @@ function DateField(props) {
 
 function SelectField({ label, value, onChange, options, testid }) {
   return (
-    <label className="flex flex-col gap-1">
-      <span className="text-[10px] tracking-[0.25em] uppercase text-zinc-500">{label}</span>
+    <label className="flex flex-col gap-1.5">
+      <span className="typo-meta">{label}</span>
       <select
         data-testid={testid}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="bg-transparent border border-border px-4 py-3 text-zinc-100 focus:border-zinc-300 outline-none font-mono text-sm"
+        className="input-modern font-mono"
       >
         {options.map(([v, l]) => (
           <option key={v} value={v} className="bg-surface-1">{l}</option>
@@ -866,7 +866,7 @@ function NextBtn({ disabled, onClick, testid, label = "Continua →" }) {
       disabled={disabled}
       onClick={onClick}
       data-testid={testid}
-      className="flex-1 bg-zinc-100 hover:bg-white text-[#05050A] font-medium px-6 py-4 uppercase tracking-widest text-xs transition-all active:scale-[0.98] cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+      className="btn-accent flex-1 py-3.5"
     >
       {label}
     </button>
@@ -875,10 +875,7 @@ function NextBtn({ disabled, onClick, testid, label = "Continua →" }) {
 
 function BackBtn({ onClick }) {
   return (
-    <button
-      onClick={onClick}
-      className="flex-1 border border-border hover:border-zinc-500 text-zinc-300 px-6 py-4 uppercase tracking-widest text-xs transition-colors cursor-pointer"
-    >
+    <button onClick={onClick} className="btn-secondary flex-1 py-3.5">
       ← Indietro
     </button>
   );
@@ -886,9 +883,9 @@ function BackBtn({ onClick }) {
 
 function Row({ label, value }) {
   return (
-    <div className="flex justify-between">
-      <span className="text-zinc-500">{label}</span>
-      <span className="text-zinc-100">{value}</span>
+    <div className="flex justify-between gap-4">
+      <span className="text-muted-content">{label}</span>
+      <span className="text-primary-content font-medium text-right">{value}</span>
     </div>
   );
 }

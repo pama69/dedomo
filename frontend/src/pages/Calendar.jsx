@@ -95,7 +95,7 @@ export default function Calendar() {
   return (
     <Layout>
       <div className="flex items-baseline justify-between flex-wrap gap-2">
-        <h2 className="text-2xl font-bold uppercase tracking-tight text-zinc-100" style={{ fontFamily: "'Cabinet Grotesk', sans-serif" }}>
+        <h2 className="typo-h1" style={{ fontFamily: "'Cabinet Grotesk', sans-serif" }}>
           Calendario
         </h2>
         <div className="flex items-center gap-2 flex-wrap">

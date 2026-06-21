@@ -28,7 +28,7 @@ export default function Owners() {
       </div>
 
       <h2
-        className="text-2xl font-bold uppercase tracking-tight text-zinc-100"
+        className="typo-h1"
         style={{ fontFamily: "'Cabinet Grotesk', sans-serif" }}
       >
         Proprietari / Codici Fiscali

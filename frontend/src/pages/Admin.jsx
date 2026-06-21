@@ -561,7 +561,7 @@ export default function Admin() {
   return (
     <Layout>
       <div className="flex items-baseline justify-between flex-wrap gap-2">
-        <h2 className="text-2xl font-bold uppercase tracking-tight text-zinc-100" style={{ fontFamily: "'Cabinet Grotesk', sans-serif" }}>
+        <h2 className="typo-h1" style={{ fontFamily: "'Cabinet Grotesk', sans-serif" }}>
           Super Pannello
         </h2>
         <Link to="/" className="text-zinc-500 hover:text-zinc-100 text-[10px] uppercase tracking-[0.25em] cursor-pointer">

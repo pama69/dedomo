@@ -117,19 +117,14 @@ export default function Archive() {
 
   return (
     <Layout>
-      <h2
-        className="text-2xl font-bold uppercase tracking-tight text-zinc-100"
-        style={{ fontFamily: "'Cabinet Grotesk', sans-serif" }}
-      >
-        Archivio Invii
-      </h2>
+      <h2 className="typo-h1">Archivio Invii</h2>
 
       {/* Sub-nav */}
       <div className="flex gap-2 flex-wrap">
         <Link
           to="/archive/owners"
           data-testid="nav-archive-owners"
-          className="border border-border hover:border-emerald-500/60 hover:text-emerald-400 text-zinc-300 px-4 py-2 uppercase tracking-[0.25em] text-[10px] cursor-pointer transition-colors"
+          className="btn-secondary"
         >
           → Archivio per Proprietario / Codice Fiscale
         </Link>
@@ -138,10 +133,13 @@ export default function Archive() {
       <RefreshReceiptsButton />
 
       {loading ? (
-        <p className="text-zinc-500 text-sm font-mono">Caricamento...</p>
+        <div className="flex flex-col gap-2">
+          <div className="skeleton h-12" />
+          <div className="skeleton h-12" />
+        </div>
       ) : items.length === 0 ? (
-        <div className="border border-dashed border-border p-12 text-center">
-          <p className="text-zinc-400 text-sm">Nessun check-in archiviato.</p>
+        <div className="surface-card p-12 text-center" style={{ borderStyle: "dashed" }}>
+          <p className="typo-body text-muted-content">Nessun check-in archiviato</p>
         </div>
       ) : (
         <>
@@ -155,13 +153,14 @@ export default function Archive() {
                   key={p.property_id}
                   onClick={() => { setActiveProperty(p.property_id); setExpanded(null); }}
                   data-testid={`archive-tab-${p.property_id}`}
-                  className={`text-[10px] tracking-[0.25em] uppercase border px-4 py-2 cursor-pointer transition-colors ${
-                    isActive
-                      ? "border-zinc-100 text-zinc-100"
-                      : "border-border text-zinc-500 hover:text-zinc-300"
-                  }`}
+                  className="typo-meta rounded-lg px-4 py-2 cursor-pointer transition-colors"
+                  style={{
+                    border: `1px solid ${isActive ? "hsl(var(--accent) / 0.5)" : "hsl(var(--border))"}`,
+                    backgroundColor: isActive ? "hsl(var(--accent) / 0.1)" : "transparent",
+                    color: isActive ? "hsl(var(--accent))" : "hsl(var(--text-muted))",
+                  }}
                 >
-                  {p.nome} <span className="text-zinc-600">({count})</span>
+                  {p.nome} <span style={{ opacity: 0.6 }}>({count})</span>
                 </button>
               );
             })}

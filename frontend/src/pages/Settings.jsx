@@ -124,69 +124,82 @@ export default function Settings() {
   return (
     <Layout>
       <div className="flex items-center justify-between">
-        <h2
-          className="text-2xl font-bold uppercase tracking-tight text-zinc-100"
-          style={{ fontFamily: "'Cabinet Grotesk', sans-serif" }}
-        >
-          Strutture
-        </h2>
+        <h2 className="typo-h1">Strutture</h2>
         <button
           data-testid="add-property-btn"
           onClick={startNew}
-          className="text-xs tracking-[0.25em] uppercase text-[#05050A] bg-zinc-100 hover:bg-white px-5 py-3 transition-colors cursor-pointer"
+          className="btn-accent"
         >
           + Nuova
         </button>
       </div>
 
-      <div className="flex items-center justify-end gap-3 pt-1">
+      <div className="flex items-center justify-end gap-2 -mt-3">
         <a
           href="/help"
           data-testid="settings-open-help"
-          className="text-[10px] tracking-[0.25em] uppercase text-zinc-400 hover:text-zinc-100 cursor-pointer"
+          className="btn-ghost"
         >
-          Apri Guida Online →
+          Apri guida online →
         </a>
         <DownloadManualButton testid="settings-download-manual" />
       </div>
 
       {loading ? (
-        <p className="text-zinc-500 text-sm font-mono">Caricamento...</p>
+        <div className="flex flex-col gap-2">
+          <div className="skeleton h-16" />
+          <div className="skeleton h-16" />
+        </div>
       ) : list.length === 0 ? (
-        <div className="border border-dashed border-border p-12 text-center">
-          <p className="text-zinc-400 text-sm mb-4">
-            Nessuna struttura configurata.
-          </p>
-          <p className="text-zinc-600 text-xs">
+        <div className="surface-card p-12 text-center" style={{ borderStyle: "dashed" }}>
+          <p className="typo-body mb-2">Nessuna struttura configurata</p>
+          <p className="typo-small text-muted-content">
             Premi "+ Nuova" per aggiungere la tua prima unità immobiliare.
           </p>
         </div>
       ) : (
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-2.5">
           {list.map((p) => (
             <div
               key={p.property_id}
               data-testid={`property-row-${p.property_id}`}
-              className="bg-surface-1 border border-border p-4 flex items-center justify-between"
+              className="surface-card p-4 flex items-center justify-between"
             >
-              <div>
-                <p className="font-medium text-zinc-100">{p.nome}</p>
-                <p className="text-[10px] tracking-[0.2em] uppercase text-zinc-500 mt-1 font-mono">
-                  {p.comune || "—"} · CIN {p.cin || "—"} · [{p.mode}]
-                </p>
+              <div className="flex items-center gap-3 min-w-0">
+                <div
+                  className="w-9 h-9 rounded-md flex items-center justify-center flex-shrink-0"
+                  style={{
+                    backgroundColor: "hsl(var(--surface-3))",
+                    color: "hsl(var(--accent))",
+                    fontFamily: "'Cabinet Grotesk', sans-serif",
+                    fontWeight: 700,
+                  }}
+                >
+                  {(p.nome || "?").charAt(0).toUpperCase()}
+                </div>
+                <div className="min-w-0">
+                  <p className="font-medium text-primary-content truncate">{p.nome}</p>
+                  <p className="typo-meta mt-0.5">
+                    {p.comune || "—"}
+                    <span className="mx-1.5 opacity-50">·</span>CIN {p.cin || "—"}
+                    <span className="mx-1.5 opacity-50">·</span>
+                    <span style={{ color: p.mode === "PROD" ? "hsl(var(--accent))" : "hsl(var(--text-muted))" }}>{p.mode}</span>
+                  </p>
+                </div>
               </div>
-              <div className="flex gap-3">
+              <div className="flex gap-1 flex-shrink-0">
                 <button
                   onClick={() => setEditing(p)}
                   data-testid={`edit-property-${p.property_id}`}
-                  className="text-[10px] tracking-[0.25em] uppercase text-zinc-400 hover:text-zinc-100 cursor-pointer"
+                  className="btn-ghost"
                 >
                   Modifica
                 </button>
                 <button
                   onClick={() => remove(p.property_id)}
                   data-testid={`delete-property-${p.property_id}`}
-                  className="text-[10px] tracking-[0.25em] uppercase text-red-500 hover:text-red-400 cursor-pointer"
+                  className="btn-ghost"
+                  style={{ color: "hsl(var(--destructive))" }}
                 >
                   Elimina
                 </button>
@@ -203,24 +216,24 @@ export default function Settings() {
 
 function Section({ title, children }) {
   return (
-    <div className="flex flex-col gap-3 border-t border-border pt-6">
-      <h3 className="text-xs tracking-[0.3em] uppercase text-zinc-500">{title}</h3>
-      <div className="flex flex-col gap-3">{children}</div>
+    <div className="surface-card p-5 flex flex-col gap-4">
+      <h3 className="typo-h3">{title}</h3>
+      <div className="flex flex-col gap-3.5">{children}</div>
     </div>
   );
 }
 
 function Field({ label, value, onChange, type = "text", testid, placeholder, mono = true }) {
   return (
-    <label className="flex flex-col gap-1">
-      <span className="text-[10px] tracking-[0.25em] uppercase text-zinc-500">{label}</span>
+    <label className="flex flex-col gap-1.5">
+      <span className="typo-meta">{label}</span>
       <input
         type={type}
         data-testid={testid}
         value={value ?? ""}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className={`bg-transparent border border-border px-4 py-3 text-zinc-100 placeholder:text-zinc-600 focus:border-zinc-300 focus:ring-1 focus:ring-zinc-300 outline-none transition-all w-full text-sm ${mono ? "font-mono" : ""}`}
+        className={`input-modern ${mono ? "font-mono" : ""}`}
       />
     </label>
   );
@@ -228,15 +241,32 @@ function Field({ label, value, onChange, type = "text", testid, placeholder, mon
 
 function Toggle({ label, value, onChange, testid }) {
   return (
-    <label className="flex items-center justify-between border border-border px-4 py-3 cursor-pointer">
-      <span className="text-[10px] tracking-[0.25em] uppercase text-zinc-400">{label}</span>
+    <label
+      className="flex items-center justify-between rounded-lg px-4 py-3 cursor-pointer transition-colors"
+      style={{
+        backgroundColor: value ? "hsl(var(--accent) / 0.08)" : "hsl(var(--surface-2))",
+        border: `1px solid ${value ? "hsl(var(--accent) / 0.35)" : "hsl(var(--border))"}`,
+      }}
+      onClick={() => onChange(!value)}
+    >
+      <span className="typo-meta" style={{ color: value ? "hsl(var(--accent))" : "hsl(var(--text-muted))" }}>
+        {label}
+      </span>
       <button
         type="button"
         data-testid={testid}
-        onClick={() => onChange(!value)}
-        className={`text-xs tracking-[0.25em] uppercase font-mono cursor-pointer ${value ? "text-emerald-500" : "text-zinc-600"}`}
+        onClick={(e) => { e.preventDefault(); onChange(!value); }}
+        className="relative w-10 h-5.5 rounded-full transition-colors flex-shrink-0"
+        style={{
+          width: 40, height: 22,
+          backgroundColor: value ? "hsl(var(--accent))" : "hsl(var(--surface-3))",
+        }}
+        aria-pressed={value}
       >
-        [{value ? "ON" : "OFF"}]
+        <span
+          className="absolute top-0.5 rounded-full bg-white transition-all"
+          style={{ width: 18, height: 18, left: value ? 20 : 2 }}
+        />
       </button>
     </label>
   );
@@ -262,16 +292,13 @@ function PropertyEditor({ p, setP, save, cancel, saving, error }) {
   return (
     <Layout>
       <div className="flex items-center justify-between">
-        <h2
-          className="text-2xl font-bold uppercase tracking-tight text-zinc-100"
-          style={{ fontFamily: "'Cabinet Grotesk', sans-serif" }}
-        >
+        <h2 className="typo-h1">
           {p.property_id ? "Modifica Struttura" : "Nuova Struttura"}
         </h2>
         <button
           onClick={cancel}
           data-testid="cancel-edit-btn"
-          className="text-[10px] tracking-[0.25em] uppercase text-zinc-500 hover:text-zinc-100 cursor-pointer"
+          className="btn-ghost"
         >
           ← Indietro
         </button>
@@ -317,7 +344,7 @@ function PropertyEditor({ p, setP, save, cancel, saving, error }) {
             data-testid="aw-tipo-account"
             value={p.alloggiati.tipo_account}
             onChange={(e) => upd("alloggiati.tipo_account", e.target.value)}
-            className="bg-transparent border border-border px-4 py-3 text-zinc-100 focus:border-zinc-300 outline-none font-mono text-sm"
+            className="input-modern font-mono"
           >
             <option value="standard" className="bg-surface-1">Standard (hotel, B&amp;B, struttura unica)</option>
             <option value="appartamenti" className="bg-surface-1">Gestore Appartamenti (con ID per ogni appartamento)</option>
@@ -345,7 +372,7 @@ function PropertyEditor({ p, setP, save, cancel, saving, error }) {
             data-testid="r1k-regione"
             value={p.ross1000.regione}
             onChange={(e) => upd("ross1000.regione", e.target.value)}
-            className="bg-transparent border border-border px-4 py-3 text-zinc-100 focus:border-zinc-300 outline-none font-mono text-sm"
+            className="input-modern font-mono"
           >
             {["Abruzzo","Basilicata","Calabria","Emilia-Romagna","Lazio","Liguria","Lombardia","Marche","Molise","Piemonte","Sardegna","Toscana","Veneto"].map((r) => (
               <option key={r} value={r} className="bg-surface-1">{r}</option>
@@ -365,7 +392,7 @@ function PropertyEditor({ p, setP, save, cancel, saving, error }) {
             data-testid="r1k-format"
             value={p.ross1000.format}
             onChange={(e) => upd("ross1000.format", e.target.value)}
-            className="bg-transparent border border-border px-4 py-3 text-zinc-100 focus:border-zinc-300 outline-none font-mono text-sm"
+            className="input-modern font-mono"
           >
             <option value="soap_v2" className="bg-surface-1">Web service automatico (consigliato)</option>
             <option value="csv_manual" className="bg-surface-1">CSV manuale (download + upload)</option>
@@ -426,22 +453,26 @@ function PropertyEditor({ p, setP, save, cancel, saving, error }) {
         )}
       </Section>
 
-      {error && <p className="text-red-500 text-xs font-mono uppercase tracking-wider">[ ERRORE ] {error}</p>}
-
-      <div className="flex gap-3 mt-4">
-        <button
-          onClick={cancel}
-          className="flex-1 border border-border hover:border-zinc-500 text-zinc-300 px-6 py-4 uppercase tracking-widest text-xs transition-colors cursor-pointer"
+      {error && (
+        <div
+          className="rounded-lg px-4 py-3 typo-small"
+          style={{ backgroundColor: "hsl(var(--destructive) / 0.1)", border: "1px solid hsl(var(--destructive) / 0.3)", color: "hsl(var(--destructive))" }}
         >
+          {error}
+        </div>
+      )}
+
+      <div className="flex gap-3 mt-2">
+        <button onClick={cancel} className="btn-secondary flex-1 py-3.5">
           Annulla
         </button>
         <button
           onClick={save}
           disabled={saving}
           data-testid="save-property-btn"
-          className="flex-1 bg-zinc-100 hover:bg-white text-[#05050A] font-medium px-6 py-4 uppercase tracking-widest text-xs transition-all active:scale-[0.98] cursor-pointer disabled:opacity-50"
+          className="btn-accent flex-1 py-3.5"
         >
-          {saving ? "Salvataggio..." : "Salva"}
+          {saving ? "Salvataggio..." : "Salva struttura"}
         </button>
       </div>
     </Layout>
@@ -476,7 +507,7 @@ function TestCredentialsButton({ propertyId }) {
         onClick={run}
         disabled={loading}
         data-testid="test-alloggiati-btn"
-        className="border border-border hover:border-zinc-500 text-zinc-300 px-4 py-3 uppercase tracking-widest text-[10px] transition-colors cursor-pointer disabled:opacity-50"
+        className="btn-secondary w-full disabled:opacity-50"
       >
         {loading ? "Test in corso..." : "Test credenziali Alloggiati Web"}
       </button>
@@ -542,7 +573,7 @@ function TestTurismo5Button({ propertyId }) {
         onClick={run}
         disabled={loading}
         data-testid="test-turismo5-btn"
-        className="border border-border hover:border-zinc-500 text-zinc-300 px-4 py-3 uppercase tracking-widest text-[10px] transition-colors cursor-pointer disabled:opacity-50"
+        className="btn-secondary w-full disabled:opacity-50"
       >
         {loading ? "Test in corso..." : "Test credenziali Turismo 5"}
       </button>
@@ -636,7 +667,7 @@ function ApartmentSelector({ propertyId, value, onChange, disabled }) {
           onClick={load}
           disabled={loading}
           data-testid="load-appartamenti-btn"
-          className="border border-border hover:border-zinc-500 text-zinc-300 px-4 py-3 uppercase tracking-widest text-[10px] transition-colors cursor-pointer disabled:opacity-50"
+          className="btn-secondary w-full disabled:opacity-50"
         >
           {loading ? "Caricamento..." : "Carica miei appartamenti da Alloggiati Web"}
         </button>
@@ -646,7 +677,7 @@ function ApartmentSelector({ propertyId, value, onChange, disabled }) {
             data-testid="aw-idappartamento"
             value={value !== undefined && value !== null && value !== "" ? value : ""}
             onChange={(e) => onChange(e.target.value === "" ? null : parseInt(e.target.value))}
-            className="bg-transparent border border-border px-4 py-3 text-zinc-100 focus:border-zinc-300 outline-none font-mono text-sm"
+            className="input-modern font-mono"
           >
             <option value="" className="bg-surface-1">— Seleziona appartamento —</option>
             {items.map((a) => (
@@ -999,7 +1030,7 @@ function OwnerBankInfoSection({ properties }) {
   return (
     <div className="border-t border-border pt-6 mt-6 flex flex-col gap-3">
       <div>
-        <h3 className="text-2xl font-bold uppercase tracking-tight text-zinc-100" style={{ fontFamily: "'Cabinet Grotesk', sans-serif" }}>
+        <h3 className="typo-h1" style={{ fontFamily: "'Cabinet Grotesk', sans-serif" }}>
           Dati Bancari per Proprietario
         </h3>
         <p className="text-zinc-500 text-xs mt-1">
