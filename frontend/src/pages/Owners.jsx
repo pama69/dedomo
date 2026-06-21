@@ -45,7 +45,7 @@ export default function Owners() {
       ) : error ? (
         <p className="text-red-500 text-sm font-mono">{error}</p>
       ) : owners.length === 0 ? (
-        <div className="border border-dashed border-[#1E1E28] p-12 text-center">
+        <div className="border border-dashed border-border p-12 text-center">
           <p className="text-zinc-400 text-sm mb-3">
             Nessun proprietario configurato.
           </p>
@@ -60,7 +60,7 @@ export default function Owners() {
               key={o.id}
               to={`/archive/owners/${encodeURIComponent(o.id)}`}
               data-testid={`owner-card-${o.id}`}
-              className="border border-[#1E1E28] hover:border-zinc-500 p-4 flex flex-col gap-2 cursor-pointer transition-colors"
+              className="border border-border hover:border-zinc-500 p-4 flex flex-col gap-2 cursor-pointer transition-colors"
             >
               <div className="flex items-baseline justify-between">
                 <span className="text-zinc-100 text-base font-bold uppercase tracking-tight">

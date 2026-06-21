@@ -85,7 +85,7 @@ export default function BillingSuccess() {
               </button>
               <button
                 onClick={() => navigate("/billing/pricing")}
-                className="border border-[#1E1E28] hover:border-zinc-500 text-zinc-400 px-6 py-3 uppercase tracking-[0.25em] text-xs cursor-pointer"
+                className="border border-border hover:border-zinc-500 text-zinc-400 px-6 py-3 uppercase tracking-[0.25em] text-xs cursor-pointer"
               >
                 Gestisci abbonamento
               </button>

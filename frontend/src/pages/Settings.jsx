@@ -153,7 +153,7 @@ export default function Settings() {
       {loading ? (
         <p className="text-zinc-500 text-sm font-mono">Caricamento...</p>
       ) : list.length === 0 ? (
-        <div className="border border-dashed border-[#1E1E28] p-12 text-center">
+        <div className="border border-dashed border-border p-12 text-center">
           <p className="text-zinc-400 text-sm mb-4">
             Nessuna struttura configurata.
           </p>
@@ -167,7 +167,7 @@ export default function Settings() {
             <div
               key={p.property_id}
               data-testid={`property-row-${p.property_id}`}
-              className="bg-[#0E0E14] border border-[#1E1E28] p-4 flex items-center justify-between"
+              className="bg-surface-1 border border-border p-4 flex items-center justify-between"
             >
               <div>
                 <p className="font-medium text-zinc-100">{p.nome}</p>
@@ -203,7 +203,7 @@ export default function Settings() {
 
 function Section({ title, children }) {
   return (
-    <div className="flex flex-col gap-3 border-t border-[#1E1E28] pt-6">
+    <div className="flex flex-col gap-3 border-t border-border pt-6">
       <h3 className="text-xs tracking-[0.3em] uppercase text-zinc-500">{title}</h3>
       <div className="flex flex-col gap-3">{children}</div>
     </div>
@@ -220,7 +220,7 @@ function Field({ label, value, onChange, type = "text", testid, placeholder, mon
         value={value ?? ""}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className={`bg-transparent border border-[#1E1E28] px-4 py-3 text-zinc-100 placeholder:text-zinc-600 focus:border-zinc-300 focus:ring-1 focus:ring-zinc-300 outline-none transition-all w-full text-sm ${mono ? "font-mono" : ""}`}
+        className={`bg-transparent border border-border px-4 py-3 text-zinc-100 placeholder:text-zinc-600 focus:border-zinc-300 focus:ring-1 focus:ring-zinc-300 outline-none transition-all w-full text-sm ${mono ? "font-mono" : ""}`}
       />
     </label>
   );
@@ -228,7 +228,7 @@ function Field({ label, value, onChange, type = "text", testid, placeholder, mon
 
 function Toggle({ label, value, onChange, testid }) {
   return (
-    <label className="flex items-center justify-between border border-[#1E1E28] px-4 py-3 cursor-pointer">
+    <label className="flex items-center justify-between border border-border px-4 py-3 cursor-pointer">
       <span className="text-[10px] tracking-[0.25em] uppercase text-zinc-400">{label}</span>
       <button
         type="button"
@@ -287,7 +287,7 @@ function PropertyEditor({ p, setP, save, cancel, saving, error }) {
         </div>
         <Field label="CIN (Codice Identificativo Nazionale)" value={p.cin} onChange={(v) => upd("cin", v)} testid="prop-cin" />
 
-        <div className="border-t border-[#1E1E28] pt-3 flex flex-col gap-3">
+        <div className="border-t border-border pt-3 flex flex-col gap-3">
           <p className="text-[10px] tracking-[0.25em] uppercase text-zinc-500">Intestazione Ricevute Imposta di Soggiorno</p>
           <Field label="Proprietario" value={p.proprietario || ""} onChange={(v) => upd("proprietario", v)} testid="prop-proprietario" placeholder="Es. Mario Rossi" mono={false} />
           <Field label="Codice Fiscale" value={p.codice_fiscale || ""} onChange={(v) => upd("codice_fiscale", (v || "").toUpperCase())} testid="prop-codice-fiscale" placeholder="RSSMRA80A01H501U" />
@@ -317,11 +317,11 @@ function PropertyEditor({ p, setP, save, cancel, saving, error }) {
             data-testid="aw-tipo-account"
             value={p.alloggiati.tipo_account}
             onChange={(e) => upd("alloggiati.tipo_account", e.target.value)}
-            className="bg-transparent border border-[#1E1E28] px-4 py-3 text-zinc-100 focus:border-zinc-300 outline-none font-mono text-sm"
+            className="bg-transparent border border-border px-4 py-3 text-zinc-100 focus:border-zinc-300 outline-none font-mono text-sm"
           >
-            <option value="standard" className="bg-[#0E0E14]">Standard (hotel, B&amp;B, struttura unica)</option>
-            <option value="appartamenti" className="bg-[#0E0E14]">Gestore Appartamenti (con ID per ogni appartamento)</option>
-            <option value="appartamenti_file_unico" className="bg-[#0E0E14]">Gestore Appartamenti (file unico)</option>
+            <option value="standard" className="bg-surface-1">Standard (hotel, B&amp;B, struttura unica)</option>
+            <option value="appartamenti" className="bg-surface-1">Gestore Appartamenti (con ID per ogni appartamento)</option>
+            <option value="appartamenti_file_unico" className="bg-surface-1">Gestore Appartamenti (file unico)</option>
           </select>
         </label>
         {p.alloggiati.tipo_account === "appartamenti" && (
@@ -345,10 +345,10 @@ function PropertyEditor({ p, setP, save, cancel, saving, error }) {
             data-testid="r1k-regione"
             value={p.ross1000.regione}
             onChange={(e) => upd("ross1000.regione", e.target.value)}
-            className="bg-transparent border border-[#1E1E28] px-4 py-3 text-zinc-100 focus:border-zinc-300 outline-none font-mono text-sm"
+            className="bg-transparent border border-border px-4 py-3 text-zinc-100 focus:border-zinc-300 outline-none font-mono text-sm"
           >
             {["Abruzzo","Basilicata","Calabria","Emilia-Romagna","Lazio","Liguria","Lombardia","Marche","Molise","Piemonte","Sardegna","Toscana","Veneto"].map((r) => (
-              <option key={r} value={r} className="bg-[#0E0E14]">{r}</option>
+              <option key={r} value={r} className="bg-surface-1">{r}</option>
             ))}
           </select>
         </label>
@@ -365,10 +365,10 @@ function PropertyEditor({ p, setP, save, cancel, saving, error }) {
             data-testid="r1k-format"
             value={p.ross1000.format}
             onChange={(e) => upd("ross1000.format", e.target.value)}
-            className="bg-transparent border border-[#1E1E28] px-4 py-3 text-zinc-100 focus:border-zinc-300 outline-none font-mono text-sm"
+            className="bg-transparent border border-border px-4 py-3 text-zinc-100 focus:border-zinc-300 outline-none font-mono text-sm"
           >
-            <option value="soap_v2" className="bg-[#0E0E14]">Web service automatico (consigliato)</option>
-            <option value="csv_manual" className="bg-[#0E0E14]">CSV manuale (download + upload)</option>
+            <option value="soap_v2" className="bg-surface-1">Web service automatico (consigliato)</option>
+            <option value="csv_manual" className="bg-surface-1">CSV manuale (download + upload)</option>
           </select>
         </label>
         {p.property_id && p.ross1000.format === "soap_v2" && (
@@ -416,7 +416,7 @@ function PropertyEditor({ p, setP, save, cancel, saving, error }) {
               value={p.calendar?.color || "#10b981"}
               onChange={(e) => upd("calendar.color", e.target.value)}
               data-testid="cal-color"
-              className="w-12 h-10 bg-transparent border border-[#1E1E28] cursor-pointer"
+              className="w-12 h-10 bg-transparent border border-border cursor-pointer"
             />
             <span className="text-zinc-400 text-[11px] font-mono">{p.calendar?.color || "#10b981"}</span>
           </div>
@@ -431,7 +431,7 @@ function PropertyEditor({ p, setP, save, cancel, saving, error }) {
       <div className="flex gap-3 mt-4">
         <button
           onClick={cancel}
-          className="flex-1 border border-[#1E1E28] hover:border-zinc-500 text-zinc-300 px-6 py-4 uppercase tracking-widest text-xs transition-colors cursor-pointer"
+          className="flex-1 border border-border hover:border-zinc-500 text-zinc-300 px-6 py-4 uppercase tracking-widest text-xs transition-colors cursor-pointer"
         >
           Annulla
         </button>
@@ -476,7 +476,7 @@ function TestCredentialsButton({ propertyId }) {
         onClick={run}
         disabled={loading}
         data-testid="test-alloggiati-btn"
-        className="border border-[#1E1E28] hover:border-zinc-500 text-zinc-300 px-4 py-3 uppercase tracking-widest text-[10px] transition-colors cursor-pointer disabled:opacity-50"
+        className="border border-border hover:border-zinc-500 text-zinc-300 px-4 py-3 uppercase tracking-widest text-[10px] transition-colors cursor-pointer disabled:opacity-50"
       >
         {loading ? "Test in corso..." : "Test credenziali Alloggiati Web"}
       </button>
@@ -542,7 +542,7 @@ function TestTurismo5Button({ propertyId }) {
         onClick={run}
         disabled={loading}
         data-testid="test-turismo5-btn"
-        className="border border-[#1E1E28] hover:border-zinc-500 text-zinc-300 px-4 py-3 uppercase tracking-widest text-[10px] transition-colors cursor-pointer disabled:opacity-50"
+        className="border border-border hover:border-zinc-500 text-zinc-300 px-4 py-3 uppercase tracking-widest text-[10px] transition-colors cursor-pointer disabled:opacity-50"
       >
         {loading ? "Test in corso..." : "Test credenziali Turismo 5"}
       </button>
@@ -636,7 +636,7 @@ function ApartmentSelector({ propertyId, value, onChange, disabled }) {
           onClick={load}
           disabled={loading}
           data-testid="load-appartamenti-btn"
-          className="border border-[#1E1E28] hover:border-zinc-500 text-zinc-300 px-4 py-3 uppercase tracking-widest text-[10px] transition-colors cursor-pointer disabled:opacity-50"
+          className="border border-border hover:border-zinc-500 text-zinc-300 px-4 py-3 uppercase tracking-widest text-[10px] transition-colors cursor-pointer disabled:opacity-50"
         >
           {loading ? "Caricamento..." : "Carica miei appartamenti da Alloggiati Web"}
         </button>
@@ -646,11 +646,11 @@ function ApartmentSelector({ propertyId, value, onChange, disabled }) {
             data-testid="aw-idappartamento"
             value={value !== undefined && value !== null && value !== "" ? value : ""}
             onChange={(e) => onChange(e.target.value === "" ? null : parseInt(e.target.value))}
-            className="bg-transparent border border-[#1E1E28] px-4 py-3 text-zinc-100 focus:border-zinc-300 outline-none font-mono text-sm"
+            className="bg-transparent border border-border px-4 py-3 text-zinc-100 focus:border-zinc-300 outline-none font-mono text-sm"
           >
-            <option value="" className="bg-[#0E0E14]">— Seleziona appartamento —</option>
+            <option value="" className="bg-surface-1">— Seleziona appartamento —</option>
             {items.map((a) => (
-              <option key={a.id} value={a.id} className="bg-[#0E0E14]">
+              <option key={a.id} value={a.id} className="bg-surface-1">
                 [{a.id}] {a.descrizione} — {a.comune} ({a.prov})
               </option>
             ))}
@@ -691,12 +691,12 @@ function ApartmentSelector({ propertyId, value, onChange, disabled }) {
                 value={value || ""}
                 onChange={(e) => onChange(parseInt(e.target.value) || 0)}
                 placeholder="es. 1"
-                className="flex-1 bg-transparent border border-[#1E1E28] px-3 py-2 text-zinc-100 placeholder:text-zinc-600 focus:border-zinc-300 outline-none font-mono text-sm"
+                className="flex-1 bg-transparent border border-border px-3 py-2 text-zinc-100 placeholder:text-zinc-600 focus:border-zinc-300 outline-none font-mono text-sm"
               />
               <button
                 type="button"
                 onClick={() => onChange(1)}
-                className="border border-[#1E1E28] hover:border-zinc-500 px-3 py-2 text-zinc-300 uppercase tracking-widest text-[10px] cursor-pointer"
+                className="border border-border hover:border-zinc-500 px-3 py-2 text-zinc-300 uppercase tracking-widest text-[10px] cursor-pointer"
               >
                 Usa 1
               </button>
@@ -799,7 +799,7 @@ function AddApartmentForm({ propertyId, onAdded, onCancel }) {
   };
 
   return (
-    <div className="border border-[#1E1E28] p-4 flex flex-col gap-3 bg-[#0E0E14]">
+    <div className="border border-border p-4 flex flex-col gap-3 bg-surface-1">
       <p className="text-xs tracking-[0.25em] uppercase text-zinc-300">
         Nuovo Appartamento
       </p>
@@ -811,7 +811,7 @@ function AddApartmentForm({ propertyId, onAdded, onCancel }) {
           value={form.descrizione}
           onChange={(e) => setForm({ ...form, descrizione: e.target.value })}
           placeholder="Es. Villa Mare Appartamento 2"
-          className="bg-transparent border border-[#1E1E28] px-3 py-2 text-zinc-100 placeholder:text-zinc-600 focus:border-zinc-300 outline-none text-sm"
+          className="bg-transparent border border-border px-3 py-2 text-zinc-100 placeholder:text-zinc-600 focus:border-zinc-300 outline-none text-sm"
         />
       </label>
       <label className="flex flex-col gap-1">
@@ -824,13 +824,13 @@ function AddApartmentForm({ propertyId, onAdded, onCancel }) {
             onChange={(e) => setComuneQuery(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), searchComuni())}
             placeholder="Es. Pescara"
-            className="flex-1 bg-transparent border border-[#1E1E28] px-3 py-2 text-zinc-100 placeholder:text-zinc-600 focus:border-zinc-300 outline-none text-sm"
+            className="flex-1 bg-transparent border border-border px-3 py-2 text-zinc-100 placeholder:text-zinc-600 focus:border-zinc-300 outline-none text-sm"
           />
           <button
             type="button"
             onClick={searchComuni}
             disabled={searchingComuni}
-            className="border border-[#1E1E28] hover:border-zinc-500 px-4 text-zinc-300 uppercase tracking-widest text-[10px] cursor-pointer disabled:opacity-50"
+            className="border border-border hover:border-zinc-500 px-4 text-zinc-300 uppercase tracking-widest text-[10px] cursor-pointer disabled:opacity-50"
           >
             {searchingComuni ? "..." : "Cerca"}
           </button>
@@ -847,11 +847,11 @@ function AddApartmentForm({ propertyId, onAdded, onCancel }) {
                 comune_nome: c ? c.nome : "",
               });
             }}
-            className="bg-transparent border border-[#1E1E28] px-3 py-2 text-zinc-100 focus:border-zinc-300 outline-none font-mono text-sm mt-1"
+            className="bg-transparent border border-border px-3 py-2 text-zinc-100 focus:border-zinc-300 outline-none font-mono text-sm mt-1"
           >
-            <option value="" className="bg-[#0E0E14]">— Seleziona comune —</option>
+            <option value="" className="bg-surface-1">— Seleziona comune —</option>
             {comuneResults.map((c) => (
-              <option key={c.codice} value={c.codice} className="bg-[#0E0E14]">
+              <option key={c.codice} value={c.codice} className="bg-surface-1">
                 {c.nome} ({c.provincia}) — {c.codice}
               </option>
             ))}
@@ -866,7 +866,7 @@ function AddApartmentForm({ propertyId, onAdded, onCancel }) {
           value={form.indirizzo}
           onChange={(e) => setForm({ ...form, indirizzo: e.target.value })}
           placeholder="Es. Via Roma, 25"
-          className="bg-transparent border border-[#1E1E28] px-3 py-2 text-zinc-100 placeholder:text-zinc-600 focus:border-zinc-300 outline-none text-sm"
+          className="bg-transparent border border-border px-3 py-2 text-zinc-100 placeholder:text-zinc-600 focus:border-zinc-300 outline-none text-sm"
         />
       </label>
       <label className="flex flex-col gap-1">
@@ -877,7 +877,7 @@ function AddApartmentForm({ propertyId, onAdded, onCancel }) {
           value={form.proprietario}
           onChange={(e) => setForm({ ...form, proprietario: e.target.value })}
           placeholder="Nome Cognome del proprietario"
-          className="bg-transparent border border-[#1E1E28] px-3 py-2 text-zinc-100 placeholder:text-zinc-600 focus:border-zinc-300 outline-none text-sm"
+          className="bg-transparent border border-border px-3 py-2 text-zinc-100 placeholder:text-zinc-600 focus:border-zinc-300 outline-none text-sm"
         />
       </label>
       {error && (
@@ -889,7 +889,7 @@ function AddApartmentForm({ propertyId, onAdded, onCancel }) {
         <button
           type="button"
           onClick={onCancel}
-          className="flex-1 border border-[#1E1E28] hover:border-zinc-500 text-zinc-400 px-4 py-3 uppercase tracking-widest text-[10px] cursor-pointer"
+          className="flex-1 border border-border hover:border-zinc-500 text-zinc-400 px-4 py-3 uppercase tracking-widest text-[10px] cursor-pointer"
         >
           Annulla
         </button>
@@ -940,13 +940,13 @@ function PersonalIcalField({ propertyId }) {
           value={fullUrl}
           data-testid="cal-personal-url"
           onClick={(e) => e.target.select()}
-          className="flex-1 bg-[#0E0E14] border border-[#1E1E28] px-3 py-2 text-zinc-100 text-[10px] font-mono outline-none"
+          className="flex-1 bg-surface-1 border border-border px-3 py-2 text-zinc-100 text-[10px] font-mono outline-none"
         />
         <button
           type="button"
           onClick={copy}
           data-testid="cal-personal-copy"
-          className="border border-[#1E1E28] hover:border-emerald-500 text-zinc-300 hover:text-emerald-400 px-3 py-2 uppercase tracking-widest text-[10px] cursor-pointer"
+          className="border border-border hover:border-emerald-500 text-zinc-300 hover:text-emerald-400 px-3 py-2 uppercase tracking-widest text-[10px] cursor-pointer"
         >
           {copied ? "Copiato ✓" : "Copia"}
         </button>
@@ -997,7 +997,7 @@ function OwnerBankInfoSection({ properties }) {
   if (cfs.length === 0) return null;
 
   return (
-    <div className="border-t border-[#1E1E28] pt-6 mt-6 flex flex-col gap-3">
+    <div className="border-t border-border pt-6 mt-6 flex flex-col gap-3">
       <div>
         <h3 className="text-2xl font-bold uppercase tracking-tight text-zinc-100" style={{ fontFamily: "'Cabinet Grotesk', sans-serif" }}>
           Dati Bancari per Proprietario
@@ -1018,7 +1018,7 @@ function OwnerBankInfoSection({ properties }) {
               <div
                 key={c.codice_fiscale}
                 data-testid={`owner-bank-row-${c.codice_fiscale}`}
-                className="bg-[#0E0E14] border border-[#1E1E28] p-4 flex items-center justify-between gap-4"
+                className="bg-surface-1 border border-border p-4 flex items-center justify-between gap-4"
               >
                 <div className="min-w-0 flex-1">
                   <p className="font-medium text-zinc-100">{c.intestatario || "—"}</p>
@@ -1112,7 +1112,7 @@ function OwnerBankInfoModal({ cf, intestatario, onClose, onSaved }) {
       onClick={onClose}
     >
       <div
-        className="bg-[#05050A] border border-[#1E1E28] max-w-md w-full p-6 flex flex-col gap-4"
+        className="bg-background border border-border max-w-md w-full p-6 flex flex-col gap-4"
         onClick={(e) => e.stopPropagation()}
       >
         <div>
@@ -1155,7 +1155,7 @@ function OwnerBankInfoModal({ cf, intestatario, onClose, onSaved }) {
               <button
                 onClick={onClose}
                 data-testid="bank-cancel"
-                className="text-[10px] tracking-[0.25em] uppercase text-zinc-400 border border-[#1E1E28] hover:border-zinc-500 px-5 py-3 transition-colors cursor-pointer"
+                className="text-[10px] tracking-[0.25em] uppercase text-zinc-400 border border-border hover:border-zinc-500 px-5 py-3 transition-colors cursor-pointer"
               >
                 Annulla
               </button>

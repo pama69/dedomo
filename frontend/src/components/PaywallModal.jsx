@@ -24,7 +24,7 @@ export default function PaywallModal({ open, reason, onClose, details = {} }) {
       onClick={onClose}
     >
       <div
-        className="bg-[#0E0E14] border border-amber-500/40 max-w-md w-full p-6 flex flex-col gap-5"
+        className="bg-surface-1 border border-amber-500/40 max-w-md w-full p-6 flex flex-col gap-5"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-baseline justify-between">
@@ -57,7 +57,7 @@ export default function PaywallModal({ open, reason, onClose, details = {} }) {
           )}
         </p>
 
-        <div className="border border-[#1E1E28] p-3 flex flex-col gap-2 font-mono text-[11px]">
+        <div className="border border-border p-3 flex flex-col gap-2 font-mono text-[11px]">
           <div className="flex justify-between">
             <span className="text-zinc-500">Prima proprietà</span>
             <span className="text-zinc-200">€ 19.99 / anno</span>
@@ -66,7 +66,7 @@ export default function PaywallModal({ open, reason, onClose, details = {} }) {
             <span className="text-zinc-500">Ogni proprietà extra (max 10)</span>
             <span className="text-zinc-200">€ 9.99 / anno</span>
           </div>
-          <div className="flex justify-between text-zinc-600 pt-1 border-t border-[#1E1E28]">
+          <div className="flex justify-between text-zinc-600 pt-1 border-t border-border">
             <span>+ IVA 22%</span>
             <span>annullabile in qualsiasi momento</span>
           </div>

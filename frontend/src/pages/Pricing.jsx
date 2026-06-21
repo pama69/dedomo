@@ -129,7 +129,7 @@ export default function Pricing() {
         )}
 
         {/* Property count selector */}
-        <div className="border border-[#1E1E28] p-4 flex flex-col gap-4">
+        <div className="border border-border p-4 flex flex-col gap-4">
           <div className="flex justify-between items-baseline">
             <span className="text-[10px] tracking-[0.25em] uppercase text-zinc-500">
               Numero di proprietà
@@ -162,7 +162,7 @@ export default function Pricing() {
                 className={`px-3 py-1 text-[10px] tracking-widest uppercase border cursor-pointer ${
                   num === n
                     ? "border-amber-500 bg-amber-500/10 text-amber-300"
-                    : "border-[#1E1E28] text-zinc-500 hover:border-amber-500/60"
+                    : "border-border text-zinc-500 hover:border-amber-500/60"
                 }`}
               >
                 {n}
@@ -172,7 +172,7 @@ export default function Pricing() {
         </div>
 
         {/* Pricing breakdown */}
-        <div className="border border-[#1E1E28] p-4 flex flex-col gap-3 font-mono">
+        <div className="border border-border p-4 flex flex-col gap-3 font-mono">
           <div className="flex justify-between text-[11px]">
             <span className="text-zinc-400">Prima proprietà</span>
             <span className="text-zinc-200">€ {priceFirst.toFixed(2)}</span>
@@ -183,7 +183,7 @@ export default function Pricing() {
               <span className="text-zinc-200">€ {((num - 1) * priceExtra).toFixed(2)}</span>
             </div>
           )}
-          <div className="flex justify-between text-[11px] border-t border-[#1E1E28] pt-2">
+          <div className="flex justify-between text-[11px] border-t border-border pt-2">
             <span className="text-zinc-400">Subtotale</span>
             <span className="text-zinc-200">€ {subtotal.toFixed(2)}</span>
           </div>

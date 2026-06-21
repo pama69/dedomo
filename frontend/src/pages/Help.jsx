@@ -211,7 +211,7 @@ export default function Help() {
         {/* TOC */}
         <nav
           data-testid="help-toc"
-          className="md:sticky md:top-4 self-start border-l border-[#1E1E28] pl-4 flex flex-col gap-2"
+          className="md:sticky md:top-4 self-start border-l border-border pl-4 flex flex-col gap-2"
         >
           <p className="text-[10px] tracking-[0.3em] uppercase text-zinc-500 mb-2">Indice</p>
           {CHAPTERS.map((ch) => (
@@ -247,7 +247,7 @@ function Chapter({ ch }) {
       data-testid={`help-chapter-${ch.id}`}
       className="flex flex-col gap-4 scroll-mt-6"
     >
-      <header className="flex items-baseline gap-4 border-b border-[#1E1E28] pb-3">
+      <header className="flex items-baseline gap-4 border-b border-border pb-3">
         <span className="font-mono text-xs text-zinc-500">{ch.n}</span>
         <h3
           className="text-xl font-bold uppercase tracking-tight text-zinc-100"
@@ -280,7 +280,7 @@ function Chapter({ ch }) {
           {ch.images.map((img, i) => (
             <figure
               key={i}
-              className="bg-[#0E0E14] border border-[#1E1E28] p-2 flex flex-col gap-2"
+              className="bg-surface-1 border border-border p-2 flex flex-col gap-2"
             >
               <img
                 src={asset(img.src)}
@@ -300,7 +300,7 @@ function Chapter({ ch }) {
       {ch.faqs && (
         <div className="flex flex-col gap-4">
           {ch.faqs.map((f, i) => (
-            <div key={i} className="border-l-2 border-[#1E1E28] pl-4">
+            <div key={i} className="border-l-2 border-border pl-4">
               <p className="text-zinc-100 font-medium text-sm">{f.q}</p>
               <p className="text-zinc-400 text-sm mt-1 leading-relaxed">{f.a}</p>
             </div>

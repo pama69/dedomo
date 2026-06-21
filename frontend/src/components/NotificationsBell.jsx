@@ -96,9 +96,9 @@ export default function NotificationsBell() {
       {open && (
         <div
           data-testid="notifications-dropdown"
-          className="absolute right-0 top-full mt-2 w-[min(360px,calc(100vw-2rem))] bg-[#0E0E14] border border-[#1E1E28] shadow-2xl z-50 max-h-[480px] overflow-hidden flex flex-col"
+          className="absolute right-0 top-full mt-2 w-[min(360px,calc(100vw-2rem))] bg-surface-1 border border-border shadow-2xl z-50 max-h-[480px] overflow-hidden flex flex-col"
         >
-          <div className="px-3 py-2 border-b border-[#1E1E28] flex items-center justify-between">
+          <div className="px-3 py-2 border-b border-border flex items-center justify-between">
             <span className="text-[10px] tracking-[0.25em] uppercase text-zinc-400">Notifiche</span>
             {unread > 0 && (
               <button
@@ -123,7 +123,7 @@ export default function NotificationsBell() {
                   type="button"
                   onClick={() => !n.read && markRead(n.notification_id)}
                   data-testid={`notification-${n.notification_id}`}
-                  className={`w-full text-left px-3 py-3 border-b border-[#1E1E28] hover:bg-[#15151C] flex gap-3 cursor-pointer ${!n.read ? "bg-[#0E0E14]" : "bg-transparent opacity-70"}`}
+                  className={`w-full text-left px-3 py-3 border-b border-border hover:bg-surface-2 flex gap-3 cursor-pointer ${!n.read ? "bg-surface-1" : "bg-transparent opacity-70"}`}
                 >
                   <div className={`w-6 h-6 flex-shrink-0 border ${levelColor(n.level)} flex items-center justify-center font-mono text-xs`}>
                     {levelIcon(n.level)}

@@ -110,7 +110,7 @@ export default function Calendar() {
           <button
             onClick={() => setMonthStart(addMonths(monthStart, -1))}
             data-testid="cal-prev-month"
-            className="border border-[#1E1E28] hover:border-zinc-500 text-zinc-300 px-3 py-2 text-[10px] uppercase tracking-widest cursor-pointer"
+            className="border border-border hover:border-zinc-500 text-zinc-300 px-3 py-2 text-[10px] uppercase tracking-widest cursor-pointer"
           >←</button>
           <span className="text-zinc-100 text-sm uppercase tracking-widest min-w-[140px] text-center font-mono">
             {fmtMonthName(monthStart)}
@@ -118,7 +118,7 @@ export default function Calendar() {
           <button
             onClick={() => setMonthStart(addMonths(monthStart, 1))}
             data-testid="cal-next-month"
-            className="border border-[#1E1E28] hover:border-zinc-500 text-zinc-300 px-3 py-2 text-[10px] uppercase tracking-widest cursor-pointer"
+            className="border border-border hover:border-zinc-500 text-zinc-300 px-3 py-2 text-[10px] uppercase tracking-widest cursor-pointer"
           >→</button>
           <button
             onClick={() => setAddOpen(true)}
@@ -135,7 +135,7 @@ export default function Calendar() {
       )}
 
       {/* Legend */}
-      <div className="flex flex-wrap gap-3 border border-[#1E1E28] p-3" data-testid="cal-legend">
+      <div className="flex flex-wrap gap-3 border border-border p-3" data-testid="cal-legend">
         {properties.length === 0 ? (
           <span className="text-zinc-500 text-[11px] font-mono">Nessuna struttura configurata.</span>
         ) : (
@@ -154,10 +154,10 @@ export default function Calendar() {
       {loading && <p className="text-zinc-500 text-[11px] font-mono">Caricamento...</p>}
 
       {/* Calendar grid */}
-      <div className="border border-[#1E1E28]">
-        <div className="grid grid-cols-7 border-b border-[#1E1E28]">
+      <div className="border border-border">
+        <div className="grid grid-cols-7 border-b border-border">
           {["Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom"].map((d) => (
-            <div key={d} className="px-2 py-2 text-[9px] tracking-widest uppercase text-zinc-500 text-center font-mono border-r border-[#1E1E28] last:border-r-0">{d}</div>
+            <div key={d} className="px-2 py-2 text-[9px] tracking-widest uppercase text-zinc-500 text-center font-mono border-r border-border last:border-r-0">{d}</div>
           ))}
         </div>
         <div className="grid grid-cols-7" style={{ gridAutoRows: "minmax(96px, auto)" }}>
@@ -170,7 +170,7 @@ export default function Calendar() {
               <div
                 key={i}
                 data-testid={`cal-day-${k}`}
-                className={`border-r border-b border-[#1E1E28] last:border-r-0 p-1 flex flex-col gap-0.5 ${!inMonth ? "bg-[#0a0a0e]" : ""}`}
+                className={`border-r border-b border-border last:border-r-0 p-1 flex flex-col gap-0.5 ${!inMonth ? "bg-background" : ""}`}
               >
                 <span className={`text-[10px] font-mono ${isToday ? "text-emerald-500 font-bold" : inMonth ? "text-zinc-400" : "text-zinc-700"}`}>
                   {d.getDate()}
@@ -300,8 +300,8 @@ function BookingModal({ properties, booking, onClose, onSaved, onDeleted }) {
 
   return (
     <div className="fixed inset-0 bg-black/70 z-50 flex items-start justify-center p-4 overflow-y-auto" onClick={onClose} data-testid="cal-booking-modal">
-      <div className="bg-[#0E0E14] border border-[#1E1E28] max-w-md w-full my-8 flex flex-col" onClick={(e) => e.stopPropagation()}>
-        <div className="px-4 py-3 border-b border-[#1E1E28] flex items-center justify-between">
+      <div className="bg-surface-1 border border-border max-w-md w-full my-8 flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <div className="px-4 py-3 border-b border-border flex items-center justify-between">
           <span className="text-[10px] tracking-[0.25em] uppercase text-zinc-400">
             {isEdit ? "Modifica Prenotazione" : "Nuova Prenotazione"}
           </span>
@@ -315,10 +315,10 @@ function BookingModal({ properties, booking, onClose, onSaved, onDeleted }) {
               onChange={(e) => setPropertyId(e.target.value)}
               disabled={isEdit}
               data-testid="cal-booking-property"
-              className="bg-transparent border border-[#1E1E28] px-3 py-2 text-zinc-100 focus:border-zinc-300 outline-none text-sm font-mono disabled:opacity-50"
+              className="bg-transparent border border-border px-3 py-2 text-zinc-100 focus:border-zinc-300 outline-none text-sm font-mono disabled:opacity-50"
             >
               {properties.map((p) => (
-                <option key={p.property_id} value={p.property_id} className="bg-[#0E0E14]">
+                <option key={p.property_id} value={p.property_id} className="bg-surface-1">
                   {p.nome}
                 </option>
               ))}
@@ -332,7 +332,7 @@ function BookingModal({ properties, booking, onClose, onSaved, onDeleted }) {
                 value={start}
                 onChange={(e) => setStart(e.target.value)}
                 data-testid="cal-booking-start"
-                className="bg-transparent border border-[#1E1E28] px-3 py-2 text-zinc-100 focus:border-zinc-300 outline-none text-sm font-mono"
+                className="bg-transparent border border-border px-3 py-2 text-zinc-100 focus:border-zinc-300 outline-none text-sm font-mono"
               />
             </label>
             <label className="flex flex-col gap-1">
@@ -342,7 +342,7 @@ function BookingModal({ properties, booking, onClose, onSaved, onDeleted }) {
                 value={end}
                 onChange={(e) => setEnd(e.target.value)}
                 data-testid="cal-booking-end"
-                className="bg-transparent border border-[#1E1E28] px-3 py-2 text-zinc-100 focus:border-zinc-300 outline-none text-sm font-mono"
+                className="bg-transparent border border-border px-3 py-2 text-zinc-100 focus:border-zinc-300 outline-none text-sm font-mono"
               />
             </label>
           </div>
@@ -354,7 +354,7 @@ function BookingModal({ properties, booking, onClose, onSaved, onDeleted }) {
               rows={3}
               data-testid="cal-booking-notes"
               placeholder="Note libere..."
-              className="bg-transparent border border-[#1E1E28] px-3 py-2 text-zinc-100 placeholder:text-zinc-600 focus:border-zinc-300 outline-none text-sm font-mono resize-none"
+              className="bg-transparent border border-border px-3 py-2 text-zinc-100 placeholder:text-zinc-600 focus:border-zinc-300 outline-none text-sm font-mono resize-none"
             />
           </label>
           {error && <p className="text-red-400 text-[10px] font-mono">[ ERR ] {error}</p>}
@@ -379,7 +379,7 @@ function BookingModal({ properties, booking, onClose, onSaved, onDeleted }) {
             )}
             <button
               onClick={onClose}
-              className="border border-[#1E1E28] hover:border-zinc-500 text-zinc-400 px-4 py-2 uppercase tracking-widest text-[10px] cursor-pointer"
+              className="border border-border hover:border-zinc-500 text-zinc-400 px-4 py-2 uppercase tracking-widest text-[10px] cursor-pointer"
             >
               Annulla
             </button>
@@ -401,7 +401,7 @@ function BookingModal({ properties, booking, onClose, onSaved, onDeleted }) {
                 <button
                   onClick={() => setConfirmDelete(false)}
                   disabled={saving}
-                  className="flex-1 border border-[#1E1E28] hover:border-zinc-500 text-zinc-400 px-4 py-2 uppercase tracking-widest text-[10px] cursor-pointer"
+                  className="flex-1 border border-border hover:border-zinc-500 text-zinc-400 px-4 py-2 uppercase tracking-widest text-[10px] cursor-pointer"
                 >
                   Annulla
                 </button>

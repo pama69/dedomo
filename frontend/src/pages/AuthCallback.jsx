@@ -39,7 +39,7 @@ export default function AuthCallback() {
   }, [navigate, setUser]);
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#05050A]">
+    <div className="min-h-screen flex items-center justify-center bg-background">
       <p className="text-zinc-500 text-xs tracking-[0.3em] uppercase">Autenticazione in corso...</p>
     </div>
   );

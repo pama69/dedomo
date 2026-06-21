@@ -97,8 +97,8 @@ export default function Checkin() {
               onClick={() => setPropertyId(p.property_id)}
               className={`text-left p-4 border transition-colors cursor-pointer ${
                 propertyId === p.property_id
-                  ? "border-zinc-100 bg-[#15151C]"
-                  : "border-[#1E1E28] hover:border-zinc-500"
+                  ? "border-zinc-100 bg-surface-2"
+                  : "border-border hover:border-zinc-500"
               }`}
             >
               <div className="flex justify-between items-start">
@@ -310,7 +310,7 @@ export default function Checkin() {
                 className={`text-[10px] tracking-[0.25em] uppercase border px-4 py-2 cursor-pointer transition-colors ${
                   i === activeGuestIdx
                     ? "border-zinc-100 text-zinc-100"
-                    : "border-[#1E1E28] text-zinc-500 hover:text-zinc-300"
+                    : "border-border text-zinc-500 hover:text-zinc-300"
                 }`}
               >
                 {i === 0 ? "★ " : ""}{lbl}
@@ -323,7 +323,7 @@ export default function Checkin() {
               setGuests([...guests, emptyGuest()]);
               setActiveGuestIdx(guests.length);
             }}
-            className="text-[10px] tracking-[0.25em] uppercase border border-dashed border-[#1E1E28] text-zinc-500 hover:text-zinc-100 px-4 py-2 cursor-pointer"
+            className="text-[10px] tracking-[0.25em] uppercase border border-dashed border-border text-zinc-500 hover:text-zinc-100 px-4 py-2 cursor-pointer"
           >
             + Aggiungi
           </button>
@@ -333,7 +333,7 @@ export default function Checkin() {
         </p>
 
         <div className="grid grid-cols-2 gap-2">
-          <label className="border-2 border-dashed border-[#1E1E28] bg-[#0E0E14] py-6 flex flex-col items-center justify-center hover:border-zinc-500 transition-colors cursor-pointer text-zinc-400 uppercase tracking-widest text-[10px] text-center">
+          <label className="border-2 border-dashed border-border bg-surface-1 py-6 flex flex-col items-center justify-center hover:border-zinc-500 transition-colors cursor-pointer text-zinc-400 uppercase tracking-widest text-[10px] text-center">
             <input
               type="file"
               accept="image/jpeg,image/png,image/webp"
@@ -351,7 +351,7 @@ export default function Checkin() {
               </>
             )}
           </label>
-          <label className="border-2 border-dashed border-[#1E1E28] bg-[#0E0E14] py-6 flex flex-col items-center justify-center hover:border-zinc-500 transition-colors cursor-pointer text-zinc-400 uppercase tracking-widest text-[10px] text-center">
+          <label className="border-2 border-dashed border-border bg-surface-1 py-6 flex flex-col items-center justify-center hover:border-zinc-500 transition-colors cursor-pointer text-zinc-400 uppercase tracking-widest text-[10px] text-center">
             <input
               type="file"
               accept="image/jpeg,image/png,image/webp"
@@ -381,7 +381,7 @@ export default function Checkin() {
         )}
 
         {g._doc_preview && (
-          <div className="border border-[#1E1E28] p-3 flex flex-col gap-2">
+          <div className="border border-border p-3 flex flex-col gap-2">
             <span className="text-[10px] tracking-[0.25em] uppercase text-zinc-500">
               Foto Documento — Confronta con i dati estratti
             </span>
@@ -582,7 +582,7 @@ export default function Checkin() {
     return (
       <>
         <StepHeader n="04" label="Riepilogo" />
-        <div className="bg-[#0E0E14] border border-[#1E1E28] p-5 font-mono text-xs flex flex-col gap-2">
+        <div className="bg-surface-1 border border-border p-5 font-mono text-xs flex flex-col gap-2">
           <Row label="STRUTTURA" value={prop?.nome} />
           <Row label="MODALITÀ" value={`[${prop?.mode}]`} />
           <Row label="ARRIVO" value={new Date(dataArrivo).toLocaleDateString("it-IT")} />
@@ -591,7 +591,7 @@ export default function Checkin() {
         </div>
 
         {/* Tree view of guests: capofamiglia at root, familiari indented */}
-        <div className="bg-[#0E0E14] border border-[#1E1E28] p-5 font-mono text-xs flex flex-col gap-2">
+        <div className="bg-surface-1 border border-border p-5 font-mono text-xs flex flex-col gap-2">
           <p className="text-[10px] tracking-[0.3em] uppercase text-zinc-500 mb-2">
             Struttura Familiare
           </p>
@@ -605,7 +605,7 @@ export default function Checkin() {
                 </span>
               </div>
               {familiari.map((g, i) => (
-                <div key={i} className="ml-6 flex items-center gap-2 text-zinc-300 border-l border-[#1E1E28] pl-4 py-1">
+                <div key={i} className="ml-6 flex items-center gap-2 text-zinc-300 border-l border-border pl-4 py-1">
                   <span className="text-zinc-600">└</span>
                   <span className="font-bold">{g.cognome || "—"} {g.nome}</span>
                   <span className="text-zinc-500 text-[10px]">[FAMILIARE]</span>
@@ -622,7 +622,7 @@ export default function Checkin() {
           </summary>
           <div className="flex flex-col gap-2 mt-3">
             {guests.map((g, i) => (
-              <div key={i} className="bg-[#0E0E14] border border-[#1E1E28] p-4 font-mono text-xs">
+              <div key={i} className="bg-surface-1 border border-border p-4 font-mono text-xs">
                 <p className="text-zinc-300 font-bold">
                   #{i + 1} — {g.cognome} {g.nome} [{g.sesso}]
                 </p>
@@ -769,7 +769,7 @@ export default function Checkin() {
               target="_blank"
               rel="noreferrer"
               data-testid="download-ross-csv"
-              className="text-center border border-[#1E1E28] hover:border-zinc-500 px-6 py-4 uppercase tracking-widest text-xs text-zinc-300 cursor-pointer"
+              className="text-center border border-border hover:border-zinc-500 px-6 py-4 uppercase tracking-widest text-xs text-zinc-300 cursor-pointer"
             >
               Scarica CSV Ross 1000
             </a>
@@ -811,7 +811,7 @@ export default function Checkin() {
 // ===== sub-components =====
 function StepHeader({ n, label }) {
   return (
-    <div className="flex items-baseline gap-4 border-b border-[#1E1E28] pb-4">
+    <div className="flex items-baseline gap-4 border-b border-border pb-4">
       <span className="text-[10px] tracking-[0.3em] uppercase text-zinc-500 font-mono">/{n}</span>
       <h2
         className="text-2xl font-bold uppercase tracking-tight text-zinc-100"
@@ -832,7 +832,7 @@ function TextField({ label, value, onChange, testid, type = "text" }) {
         data-testid={testid}
         value={value ?? ""}
         onChange={(e) => onChange(e.target.value)}
-        className="bg-transparent border border-[#1E1E28] px-4 py-3 text-zinc-100 placeholder:text-zinc-600 focus:border-zinc-300 focus:ring-1 focus:ring-zinc-300 outline-none transition-all w-full font-mono text-sm"
+        className="bg-transparent border border-border px-4 py-3 text-zinc-100 placeholder:text-zinc-600 focus:border-zinc-300 focus:ring-1 focus:ring-zinc-300 outline-none transition-all w-full font-mono text-sm"
       />
     </label>
   );
@@ -850,10 +850,10 @@ function SelectField({ label, value, onChange, options, testid }) {
         data-testid={testid}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="bg-transparent border border-[#1E1E28] px-4 py-3 text-zinc-100 focus:border-zinc-300 outline-none font-mono text-sm"
+        className="bg-transparent border border-border px-4 py-3 text-zinc-100 focus:border-zinc-300 outline-none font-mono text-sm"
       >
         {options.map(([v, l]) => (
-          <option key={v} value={v} className="bg-[#0E0E14]">{l}</option>
+          <option key={v} value={v} className="bg-surface-1">{l}</option>
         ))}
       </select>
     </label>
@@ -877,7 +877,7 @@ function BackBtn({ onClick }) {
   return (
     <button
       onClick={onClick}
-      className="flex-1 border border-[#1E1E28] hover:border-zinc-500 text-zinc-300 px-6 py-4 uppercase tracking-widest text-xs transition-colors cursor-pointer"
+      className="flex-1 border border-border hover:border-zinc-500 text-zinc-300 px-6 py-4 uppercase tracking-widest text-xs transition-colors cursor-pointer"
     >
       ← Indietro
     </button>
@@ -897,7 +897,7 @@ function ResultRow({ label, ok, skipped, message }) {
   const tag = skipped ? "SKIP" : ok ? "OK" : "ERR";
   const color = skipped ? "text-zinc-500" : ok ? "text-emerald-500" : "text-red-500";
   return (
-    <div className="bg-[#0E0E14] border border-[#1E1E28] p-4 flex flex-col gap-2">
+    <div className="bg-surface-1 border border-border p-4 flex flex-col gap-2">
       <div className="flex justify-between items-center">
         <span className="text-zinc-300">{label}</span>
         <span className={`${color} font-bold`}>[ {tag} ]</span>
@@ -1030,10 +1030,10 @@ function ComuneNascitaField({ luogoNascita, comuneCode, provSigla, notFound, pro
         onKeyDown={onKey}
         placeholder="Inizia a scrivere il comune..."
         autoComplete="off"
-        className="bg-transparent border border-[#1E1E28] px-4 py-3 text-zinc-100 placeholder:text-zinc-600 focus:border-zinc-300 outline-none w-full font-mono text-sm"
+        className="bg-transparent border border-border px-4 py-3 text-zinc-100 placeholder:text-zinc-600 focus:border-zinc-300 outline-none w-full font-mono text-sm"
       />
       {showDropdown && (
-        <div className="absolute top-full left-0 right-0 mt-1 border border-[#1E1E28] bg-[#0E0E14] z-20 max-h-60 overflow-y-auto shadow-lg">
+        <div className="absolute top-full left-0 right-0 mt-1 border border-border bg-surface-1 z-20 max-h-60 overflow-y-auto shadow-lg">
           {searching && results.length === 0 && (
             <div className="px-3 py-2 text-zinc-500 text-[10px] font-mono">Ricerca...</div>
           )}
@@ -1045,7 +1045,7 @@ function ComuneNascitaField({ luogoNascita, comuneCode, provSigla, notFound, pro
               onMouseEnter={() => setHighlighted(i)}
               data-testid={`comune-result-${c.codice}`}
               className={`w-full text-left text-[11px] font-mono px-3 py-2 cursor-pointer ${
-                highlighted === i ? "bg-[#15151C] text-zinc-100" : "text-zinc-300 hover:bg-[#15151C]"
+                highlighted === i ? "bg-surface-2 text-zinc-100" : "text-zinc-300 hover:bg-surface-2"
               }`}
             >
               <span>{c.nome}</span>
@@ -1150,10 +1150,10 @@ function PaeseField({ paeseNome, statoCode, propertyId, onChange }) {
         onKeyDown={onKey}
         placeholder="Inizia a scrivere il paese..."
         autoComplete="off"
-        className="bg-transparent border border-[#1E1E28] px-4 py-3 text-zinc-100 placeholder:text-zinc-600 focus:border-zinc-300 outline-none w-full font-mono text-sm"
+        className="bg-transparent border border-border px-4 py-3 text-zinc-100 placeholder:text-zinc-600 focus:border-zinc-300 outline-none w-full font-mono text-sm"
       />
       {showDropdown && (
-        <div className="absolute top-full left-0 right-0 mt-1 border border-[#1E1E28] bg-[#0E0E14] z-20 max-h-60 overflow-y-auto shadow-lg">
+        <div className="absolute top-full left-0 right-0 mt-1 border border-border bg-surface-1 z-20 max-h-60 overflow-y-auto shadow-lg">
           {searching && results.length === 0 && (
             <div className="px-3 py-2 text-zinc-500 text-[10px] font-mono">Ricerca...</div>
           )}
@@ -1166,8 +1166,8 @@ function PaeseField({ paeseNome, statoCode, propertyId, onChange }) {
               data-testid={`paese-result-${c.codice}`}
               className={`w-full text-left text-[11px] font-mono px-3 py-2 cursor-pointer ${
                 highlighted === i
-                  ? "bg-[#15151C] text-zinc-100"
-                  : "text-zinc-300 hover:bg-[#15151C]"
+                  ? "bg-surface-2 text-zinc-100"
+                  : "text-zinc-300 hover:bg-surface-2"
               }`}
             >
               <span>{c.nome}</span>
@@ -1229,33 +1229,33 @@ function ComuneReceiptButton({ checkinId, guests, importo }) {
 
   if (!open) {
     return (
-      <button onClick={() => setOpen(true)} data-testid="download-pdf-receipt" className="text-center border border-[#1E1E28] hover:border-zinc-500 px-6 py-4 uppercase tracking-widest text-xs text-zinc-300 cursor-pointer">
+      <button onClick={() => setOpen(true)} data-testid="download-pdf-receipt" className="text-center border border-border hover:border-zinc-500 px-6 py-4 uppercase tracking-widest text-xs text-zinc-300 cursor-pointer">
         Genera Ricevuta Imposta (PDF) — € {importo?.toFixed(2)}
       </button>
     );
   }
   return (
-    <div className="border border-[#1E1E28] bg-[#0E0E14] p-4 flex flex-col gap-3">
+    <div className="border border-border bg-surface-1 p-4 flex flex-col gap-3">
       <p className="text-xs tracking-[0.3em] uppercase text-zinc-300">Nuova Ricevuta Comune</p>
       <label className="flex flex-col gap-1">
         <span className="text-[10px] tracking-[0.25em] uppercase text-zinc-500">N. Ricevuta</span>
-        <input type="text" data-testid="ricevuta-numero-input" value={numero} onChange={(e) => setNumero(e.target.value)} placeholder="Es. 2026/001" className="bg-transparent border border-[#1E1E28] px-3 py-2 text-zinc-100 placeholder:text-zinc-600 focus:border-zinc-300 outline-none text-sm font-mono"/>
+        <input type="text" data-testid="ricevuta-numero-input" value={numero} onChange={(e) => setNumero(e.target.value)} placeholder="Es. 2026/001" className="bg-transparent border border-border px-3 py-2 text-zinc-100 placeholder:text-zinc-600 focus:border-zinc-300 outline-none text-sm font-mono"/>
       </label>
       <label className="flex flex-col gap-1">
         <span className="text-[10px] tracking-[0.25em] uppercase text-zinc-500">Data Ricevuta</span>
-        <input type="date" data-testid="ricevuta-data-input" value={data} onChange={(e) => setData(e.target.value)} className="bg-transparent border border-[#1E1E28] px-3 py-2 text-zinc-100 focus:border-zinc-300 outline-none text-sm font-mono"/>
+        <input type="date" data-testid="ricevuta-data-input" value={data} onChange={(e) => setData(e.target.value)} className="bg-transparent border border-border px-3 py-2 text-zinc-100 focus:border-zinc-300 outline-none text-sm font-mono"/>
       </label>
       {guests && guests.length > 1 && (
         <label className="flex flex-col gap-1">
           <span className="text-[10px] tracking-[0.25em] uppercase text-zinc-500">Intestatario</span>
-          <select value={ospiteIdx} onChange={(e) => setOspiteIdx(parseInt(e.target.value))} className="bg-transparent border border-[#1E1E28] px-3 py-2 text-zinc-100 focus:border-zinc-300 outline-none text-sm font-mono">
-            {guests.map((g, i) => (<option key={i} value={i} className="bg-[#0E0E14]">{g.cognome} {g.nome}</option>))}
+          <select value={ospiteIdx} onChange={(e) => setOspiteIdx(parseInt(e.target.value))} className="bg-transparent border border-border px-3 py-2 text-zinc-100 focus:border-zinc-300 outline-none text-sm font-mono">
+            {guests.map((g, i) => (<option key={i} value={i} className="bg-surface-1">{g.cognome} {g.nome}</option>))}
           </select>
         </label>
       )}
       {error && <p className="text-red-500 text-[10px] font-mono break-words">[ ERR ] {error}</p>}
       <div className="flex gap-2">
-        <button type="button" onClick={() => setOpen(false)} className="flex-1 border border-[#1E1E28] hover:border-zinc-500 text-zinc-400 px-4 py-3 uppercase tracking-widest text-[10px] cursor-pointer">Annulla</button>
+        <button type="button" onClick={() => setOpen(false)} className="flex-1 border border-border hover:border-zinc-500 text-zinc-400 px-4 py-3 uppercase tracking-widest text-[10px] cursor-pointer">Annulla</button>
         <button type="button" onClick={submit} disabled={loading} data-testid="generate-ricevuta-btn" className="flex-1 bg-zinc-100 hover:bg-white text-[#05050A] px-4 py-3 uppercase tracking-widest text-[10px] cursor-pointer disabled:opacity-50">
           {loading ? "Generazione..." : "Genera e scarica"}
         </button>

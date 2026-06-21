@@ -33,7 +33,7 @@ export default function DownloadManualButton({ variant = "default", testid = "do
   const baseCls =
     variant === "primary"
       ? "text-[10px] tracking-[0.25em] uppercase text-[#05050A] bg-zinc-100 hover:bg-white px-5 py-3 transition-colors cursor-pointer"
-      : "text-[10px] tracking-[0.25em] uppercase text-zinc-400 hover:text-zinc-100 border border-[#1E1E28] hover:border-zinc-500 px-4 py-2.5 transition-colors cursor-pointer";
+      : "text-[10px] tracking-[0.25em] uppercase text-zinc-400 hover:text-zinc-100 border border-border hover:border-zinc-500 px-4 py-2.5 transition-colors cursor-pointer";
 
   return (
     <div className="flex flex-col gap-2 items-end">

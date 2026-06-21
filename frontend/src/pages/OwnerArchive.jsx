@@ -105,7 +105,7 @@ export default function OwnerArchive() {
       </h2>
 
       {/* Filters */}
-      <div className="border border-[#1E1E28] p-4 flex flex-col gap-3">
+      <div className="border border-border p-4 flex flex-col gap-3">
         <span className="text-[10px] tracking-[0.25em] uppercase text-zinc-500">Filtri</span>
         <div className="grid grid-cols-2 gap-3">
           <label className="flex flex-col gap-1">
@@ -115,7 +115,7 @@ export default function OwnerArchive() {
               value={dateFrom}
               onChange={(e) => setDateFrom(e.target.value)}
               data-testid="filter-date-from"
-              className="bg-transparent border border-[#1E1E28] px-3 py-2 text-zinc-100 focus:border-zinc-300 outline-none text-sm font-mono"
+              className="bg-transparent border border-border px-3 py-2 text-zinc-100 focus:border-zinc-300 outline-none text-sm font-mono"
             />
           </label>
           <label className="flex flex-col gap-1">
@@ -125,7 +125,7 @@ export default function OwnerArchive() {
               value={dateTo}
               onChange={(e) => setDateTo(e.target.value)}
               data-testid="filter-date-to"
-              className="bg-transparent border border-[#1E1E28] px-3 py-2 text-zinc-100 focus:border-zinc-300 outline-none text-sm font-mono"
+              className="bg-transparent border border-border px-3 py-2 text-zinc-100 focus:border-zinc-300 outline-none text-sm font-mono"
             />
           </label>
         </div>
@@ -139,7 +139,7 @@ export default function OwnerArchive() {
           </button>
           <button
             onClick={() => { setDateFrom(""); setDateTo(""); setTimeout(reload, 0); }}
-            className="border border-[#1E1E28] hover:border-zinc-500 text-zinc-400 px-4 py-2 uppercase tracking-[0.25em] text-[10px] cursor-pointer"
+            className="border border-border hover:border-zinc-500 text-zinc-400 px-4 py-2 uppercase tracking-[0.25em] text-[10px] cursor-pointer"
           >
             Reset
           </button>
@@ -157,7 +157,7 @@ export default function OwnerArchive() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-2 border-b border-[#1E1E28]">
+      <div className="flex gap-2 border-b border-border">
         <button
           onClick={() => setTab("ricevute")}
           data-testid="tab-ricevute"
@@ -214,7 +214,7 @@ export default function OwnerArchive() {
             )}
           </div>
           {ricevute.length === 0 ? (
-            <p className="text-zinc-500 text-sm font-mono border border-dashed border-[#1E1E28] p-8 text-center">
+            <p className="text-zinc-500 text-sm font-mono border border-dashed border-border p-8 text-center">
               Nessuna ricevuta nel periodo selezionato.
             </p>
           ) : (
@@ -223,7 +223,7 @@ export default function OwnerArchive() {
                 <div
                   key={`${r.checkin_id}-${r.receipt_index}`}
                   data-testid={`ricevuta-row-${r.checkin_id}-${r.receipt_index}`}
-                  className="border border-[#1E1E28] p-3 flex flex-col gap-2"
+                  className="border border-border p-3 flex flex-col gap-2"
                 >
                   <div className="flex items-baseline justify-between flex-wrap gap-2">
                     <span className="text-zinc-100 text-sm font-mono">
@@ -262,7 +262,7 @@ export default function OwnerArchive() {
       ) : tab === "schedine" ? (
         // schedine tab
         schedine.length === 0 ? (
-          <p className="text-zinc-500 text-sm font-mono border border-dashed border-[#1E1E28] p-8 text-center">
+          <p className="text-zinc-500 text-sm font-mono border border-dashed border-border p-8 text-center">
             Nessuna schedina Alloggiati Web nel periodo selezionato.
             <br />
             <span className="text-zinc-600 text-[10px]">
@@ -286,7 +286,7 @@ export default function OwnerArchive() {
               <div
                 key={s.checkin_id}
                 data-testid={`schedina-row-${s.checkin_id}`}
-                className="border border-[#1E1E28] p-3 flex flex-col gap-2"
+                className="border border-border p-3 flex flex-col gap-2"
               >
                 <div className="flex items-baseline justify-between flex-wrap gap-2">
                   <span className="text-zinc-100 text-sm font-mono">
@@ -319,7 +319,7 @@ export default function OwnerArchive() {
 
       {tab === "locazione" && !loading && (
         locazione.length === 0 ? (
-          <p className="text-zinc-500 text-sm font-mono border border-dashed border-[#1E1E28] p-8 text-center">
+          <p className="text-zinc-500 text-sm font-mono border border-dashed border-border p-8 text-center">
             Nessuna ricevuta di locazione per questo proprietario.
           </p>
         ) : (
@@ -406,7 +406,7 @@ function MonthlySummaryModal({ cf, onClose }) {
       onClick={onClose}
     >
       <div
-        className="bg-[#05050A] border border-sky-500/40 max-w-3xl w-full p-6 flex flex-col gap-4 max-h-[90vh] overflow-auto"
+        className="bg-background border border-sky-500/40 max-w-3xl w-full p-6 flex flex-col gap-4 max-h-[90vh] overflow-auto"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex justify-between items-baseline">
@@ -432,12 +432,12 @@ function MonthlySummaryModal({ cf, onClose }) {
         ) : err ? (
           <p className="text-red-400 text-sm font-mono">{err}</p>
         ) : rows.length === 0 ? (
-          <p className="text-zinc-500 text-sm font-mono border border-dashed border-[#1E1E28] p-6 text-center">
+          <p className="text-zinc-500 text-sm font-mono border border-dashed border-border p-6 text-center">
             Nessuna ricevuta in modalità PROD con trasmissione Alloggiati Web andata a buon fine.
           </p>
         ) : (
           <div className="flex flex-col gap-2">
-            <div className="grid grid-cols-[1.4fr_repeat(5,1fr)] gap-2 text-[9px] tracking-[0.2em] uppercase text-zinc-500 font-mono border-b border-[#1E1E28] pb-2">
+            <div className="grid grid-cols-[1.4fr_repeat(5,1fr)] gap-2 text-[9px] tracking-[0.2em] uppercase text-zinc-500 font-mono border-b border-border pb-2">
               <span>Mese / Anno</span>
               <span className="text-right">Prima Ric.</span>
               <span className="text-right">Ultima Ric.</span>
@@ -449,7 +449,7 @@ function MonthlySummaryModal({ cf, onClose }) {
               <div
                 key={r.month_key}
                 data-testid={`monthly-row-${r.month_key}`}
-                className="grid grid-cols-[1.4fr_repeat(5,1fr)] gap-2 text-[11px] font-mono py-2 border-b border-[#1E1E28]/40 hover:bg-[#0E0E14] items-baseline"
+                className="grid grid-cols-[1.4fr_repeat(5,1fr)] gap-2 text-[11px] font-mono py-2 border-b border-border/40 hover:bg-surface-1 items-baseline"
               >
                 <span className="text-zinc-100">{r.month_label}</span>
                 <span className="text-right text-zinc-300 truncate" title={r.primo}>{r.primo}</span>

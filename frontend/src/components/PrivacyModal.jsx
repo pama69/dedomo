@@ -14,10 +14,10 @@ export default function PrivacyModal({ open, onClose }) {
       onClick={onClose}
     >
       <div
-        className="bg-[#0E0E14] border border-amber-500/40 max-w-2xl w-full max-h-[85vh] overflow-y-auto"
+        className="bg-surface-1 border border-amber-500/40 max-w-2xl w-full max-h-[85vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="sticky top-0 bg-[#0E0E14] border-b border-[#1E1E28] px-5 py-3 flex justify-between items-center">
+        <div className="sticky top-0 bg-surface-1 border-b border-border px-5 py-3 flex justify-between items-center">
           <span className="text-[10px] tracking-[0.3em] uppercase text-amber-400">
             Informativa Privacy
           </span>
@@ -67,7 +67,7 @@ export default function PrivacyModal({ open, onClose }) {
             </li>
           </ul>
 
-          <div className="border border-[#1E1E28] p-3 bg-black/30 text-[12px] font-mono">
+          <div className="border border-border p-3 bg-black/30 text-[12px] font-mono">
             <p><span className="text-zinc-500">Titolare del trattamento:</span> Paolo Manni</p>
             <p><span className="text-zinc-500">Indirizzo:</span> Via Montanara 35, 65100 Pescara (PE)</p>
             <p>
@@ -115,7 +115,7 @@ export default function PrivacyModal({ open, onClose }) {
           </p>
         </div>
 
-        <div className="sticky bottom-0 bg-[#0E0E14] border-t border-[#1E1E28] px-5 py-3 flex justify-end">
+        <div className="sticky bottom-0 bg-surface-1 border-t border-border px-5 py-3 flex justify-end">
           <button
             onClick={onClose}
             data-testid="privacy-modal-close-btn"

@@ -129,7 +129,7 @@ export default function Archive() {
         <Link
           to="/archive/owners"
           data-testid="nav-archive-owners"
-          className="border border-[#1E1E28] hover:border-emerald-500/60 hover:text-emerald-400 text-zinc-300 px-4 py-2 uppercase tracking-[0.25em] text-[10px] cursor-pointer transition-colors"
+          className="border border-border hover:border-emerald-500/60 hover:text-emerald-400 text-zinc-300 px-4 py-2 uppercase tracking-[0.25em] text-[10px] cursor-pointer transition-colors"
         >
           → Archivio per Proprietario / Codice Fiscale
         </Link>
@@ -140,13 +140,13 @@ export default function Archive() {
       {loading ? (
         <p className="text-zinc-500 text-sm font-mono">Caricamento...</p>
       ) : items.length === 0 ? (
-        <div className="border border-dashed border-[#1E1E28] p-12 text-center">
+        <div className="border border-dashed border-border p-12 text-center">
           <p className="text-zinc-400 text-sm">Nessun check-in archiviato.</p>
         </div>
       ) : (
         <>
           {/* Property tabs */}
-          <div className="flex gap-2 flex-wrap border-b border-[#1E1E28] pb-3">
+          <div className="flex gap-2 flex-wrap border-b border-border pb-3">
             {properties.map((p) => {
               const count = grouped[p.property_id]?.length || 0;
               const isActive = activeProperty === p.property_id;
@@ -158,7 +158,7 @@ export default function Archive() {
                   className={`text-[10px] tracking-[0.25em] uppercase border px-4 py-2 cursor-pointer transition-colors ${
                     isActive
                       ? "border-zinc-100 text-zinc-100"
-                      : "border-[#1E1E28] text-zinc-500 hover:text-zinc-300"
+                      : "border-border text-zinc-500 hover:text-zinc-300"
                   }`}
                 >
                   {p.nome} <span className="text-zinc-600">({count})</span>
@@ -178,7 +178,7 @@ export default function Archive() {
                     type="button"
                     onClick={() => { setSelectedIds(new Set()); setBulkConfirm(false); }}
                     data-testid="bulk-clear"
-                    className="text-[10px] tracking-[0.25em] uppercase text-zinc-400 hover:text-zinc-100 border border-[#1E1E28] hover:border-zinc-500 px-3 py-2 cursor-pointer"
+                    className="text-[10px] tracking-[0.25em] uppercase text-zinc-400 hover:text-zinc-100 border border-border hover:border-zinc-500 px-3 py-2 cursor-pointer"
                   >
                     Deseleziona
                   </button>
@@ -218,7 +218,7 @@ export default function Archive() {
                     type="button"
                     onClick={() => toggleMonth(`${activeProperty}::${mon.key}`)}
                     data-testid={`archive-month-toggle-${mon.key}`}
-                    className="flex justify-between items-center w-full bg-[#0E0E14] border border-[#1E1E28] hover:border-zinc-500 px-4 py-2 cursor-pointer transition-colors text-left"
+                    className="flex justify-between items-center w-full bg-surface-1 border border-border hover:border-zinc-500 px-4 py-2 cursor-pointer transition-colors text-left"
                   >
                     <span className="text-[11px] tracking-[0.25em] uppercase text-zinc-300 font-mono">
                       {mon.label} <span className="text-zinc-600">· {mon.items.length} invio/i</span>
@@ -236,12 +236,12 @@ export default function Archive() {
                       <div
                         key={c.checkin_id}
                         data-testid={`archive-row-${c.checkin_id}`}
-                        className={`bg-[#0E0E14] border ml-3 transition-colors ${isSelected ? "border-amber-500/60" : "border-[#1E1E28]"}`}
+                        className={`bg-surface-1 border ml-3 transition-colors ${isSelected ? "border-amber-500/60" : "border-border"}`}
                       >
                         <div className="flex items-stretch">
                           {deletable && (
                             <label
-                              className="flex items-center px-3 border-r border-[#1E1E28] cursor-pointer hover:bg-[#15151C]"
+                              className="flex items-center px-3 border-r border-border cursor-pointer hover:bg-surface-2"
                               onClick={(e) => e.stopPropagation()}
                             >
                               <input
@@ -255,7 +255,7 @@ export default function Archive() {
                           )}
                           <button
                             onClick={() => setExpanded(isOpen ? null : c.checkin_id)}
-                            className="flex-1 p-4 flex justify-between items-center text-left cursor-pointer hover:bg-[#15151C] transition-colors"
+                            className="flex-1 p-4 flex justify-between items-center text-left cursor-pointer hover:bg-surface-2 transition-colors"
                           >
                             <div>
                               <p className="font-medium text-zinc-100">
@@ -280,7 +280,7 @@ export default function Archive() {
                         </div>
 
                         {isOpen && (
-                          <div className="border-t border-[#1E1E28] p-4 flex flex-col gap-3 font-mono text-xs">
+                          <div className="border-t border-border p-4 flex flex-col gap-3 font-mono text-xs">
                             <div className="flex flex-col gap-1">
                               <span className="text-zinc-500">OSPITI</span>
                               {c.guests?.map((g, i) => (
@@ -290,7 +290,7 @@ export default function Archive() {
                               ))}
                       </div>
                       {is_?.calculation && (
-                        <div className="border-t border-[#1E1E28] pt-3 flex justify-between">
+                        <div className="border-t border-border pt-3 flex justify-between">
                           <span className="text-zinc-500">IMPOSTA SOGGIORNO</span>
                           <span className="text-emerald-500">€ {is_.calculation.totale_imposta.toFixed(2)}</span>
                         </div>
@@ -348,7 +348,7 @@ export default function Archive() {
                           c.alloggiati_ricevuta_pdf ? (
                             <DownloadAlloggiatiBtn checkinId={c.checkin_id} />
                           ) : (
-                            <span className="text-center border border-[#1E1E28] text-zinc-500 px-4 py-3 uppercase tracking-widest text-[10px]">
+                            <span className="text-center border border-border text-zinc-500 px-4 py-3 uppercase tracking-widest text-[10px]">
                               Ricevuta Alloggiati Web — Disponibile dopo 24h
                             </span>
                           )
@@ -477,7 +477,7 @@ function DownloadReceiptBtn({ checkinId, index, receipt, onDeleted }) {
             onClick={preparePdf}
             disabled={!!busy}
             data-testid={`comune-receipt-download-${checkinId}-${index}`}
-            className="flex-1 text-center border border-[#1E1E28] hover:border-zinc-500 text-zinc-400 px-3 py-2 uppercase tracking-widest text-[10px] cursor-pointer disabled:opacity-50"
+            className="flex-1 text-center border border-border hover:border-zinc-500 text-zinc-400 px-3 py-2 uppercase tracking-widest text-[10px] cursor-pointer disabled:opacity-50"
           >
             {busy === "pdf" ? "..." : "↓ Prepara PDF"}
           </button>
@@ -522,7 +522,7 @@ function DownloadReceiptBtn({ checkinId, index, receipt, onDeleted }) {
             <button
               type="button"
               onClick={() => setConfirmDel(false)}
-              className="text-center border border-[#1E1E28] text-zinc-400 px-2 py-2 uppercase tracking-widest text-[10px] cursor-pointer"
+              className="text-center border border-border text-zinc-400 px-2 py-2 uppercase tracking-widest text-[10px] cursor-pointer"
             >
               ✕
             </button>
@@ -597,7 +597,7 @@ function SendComuneReceiptByEmailModal({ receipt, shareToken, onClose }) {
       onClick={onClose}
     >
       <div
-        className="bg-[#05050A] border border-amber-500/40 max-w-lg w-full p-6 flex flex-col gap-4"
+        className="bg-background border border-amber-500/40 max-w-lg w-full p-6 flex flex-col gap-4"
         onClick={(e) => e.stopPropagation()}
       >
         <div>
@@ -622,7 +622,7 @@ function SendComuneReceiptByEmailModal({ receipt, shareToken, onClose }) {
             onChange={(e) => setEmail(e.target.value)}
             placeholder="cliente@email.it"
             data-testid="comune-email-input"
-            className="bg-[#0E0E14] border border-[#1E1E28] focus:border-amber-500 px-3 py-2 text-zinc-100 outline-none font-mono"
+            className="bg-surface-1 border border-border focus:border-amber-500 px-3 py-2 text-zinc-100 outline-none font-mono"
           />
         </label>
         <label className="flex flex-col gap-1">
@@ -633,10 +633,10 @@ function SendComuneReceiptByEmailModal({ receipt, shareToken, onClose }) {
             onChange={(e) => setFirma(e.target.value)}
             placeholder="Nome host"
             data-testid="comune-email-firma"
-            className="bg-[#0E0E14] border border-[#1E1E28] focus:border-amber-500 px-3 py-2 text-zinc-100 outline-none font-mono"
+            className="bg-surface-1 border border-border focus:border-amber-500 px-3 py-2 text-zinc-100 outline-none font-mono"
           />
         </label>
-        <details className="border border-[#1E1E28] p-3 text-[10px]">
+        <details className="border border-border p-3 text-[10px]">
           <summary className="text-zinc-400 cursor-pointer uppercase tracking-widest">
             Anteprima testo email
           </summary>
@@ -654,7 +654,7 @@ function SendComuneReceiptByEmailModal({ receipt, shareToken, onClose }) {
               type="button"
               onClick={copyLink}
               data-testid="comune-email-copy-link"
-              className="border border-[#1E1E28] hover:border-zinc-500 text-zinc-400 px-2 py-1 cursor-pointer shrink-0"
+              className="border border-border hover:border-zinc-500 text-zinc-400 px-2 py-1 cursor-pointer shrink-0"
             >
               Copia
             </button>
@@ -674,7 +674,7 @@ function SendComuneReceiptByEmailModal({ receipt, shareToken, onClose }) {
             type="button"
             onClick={onClose}
             data-testid="comune-email-cancel"
-            className="text-center border border-[#1E1E28] hover:border-zinc-500 text-zinc-400 px-4 py-3 uppercase tracking-widest text-[10px] cursor-pointer"
+            className="text-center border border-border hover:border-zinc-500 text-zinc-400 px-4 py-3 uppercase tracking-widest text-[10px] cursor-pointer"
           >
             Annulla
           </button>
@@ -725,7 +725,7 @@ function GenerateReceiptButton({ checkinId, guests, importo, onGenerated }) {
   }
 
   return (
-    <div className="border border-amber-500/40 p-4 flex flex-col gap-3 bg-[#0E0E14]">
+    <div className="border border-amber-500/40 p-4 flex flex-col gap-3 bg-surface-1">
       <span className="text-[10px] tracking-[0.25em] uppercase text-amber-400">Genera Ricevuta Imposta di Soggiorno</span>
       <label className="flex flex-col gap-1">
         <span className="text-[10px] tracking-[0.25em] uppercase text-zinc-500">Numero Ricevuta</span>
@@ -738,7 +738,7 @@ function GenerateReceiptButton({ checkinId, guests, importo, onGenerated }) {
           placeholder="Es. 1"
           autoFocus
           data-testid={`gen-receipt-numero-${checkinId}`}
-          className="bg-transparent border border-[#1E1E28] px-3 py-2 text-zinc-100 placeholder:text-zinc-600 focus:border-zinc-300 outline-none text-sm font-mono"
+          className="bg-transparent border border-border px-3 py-2 text-zinc-100 placeholder:text-zinc-600 focus:border-zinc-300 outline-none text-sm font-mono"
         />
       </label>
       <label className="flex flex-col gap-1">
@@ -748,7 +748,7 @@ function GenerateReceiptButton({ checkinId, guests, importo, onGenerated }) {
           value={data}
           onChange={(e) => setData(e.target.value)}
           data-testid={`gen-receipt-data-${checkinId}`}
-          className="bg-transparent border border-[#1E1E28] px-3 py-2 text-zinc-100 focus:border-zinc-300 outline-none text-sm font-mono"
+          className="bg-transparent border border-border px-3 py-2 text-zinc-100 focus:border-zinc-300 outline-none text-sm font-mono"
         />
       </label>
       <label className="flex flex-col gap-1">
@@ -757,10 +757,10 @@ function GenerateReceiptButton({ checkinId, guests, importo, onGenerated }) {
           value={ospiteIdx}
           onChange={(e) => setOspiteIdx(Number(e.target.value))}
           data-testid={`gen-receipt-ospite-${checkinId}`}
-          className="bg-transparent border border-[#1E1E28] px-3 py-2 text-zinc-100 focus:border-zinc-300 outline-none text-sm font-mono"
+          className="bg-transparent border border-border px-3 py-2 text-zinc-100 focus:border-zinc-300 outline-none text-sm font-mono"
         >
           {(guests || []).map((g, i) => (
-            <option key={i} value={i} className="bg-[#0E0E14] text-zinc-100">
+            <option key={i} value={i} className="bg-surface-1 text-zinc-100">
               #{i + 1} {g.cognome} {g.nome}
             </option>
           ))}
@@ -780,7 +780,7 @@ function GenerateReceiptButton({ checkinId, guests, importo, onGenerated }) {
         <button
           type="button"
           onClick={() => { setOpen(false); setError(""); }}
-          className="border border-[#1E1E28] hover:border-zinc-500 text-zinc-400 px-4 py-2 uppercase tracking-widest text-[10px] cursor-pointer"
+          className="border border-border hover:border-zinc-500 text-zinc-400 px-4 py-2 uppercase tracking-widest text-[10px] cursor-pointer"
         >
           Annulla
         </button>
@@ -835,7 +835,7 @@ function RefreshReceiptsButton() {
         onClick={refresh}
         disabled={loading}
         data-testid="refresh-receipts-btn"
-        className="self-start border border-[#1E1E28] hover:border-zinc-500 text-zinc-400 px-4 py-2 uppercase tracking-widest text-[10px] cursor-pointer disabled:opacity-50"
+        className="self-start border border-border hover:border-zinc-500 text-zinc-400 px-4 py-2 uppercase tracking-widest text-[10px] cursor-pointer disabled:opacity-50"
       >
         {loading ? "Recupero in corso..." : "↻ Recupera ricevute Alloggiati Web"}
       </button>
@@ -927,7 +927,7 @@ function GenerateLocazioneButton({ checkinId, guests, imposta, onGenerated }) {
           onChange={(e) => setImporto(e.target.value)}
           placeholder="850,00"
           data-testid={`loc-importo-${checkinId}`}
-          className="bg-[#0E0E14] border border-[#1E1E28] focus:border-sky-500 px-3 py-2 text-zinc-100 outline-none font-mono"
+          className="bg-surface-1 border border-border focus:border-sky-500 px-3 py-2 text-zinc-100 outline-none font-mono"
         />
       </label>
 
@@ -949,13 +949,13 @@ function GenerateLocazioneButton({ checkinId, guests, imposta, onGenerated }) {
             onChange={(e) => setNumero(e.target.value)}
             placeholder="es. RL-2026/047"
             data-testid={`loc-numero-${checkinId}`}
-            className="bg-[#0E0E14] border border-[#1E1E28] focus:border-sky-500 px-3 py-2 text-zinc-100 outline-none font-mono"
+            className="bg-surface-1 border border-border focus:border-sky-500 px-3 py-2 text-zinc-100 outline-none font-mono"
           />
         )}
       </div>
 
       {importoNum > 0 && (
-        <div className="border border-[#1E1E28] p-3 flex flex-col gap-1 text-[11px] font-mono">
+        <div className="border border-border p-3 flex flex-col gap-1 text-[11px] font-mono">
           <div className="flex justify-between text-zinc-400"><span>Canone</span><span className="text-zinc-100">€ {importoNum.toFixed(2)}</span></div>
           {imposta > 0 && (
             <div className="flex justify-between text-zinc-400"><span>Imposta soggiorno</span><span className="text-zinc-100">€ {imposta.toFixed(2)}</span></div>
@@ -963,7 +963,7 @@ function GenerateLocazioneButton({ checkinId, guests, imposta, onGenerated }) {
           {bollo > 0 && (
             <div className="flex justify-between text-amber-400"><span>Marca da bollo</span><span>€ {bollo.toFixed(2)}</span></div>
           )}
-          <div className="flex justify-between border-t border-[#1E1E28] pt-1 mt-1">
+          <div className="flex justify-between border-t border-border pt-1 mt-1">
             <span className="text-sky-400 font-bold">TOTALE</span>
             <span className="text-sky-300 font-bold">€ {totale.toFixed(2)}</span>
           </div>
@@ -988,7 +988,7 @@ function GenerateLocazioneButton({ checkinId, guests, imposta, onGenerated }) {
           type="button"
           onClick={() => { setOpen(false); setErr(""); }}
           data-testid={`loc-cancel-${checkinId}`}
-          className="text-center border border-[#1E1E28] hover:border-zinc-500 text-zinc-400 px-4 py-3 uppercase tracking-widest text-[10px] cursor-pointer"
+          className="text-center border border-border hover:border-zinc-500 text-zinc-400 px-4 py-3 uppercase tracking-widest text-[10px] cursor-pointer"
         >
           Annulla
         </button>
@@ -1065,7 +1065,7 @@ function LocazioneReceiptRow({ checkinId, index, receipt, onDeleted }) {
             onClick={preparePdf}
             disabled={!!busy}
             data-testid={`loc-prepare-pdf-${checkinId}-${index}`}
-            className="flex-1 text-center border border-[#1E1E28] hover:border-zinc-500 text-zinc-400 px-3 py-2 uppercase tracking-widest text-[10px] cursor-pointer disabled:opacity-50"
+            className="flex-1 text-center border border-border hover:border-zinc-500 text-zinc-400 px-3 py-2 uppercase tracking-widest text-[10px] cursor-pointer disabled:opacity-50"
           >
             {busy === "pdf" ? "..." : "↓ Prepara PDF"}
           </button>
@@ -1110,7 +1110,7 @@ function LocazioneReceiptRow({ checkinId, index, receipt, onDeleted }) {
             <button
               type="button"
               onClick={() => setConfirmDel(false)}
-              className="text-center border border-[#1E1E28] text-zinc-400 px-2 py-2 uppercase tracking-widest text-[10px] cursor-pointer"
+              className="text-center border border-border text-zinc-400 px-2 py-2 uppercase tracking-widest text-[10px] cursor-pointer"
             >
               ✕
             </button>
@@ -1183,7 +1183,7 @@ function SendReceiptByEmailModal({ receipt, shareToken, onClose }) {
       onClick={onClose}
     >
       <div
-        className="bg-[#05050A] border border-amber-500/40 max-w-lg w-full p-6 flex flex-col gap-4"
+        className="bg-background border border-amber-500/40 max-w-lg w-full p-6 flex flex-col gap-4"
         onClick={(e) => e.stopPropagation()}
       >
         <div>
@@ -1210,7 +1210,7 @@ function SendReceiptByEmailModal({ receipt, shareToken, onClose }) {
             onChange={(e) => setEmail(e.target.value)}
             placeholder="cliente@email.it"
             data-testid="email-input"
-            className="bg-[#0E0E14] border border-[#1E1E28] focus:border-amber-500 px-3 py-2 text-zinc-100 outline-none font-mono"
+            className="bg-surface-1 border border-border focus:border-amber-500 px-3 py-2 text-zinc-100 outline-none font-mono"
           />
         </label>
 
@@ -1221,11 +1221,11 @@ function SendReceiptByEmailModal({ receipt, shareToken, onClose }) {
             value={propietario}
             onChange={(e) => setPropietario(e.target.value)}
             data-testid="email-firma"
-            className="bg-[#0E0E14] border border-[#1E1E28] focus:border-amber-500 px-3 py-2 text-zinc-100 outline-none font-mono"
+            className="bg-surface-1 border border-border focus:border-amber-500 px-3 py-2 text-zinc-100 outline-none font-mono"
           />
         </label>
 
-        <details className="border border-[#1E1E28] p-3 text-[10px]">
+        <details className="border border-border p-3 text-[10px]">
           <summary className="text-zinc-400 cursor-pointer uppercase tracking-widest">
             Anteprima testo email
           </summary>
@@ -1244,7 +1244,7 @@ function SendReceiptByEmailModal({ receipt, shareToken, onClose }) {
               type="button"
               onClick={copyLink}
               data-testid="email-copy-link"
-              className="border border-[#1E1E28] hover:border-zinc-500 text-zinc-400 px-2 py-1 cursor-pointer shrink-0"
+              className="border border-border hover:border-zinc-500 text-zinc-400 px-2 py-1 cursor-pointer shrink-0"
             >
               Copia
             </button>
@@ -1265,7 +1265,7 @@ function SendReceiptByEmailModal({ receipt, shareToken, onClose }) {
             type="button"
             onClick={onClose}
             data-testid="email-cancel"
-            className="text-center border border-[#1E1E28] hover:border-zinc-500 text-zinc-400 px-4 py-3 uppercase tracking-widest text-[10px] cursor-pointer"
+            className="text-center border border-border hover:border-zinc-500 text-zinc-400 px-4 py-3 uppercase tracking-widest text-[10px] cursor-pointer"
           >
             Annulla
           </button>

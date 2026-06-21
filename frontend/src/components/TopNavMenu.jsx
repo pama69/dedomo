@@ -35,7 +35,7 @@ export default function TopNavMenu() {
         data-testid="nav-hamburger"
         aria-label="Menu"
         aria-expanded={open}
-        className="flex flex-col justify-center items-center gap-1.5 w-9 h-9 border border-[#1E1E28] hover:border-zinc-400 transition-colors cursor-pointer group"
+        className="flex flex-col justify-center items-center gap-1.5 w-9 h-9 border border-border hover:border-zinc-400 transition-colors cursor-pointer group"
       >
         <span
           className={`block h-[1.5px] w-4 bg-zinc-300 transition-transform ${
@@ -57,7 +57,7 @@ export default function TopNavMenu() {
       {open && (
         <nav
           data-testid="nav-menu-panel"
-          className="absolute right-0 top-full mt-2 min-w-[200px] bg-[#05050A] border border-[#1E1E28] shadow-2xl flex flex-col z-50"
+          className="absolute right-0 top-full mt-2 min-w-[200px] bg-background border border-border shadow-2xl flex flex-col z-50"
         >
           {items.map((it) => (
             <NavLink
@@ -66,10 +66,10 @@ export default function TopNavMenu() {
               onClick={() => setOpen(false)}
               data-testid={it.testid}
               className={({ isActive }) =>
-                `text-[10px] tracking-[0.25em] uppercase px-4 py-3 border-b border-[#1E1E28] last:border-b-0 transition-colors ${
+                `text-[10px] tracking-[0.25em] uppercase px-4 py-3 border-b border-border last:border-b-0 transition-colors ${
                   isActive
-                    ? "text-zinc-100 bg-[#0E0E14] font-bold"
-                    : "text-zinc-400 hover:text-zinc-100 hover:bg-[#0E0E14]"
+                    ? "text-zinc-100 bg-surface-1 font-bold"
+                    : "text-zinc-400 hover:text-zinc-100 hover:bg-surface-1"
                 }`
               }
             >
