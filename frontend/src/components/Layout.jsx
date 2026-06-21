@@ -1,6 +1,5 @@
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate, Link } from "react-router-dom";
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
 import api from "@/lib/api";
 import TopNavMenu from "@/components/TopNavMenu";
 import NotificationsBell from "@/components/NotificationsBell";
@@ -23,43 +22,74 @@ export default function Layout({ children }) {
 
   if (!verified) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#05050A]">
-        <p className="text-zinc-500 text-xs tracking-[0.3em] uppercase">Caricamento...</p>
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-10 h-10 rounded-full border-2 border-text-muted border-t-accent animate-spin" />
+          <p className="typo-meta">Caricamento</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#05050A] text-zinc-100">
-      <header className="border-b border-[#1E1E28] px-4 sm:px-6 py-4 flex items-center justify-between sticky top-0 bg-[#05050A]/95 backdrop-blur-xl z-40">
-        <h1
-          className="text-2xl font-bold uppercase tracking-tighter text-zinc-100"
-          style={{ fontFamily: "'Cabinet Grotesk', sans-serif" }}
-        >
-          DEDOMO
-        </h1>
-        <div className="flex items-center gap-2">
-          {user?.is_admin && (
-            <Link
-              to="/admin"
-              data-testid="header-admin-link"
-              className="text-[10px] tracking-[0.25em] uppercase text-amber-400 hover:text-amber-300 transition-colors cursor-pointer"
-            >
-              Admin
-            </Link>
-          )}
-          <NotificationsBell />
-          <button
-            data-testid="logout-button"
-            onClick={async () => { await logout(); navigate("/login", { replace: true }); }}
-            className="text-[10px] tracking-[0.25em] uppercase text-zinc-500 hover:text-zinc-100 transition-colors cursor-pointer"
+    <div className="min-h-screen bg-background text-foreground">
+      {/* Sfumatura ambient di sfondo per dare profondità */}
+      <div
+        aria-hidden
+        className="fixed inset-0 pointer-events-none -z-10"
+        style={{
+          background:
+            "radial-gradient(60% 50% at 50% 0%, hsl(160 84% 42% / 0.06) 0%, transparent 70%)",
+        }}
+      />
+
+      <header
+        className="sticky top-0 z-40 border-b backdrop-blur-xl"
+        style={{
+          borderColor: "hsl(var(--border-subtle))",
+          backgroundColor: "hsl(var(--background) / 0.78)",
+        }}
+      >
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-3.5 flex items-center justify-between">
+          <Link
+            to="/dashboard"
+            className="flex items-center gap-2.5 group"
           >
-            Esci
-          </button>
-          <TopNavMenu />
+            <span
+              data-testid="dedomo-logotype"
+              className="text-2xl font-bold uppercase tracking-tight text-primary-content transition-colors group-hover:text-white"
+              style={{ fontFamily: "'Cabinet Grotesk', sans-serif", letterSpacing: "-0.04em" }}
+            >
+              DEDOMO
+            </span>
+            <span className="hidden sm:inline-block w-1.5 h-1.5 rounded-full bg-accent" style={{ backgroundColor: "hsl(var(--accent))" }} />
+          </Link>
+
+          <div className="flex items-center gap-1.5">
+            {user?.is_admin && (
+              <Link
+                to="/admin"
+                data-testid="header-admin-link"
+                className="btn-ghost"
+                style={{ color: "hsl(var(--warning))" }}
+              >
+                Admin
+              </Link>
+            )}
+            <NotificationsBell />
+            <button
+              data-testid="logout-button"
+              onClick={async () => { await logout(); navigate("/login", { replace: true }); }}
+              className="btn-ghost"
+            >
+              Esci
+            </button>
+            <TopNavMenu />
+          </div>
         </div>
       </header>
-      <main className="w-full max-w-3xl mx-auto pb-12 pt-8 px-4 sm:px-6 flex flex-col gap-8">
+
+      <main className="w-full max-w-5xl mx-auto pb-16 pt-8 px-4 sm:px-6 flex flex-col gap-8 animate-fade-in-up">
         {children}
       </main>
     </div>

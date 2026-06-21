@@ -24,6 +24,7 @@ export default function Dashboard() {
 
   return (
     <Layout>
+      {/* ── HERO CHECK-IN ── */}
       <button
         data-testid="main-checkin-button"
         onClick={() => {
@@ -33,113 +34,242 @@ export default function Dashboard() {
             navigate("/checkin");
           }
         }}
-        className="w-full h-36 flex flex-col items-center justify-center bg-zinc-100 text-[#05050A] hover:bg-white active:scale-[0.98] transition-all cursor-pointer"
+        className="group relative w-full overflow-hidden rounded-xl cursor-pointer transition-transform active:scale-[0.995]"
+        style={{
+          background:
+            "linear-gradient(135deg, hsl(var(--surface-2)) 0%, hsl(var(--surface-1)) 100%)",
+          border: "1px solid hsl(var(--border))",
+          padding: 0,
+        }}
       >
-        <span
-          className="text-4xl font-bold uppercase tracking-widest"
-          style={{ fontFamily: "'Cabinet Grotesk', sans-serif" }}
-        >
-          CHECK IN
-        </span>
-        <span className="text-[10px] mt-2 tracking-[0.3em] uppercase opacity-60">
-          Avvia nuovo check-in
-        </span>
+        {/* Highlight luce dall'alto */}
+        <div
+          aria-hidden
+          className="absolute inset-x-0 top-0 h-px"
+          style={{ background: "linear-gradient(90deg, transparent, hsl(var(--accent) / 0.6), transparent)" }}
+        />
+        {/* Glow di sfondo */}
+        <div
+          aria-hidden
+          className="absolute -top-24 left-1/2 -translate-x-1/2 w-[120%] h-48 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-500"
+          style={{ background: "radial-gradient(closest-side, hsl(var(--accent) / 0.18), transparent)" }}
+        />
+        <div className="relative flex flex-col items-center justify-center py-14 px-6">
+          <span className="typo-meta mb-3" style={{ color: "hsl(var(--accent))" }}>
+            ◆ Nuovo Check-In
+          </span>
+          <span
+            className="text-5xl sm:text-6xl font-bold uppercase tracking-tight text-primary-content"
+            style={{ fontFamily: "'Cabinet Grotesk', sans-serif", letterSpacing: "-0.045em" }}
+          >
+            CHECK IN
+          </span>
+          <span className="typo-small text-secondary-content mt-3">
+            Acquisisci documenti e invia ai portali
+          </span>
+        </div>
       </button>
 
-      <div>
-        <h2
-          className="text-xs tracking-[0.3em] uppercase text-zinc-500 mb-4"
-        >
-          Riepilogo Strutture
-        </h2>
+      {/* ── STATS QUICK ── */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <StatCard
+          label="Strutture"
+          value={loading ? null : properties.length}
+          hint={properties.length === 0 ? "Nessuna configurata" : "Attive"}
+        />
+        <StatCard
+          label="Ultimi Invii"
+          value={loading ? null : recent.length}
+          hint="Negli ultimi 30 giorni"
+        />
+        <StatCard
+          label="Stato Sistema"
+          value={<span style={{ color: "hsl(var(--accent))" }}>● Online</span>}
+          hint="Tutti i servizi attivi"
+          asValueNode
+        />
+      </div>
+
+      {/* ── STRUTTURE ── */}
+      <section>
+        <div className="flex items-baseline justify-between mb-4">
+          <h2 className="typo-h2">Riepilogo Strutture</h2>
+          <button
+            onClick={() => navigate("/settings")}
+            className="btn-ghost"
+          >
+            Gestisci →
+          </button>
+        </div>
+
         {loading ? (
-          <p className="text-zinc-500 text-sm font-mono">Caricamento...</p>
+          <div className="flex flex-col gap-2">
+            <div className="skeleton h-16" />
+            <div className="skeleton h-16" />
+          </div>
         ) : properties.length === 0 ? (
-          <div className="border border-dashed border-[#1E1E28] p-8 text-center">
-            <p className="text-zinc-400 text-sm mb-4">
-              Nessuna struttura configurata.
+          <div
+            className="surface-card p-10 text-center"
+            style={{ borderStyle: "dashed" }}
+          >
+            <p className="typo-body mb-5">
+              Nessuna struttura configurata
             </p>
             <button
               data-testid="setup-first-property"
               onClick={() => navigate("/settings")}
-              className="text-xs tracking-[0.25em] uppercase text-zinc-100 border border-[#1E1E28] hover:border-zinc-500 px-6 py-3 transition-colors cursor-pointer"
+              className="btn-accent"
             >
               Configura Prima Struttura
             </button>
           </div>
         ) : (
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-2.5">
             {properties.map((p) => (
-              <div
+              <button
                 key={p.property_id}
                 data-testid={`property-card-${p.property_id}`}
-                className="bg-[#0E0E14] border border-[#1E1E28] p-4 flex items-center justify-between"
+                onClick={() => navigate(`/settings#${p.property_id}`)}
+                className="surface-interactive p-4 flex items-center justify-between w-full text-left"
               >
-                <div>
-                  <p className="font-medium text-zinc-100">{p.nome}</p>
-                  <p className="text-[10px] tracking-[0.2em] uppercase text-zinc-500 mt-1 font-mono">
-                    {p.comune || "—"} · [{p.mode}]
-                  </p>
+                <div className="flex items-center gap-3 min-w-0">
+                  <div
+                    className="w-9 h-9 rounded-md flex items-center justify-center flex-shrink-0"
+                    style={{
+                      backgroundColor: "hsl(var(--surface-3))",
+                      color: "hsl(var(--accent))",
+                      fontFamily: "'Cabinet Grotesk', sans-serif",
+                      fontWeight: 700,
+                      letterSpacing: "-0.02em",
+                    }}
+                  >
+                    {(p.nome || "?").charAt(0).toUpperCase()}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="font-medium text-primary-content truncate">{p.nome}</p>
+                    <p className="typo-meta mt-0.5">
+                      {p.comune || "—"}
+                      <span className="mx-2 opacity-50">·</span>
+                      <span style={{ color: p.mode === "PROD" ? "hsl(var(--accent))" : "hsl(var(--text-muted))" }}>
+                        {p.mode}
+                      </span>
+                    </p>
+                  </div>
                 </div>
-              </div>
+                <span className="text-muted-content" aria-hidden>→</span>
+              </button>
             ))}
           </div>
         )}
-      </div>
+      </section>
 
-      <div>
-        <h2 className="text-xs tracking-[0.3em] uppercase text-zinc-500 mb-4">
-          Ultimi Invii
-        </h2>
+      {/* ── ULTIMI INVII ── */}
+      <section>
+        <div className="flex items-baseline justify-between mb-4">
+          <h2 className="typo-h2">Ultimi Invii</h2>
+          {recent.length > 0 && (
+            <button
+              onClick={() => navigate("/archive")}
+              className="btn-ghost"
+            >
+              Archivio completo →
+            </button>
+          )}
+        </div>
+
         {recent.length === 0 ? (
-          <p className="text-zinc-600 text-xs font-mono">[ NESSUN INVIO ]</p>
+          <div className="surface-card p-6 text-center">
+            <p className="typo-small text-muted-content">
+              Nessun invio ancora effettuato
+            </p>
+          </div>
         ) : (
-          <div className="flex flex-col gap-1 font-mono text-xs">
-            {recent.map((c) => {
+          <div className="surface-card overflow-hidden">
+            {recent.map((c, i) => {
               const aw = c.results?.alloggiati_web;
               const r1k = c.results?.ross1000;
+              const isLast = i === recent.length - 1;
               return (
                 <div
                   key={c.checkin_id}
-                  className="bg-[#0E0E14] border border-[#1E1E28] p-3 flex flex-col gap-1"
+                  className="flex items-center justify-between px-4 py-3"
+                  style={{
+                    borderBottom: isLast ? "none" : "1px solid hsl(var(--border-subtle))",
+                  }}
                 >
-                  <div className="flex justify-between text-zinc-400">
-                    <span>{new Date(c.created_at).toLocaleString("it-IT")}</span>
-                    <span>[{c.mode}]</span>
+                  <div className="flex flex-col min-w-0">
+                    <span className="text-primary-content font-medium truncate">
+                      {c.property_name}
+                    </span>
+                    <span className="typo-meta mt-0.5">
+                      {new Date(c.created_at).toLocaleString("it-IT", {
+                        day: "2-digit", month: "short",
+                        hour: "2-digit", minute: "2-digit",
+                      })}
+                      <span className="mx-2 opacity-50">·</span>
+                      {c.mode}
+                    </span>
                   </div>
-                  <div className="text-zinc-200">{c.property_name}</div>
-                  <div className="flex gap-3 text-[10px]">
-                    <span className={aw?.success ? "text-emerald-500" : "text-red-500"}>
-                      AW [{aw?.success ? "OK" : aw?.skipped ? "SKIP" : "ERR"}]
-                    </span>
-                    <span className={r1k?.success ? "text-emerald-500" : "text-red-500"}>
-                      R1K [{r1k?.success ? "OK" : r1k?.skipped ? "SKIP" : "ERR"}]
-                    </span>
+                  <div className="flex gap-1.5 ml-3 flex-shrink-0">
+                    <StatusPill kind={aw} label="AW" />
+                    <StatusPill kind={r1k} label="R1K" />
                   </div>
                 </div>
               );
             })}
           </div>
         )}
-      </div>
+      </section>
 
-      <div className="border-t border-[#1E1E28] pt-6 flex items-center justify-between gap-4">
+      {/* ── GUIDA ── */}
+      <div
+        className="surface-card p-5 flex flex-wrap items-center justify-between gap-4"
+      >
         <div className="flex flex-col gap-1">
-          <span className="text-[10px] tracking-[0.3em] uppercase text-zinc-500">Guida d'uso</span>
-          <span className="text-zinc-300 text-sm">Manuale passo-passo in italiano.</span>
+          <span className="typo-meta">Guida d'uso</span>
+          <span className="typo-body text-primary-content">Manuale passo-passo in italiano</span>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={() => navigate("/help")}
             data-testid="dashboard-open-help"
-            className="text-[10px] tracking-[0.25em] uppercase text-zinc-400 hover:text-zinc-100 cursor-pointer"
+            className="btn-ghost"
           >
-            Apri Guida Online →
+            Apri guida online →
           </button>
           <DownloadManualButton testid="dashboard-download-manual" />
         </div>
       </div>
     </Layout>
+  );
+}
+
+/* ── SUB-COMPONENTS ── */
+
+function StatCard({ label, value, hint, asValueNode = false }) {
+  return (
+    <div className="surface-card p-4">
+      <p className="typo-meta">{label}</p>
+      <p
+        className="mt-2 text-2xl font-bold text-primary-content"
+        style={{ fontFamily: "'Cabinet Grotesk', sans-serif", letterSpacing: "-0.025em" }}
+      >
+        {value === null ? <span className="skeleton inline-block w-8 h-6" /> : asValueNode ? value : value}
+      </p>
+      {hint && <p className="typo-small text-muted-content mt-1">{hint}</p>}
+    </div>
+  );
+}
+
+function StatusPill({ kind, label }) {
+  if (!kind) return null;
+  const cls = kind.success ? "badge-success" : kind.skipped ? "badge-neutral" : "badge-error";
+  const text = kind.success ? "OK" : kind.skipped ? "SKIP" : "ERR";
+  return (
+    <span className={`badge ${cls}`}>
+      <span className="font-mono opacity-70">{label}</span>
+      {text}
+    </span>
   );
 }
