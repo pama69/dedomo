@@ -1,10 +1,11 @@
 # ── Stage 1: build React frontend ──
 FROM node:18-slim AS frontend
 WORKDIR /app/frontend
-COPY frontend/package.json ./
-RUN npm install --legacy-peer-deps
+COPY frontend/package.json frontend/yarn.lock ./
+RUN yarn install --frozen-lockfile
 COPY frontend/ ./
-RUN npm run build
+ENV CI=false
+RUN yarn build
 
 # ── Stage 2: Python backend + static frontend ──
 FROM python:3.12-slim
