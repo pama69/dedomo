@@ -65,7 +65,7 @@ export default function Checkin() {
     }
     setAppartamentiLoading(true);
     setAppartamentoId(null);
-    api.get(`/properties/${propertyId}/alloggiati/appartamenti`)
+    api.post(`/properties/${propertyId}/alloggiati/appartamenti`)
       .then((r) => {
         const list = r.data?.appartamenti || [];
         setAppartamenti(list);
