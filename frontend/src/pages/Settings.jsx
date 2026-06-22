@@ -951,7 +951,13 @@ function PersonalIcalField({ propertyId }) {
   }, [propertyId]);
 
   if (!data) return null;
-  const fullUrl = `${process.env.REACT_APP_BACKEND_URL}${data.path}`;
+  // L'URL di export DEVE essere assoluto (i portali lo scaricano dai loro server).
+  // Preferisci l'url assoluto dal backend; altrimenti costruiscilo dall'origin corrente.
+  const envBase = process.env.REACT_APP_BACKEND_URL;
+  const base = (data.url && /^https?:\/\//i.test(data.url))
+    ? null
+    : (envBase || window.location.origin);
+  const fullUrl = base ? `${base}${data.path}` : data.url;
 
   const copy = async () => {
     try {
@@ -962,8 +968,8 @@ function PersonalIcalField({ propertyId }) {
   };
 
   return (
-    <div className="flex flex-col gap-1">
-      <span className="text-[10px] tracking-[0.25em] uppercase text-zinc-500">Calendario Personale · URL iCal (uscita)</span>
+    <div className="flex flex-col gap-1.5">
+      <span className="typo-meta">Calendario Personale · URL iCal (uscita)</span>
       <div className="flex gap-2">
         <input
           type="text"
@@ -971,18 +977,19 @@ function PersonalIcalField({ propertyId }) {
           value={fullUrl}
           data-testid="cal-personal-url"
           onClick={(e) => e.target.select()}
-          className="flex-1 bg-surface-1 border border-border px-3 py-2 text-zinc-100 text-[10px] font-mono outline-none"
+          className="input-modern flex-1 text-[11px] font-mono"
         />
         <button
           type="button"
           onClick={copy}
           data-testid="cal-personal-copy"
-          className="border border-border hover:border-emerald-500 text-zinc-300 hover:text-emerald-400 px-3 py-2 uppercase tracking-widest text-[10px] cursor-pointer"
+          className="btn-secondary"
+          style={copied ? { color: "hsl(var(--accent))", borderColor: "hsl(var(--accent) / 0.5)" } : undefined}
         >
           {copied ? "Copiato ✓" : "Copia"}
         </button>
       </div>
-      <span className="text-zinc-600 text-[10px] font-mono">
+      <span className="typo-small text-muted-content">
         Incolla questo URL nei tuoi profili Booking/Airbnb/Vrbo per esportare le tue prenotazioni manuali.
       </span>
     </div>
