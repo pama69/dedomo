@@ -233,7 +233,7 @@ function Section({ title, children }) {
   );
 }
 
-function Field({ label, value, onChange, type = "text", testid, placeholder, mono = true }) {
+function Field({ label, value, onChange, type = "text", testid, placeholder, mono = true, autoComplete }) {
   return (
     <label className="flex flex-col gap-1.5">
       <span className="typo-meta">{label}</span>
@@ -243,6 +243,7 @@ function Field({ label, value, onChange, type = "text", testid, placeholder, mon
         value={value ?? ""}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
+        autoComplete={autoComplete || "off"}
         className={`input-modern ${mono ? "font-mono" : ""}`}
       />
     </label>
@@ -346,8 +347,8 @@ function PropertyEditor({ p, setP, save, cancel, saving, error }) {
       <Section title="Alloggiati Web (Polizia)">
         <Toggle label="Abilita Alloggiati Web" value={p.alloggiati.enabled} onChange={(v) => upd("alloggiati.enabled", v)} testid="aw-enabled" />
         <Field label="Utente" value={p.alloggiati.utente} onChange={(v) => upd("alloggiati.utente", v)} testid="aw-utente" />
-        <Field label="Password" type="password" value={p.alloggiati.password} onChange={(v) => upd("alloggiati.password", v)} testid="aw-password" />
-        <Field label="WS Key" type="password" value={p.alloggiati.ws_key} onChange={(v) => upd("alloggiati.ws_key", v)} testid="aw-wskey" />
+        <Field label="Password" type="password" value={p.alloggiati.password} onChange={(v) => upd("alloggiati.password", v)} testid="aw-password" autoComplete="new-password" />
+        <Field label="WS Key (incolla qui — visibile per verifica)" type="text" value={p.alloggiati.ws_key} onChange={(v) => upd("alloggiati.ws_key", v)} testid="aw-wskey" autoComplete="off" />
         <label className="flex flex-col gap-1">
           <span className="text-[10px] tracking-[0.25em] uppercase text-zinc-500">Tipo Account</span>
           <select
@@ -370,7 +371,12 @@ function PropertyEditor({ p, setP, save, cancel, saving, error }) {
           />
         )}
         {p.property_id && (
-          <TestCredentialsButton propertyId={p.property_id} />
+          <>
+            <p className="text-amber-400 text-[10px] font-mono tracking-widest uppercase">
+              ⚠ Salva prima di fare il test — il test legge le credenziali dal database.
+            </p>
+            <TestCredentialsButton propertyId={p.property_id} />
+          </>
         )}
       </Section>
 
