@@ -41,6 +41,10 @@ export default function Checkin() {
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
   const [paywall, setPaywall] = useState(null); // {reason, used, limit, paid} | null
+  // Multi-apartment selection (Alloggiati Web account tipo "appartamenti")
+  const [appartamenti, setAppartamenti] = useState([]);
+  const [appartamentiLoading, setAppartamentiLoading] = useState(false);
+  const [appartamentoId, setAppartamentoId] = useState(null);
   // Privacy consent (GDPR) — required before submission
   const [privacyAccepted, setPrivacyAccepted] = useState(false);
   const [privacyAcceptedAt, setPrivacyAcceptedAt] = useState("");
@@ -49,6 +53,27 @@ export default function Checkin() {
   useEffect(() => {
     api.get("/properties").then((r) => setProperties(r.data));
   }, []);
+
+  // Load apartments when a multi-apartment property is selected
+  useEffect(() => {
+    const prop = properties.find((p) => p.property_id === propertyId);
+    const tipoAccount = prop?.alloggiati?.tipo_account || "standard";
+    if (!prop || tipoAccount === "standard" || !prop.alloggiati?.utente) {
+      setAppartamenti([]);
+      setAppartamentoId(null);
+      return;
+    }
+    setAppartamentiLoading(true);
+    setAppartamentoId(null);
+    api.get(`/properties/${propertyId}/alloggiati/appartamenti`)
+      .then((r) => {
+        const list = r.data?.appartamenti || [];
+        setAppartamenti(list);
+        if (list.length === 1) setAppartamentoId(list[0].id); // auto-select if only one
+      })
+      .catch(() => setAppartamenti([]))
+      .finally(() => setAppartamentiLoading(false));
+  }, [propertyId, properties]);
 
   // ============ STEP 1: dates ============
   const renderStep1 = () => (
@@ -116,6 +141,49 @@ export default function Checkin() {
           ))
         )}
       </div>
+      {/* Apartment selection for multi-apartment accounts */}
+      {selectedProperty && selectedProperty.alloggiati?.tipo_account !== "standard" && !propertyHasMissingCreds && (
+        <div className="flex flex-col gap-2">
+          <p className="text-[10px] tracking-[0.25em] uppercase text-zinc-500 font-mono">
+            Appartamento
+          </p>
+          {appartamentiLoading ? (
+            <p className="text-zinc-500 text-xs font-mono animate-ocr-blink">Caricamento appartamenti...</p>
+          ) : appartamenti.length === 0 ? (
+            <p className="text-amber-400 text-[10px] font-mono">⚠ Nessun appartamento trovato su Alloggiati Web</p>
+          ) : (
+            appartamenti.map((a) => (
+              <button
+                key={a.id}
+                onClick={() => setAppartamentoId(a.id)}
+                className={`text-left p-4 border transition-colors cursor-pointer ${
+                  appartamentoId === a.id
+                    ? "border-zinc-100 bg-surface-2"
+                    : "border-border hover:border-zinc-500"
+                }`}
+              >
+                <div className="flex justify-between items-center">
+                  <div>
+                    <p className="font-medium text-zinc-100 font-mono text-sm">
+                      <span className="text-zinc-500 mr-2">#{a.id}</span>
+                      {a.descrizione || "—"}
+                    </p>
+                    {a.comune && (
+                      <p className="text-[10px] tracking-[0.2em] uppercase text-zinc-500 mt-1 font-mono">
+                        {a.comune}{a.prov ? ` (${a.prov})` : ""}{a.indirizzo ? ` · ${a.indirizzo}` : ""}
+                      </p>
+                    )}
+                  </div>
+                  {appartamentoId === a.id && (
+                    <span className="text-emerald-500 font-mono text-xs">[ ✓ ]</span>
+                  )}
+                </div>
+              </button>
+            ))
+          )}
+        </div>
+      )}
+
       {selectedProperty && propertyHasMissingCreds && (
         <div
           data-testid="missing-creds-warning"
@@ -141,7 +209,13 @@ export default function Checkin() {
       <div className="flex gap-3 mt-4">
         <BackBtn onClick={() => setStep(1)} />
         <NextBtn
-          disabled={!propertyId || propertyHasMissingCreds}
+          disabled={
+            !propertyId ||
+            propertyHasMissingCreds ||
+            (selectedProperty?.alloggiati?.tipo_account !== "standard" &&
+              appartamenti.length > 0 &&
+              appartamentoId === null)
+          }
           onClick={() => { setGuests([emptyGuest()]); setStep(3); }}
           testid="next-step-2"
         />
@@ -544,6 +618,7 @@ export default function Checkin() {
           accepted: true,
           accepted_at: privacyAcceptedAt,
         },
+        ...(appartamentoId !== null ? { id_appartamento_override: appartamentoId } : {}),
       });
       setResult(r.data);
       setStep(5);

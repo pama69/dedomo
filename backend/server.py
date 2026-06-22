@@ -839,6 +839,7 @@ class CheckinSubmit(BaseModel):
     data_partenza: str  # YYYY-MM-DD
     guests: List[GuestData]
     privacy_consent: Optional[PrivacyConsent] = None
+    id_appartamento_override: Optional[int] = None  # overrides property's id_appartamento per this check-in
 
 
 def _guest_to_schedina(
@@ -981,9 +982,14 @@ async def checkin_submit(body: CheckinSubmit, user=Depends(get_current_user)):
     alloggiati_cfg = prop.get("alloggiati", {})
     if alloggiati_cfg.get("enabled") and alloggiati_cfg.get("utente"):
         tipo_account = alloggiati_cfg.get("tipo_account", "standard")
-        id_app_raw = alloggiati_cfg.get("id_appartamento")
-        id_app = int(id_app_raw) if id_app_raw is not None else None
-        id_app_set = id_app is not None
+        # Per-check-in apartment override (multi-apartment properties)
+        if body.id_appartamento_override is not None:
+            id_app = body.id_appartamento_override
+            id_app_set = True
+        else:
+            id_app_raw = alloggiati_cfg.get("id_appartamento")
+            id_app = int(id_app_raw) if id_app_raw is not None else None
+            id_app_set = id_app is not None
 
         # Determine tipo_alloggiato
         n = len(body.guests)
