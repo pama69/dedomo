@@ -149,7 +149,7 @@ def generate_token(utente: str, password: str, ws_key: str) -> Dict[str, Any]:
     try:
         client = _get_client()
         resp = client.service.GenerateToken(
-            Utente=utente, Password=password, WsKey=ws_key
+            Utente=utente.strip(), Password=password.strip(), WsKey=ws_key.strip()
         )
         # Zeep returns a multi-field response:
         #   GenerateTokenResult: TokenInfo (issued, expires, token)

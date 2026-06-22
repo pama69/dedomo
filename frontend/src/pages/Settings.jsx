@@ -87,6 +87,14 @@ export default function Settings() {
       // Normalize empty strings to numeric defaults before submit
       const payload = JSON.parse(JSON.stringify(editing));
       const num = (v, def = 0) => (v === "" || v === null || isNaN(v) ? def : Number(v));
+      // Trim credential fields to remove accidental whitespace from copy-paste
+      const trimStr = (v) => (typeof v === "string" ? v.trim() : v);
+      ["utente", "password", "ws_key"].forEach((k) => {
+        if (payload.alloggiati[k] !== undefined) payload.alloggiati[k] = trimStr(payload.alloggiati[k]);
+      });
+      ["utente", "password"].forEach((k) => {
+        if (payload.ross1000[k] !== undefined) payload.ross1000[k] = trimStr(payload.ross1000[k]);
+      });
       payload.ross1000.n_camere = num(payload.ross1000.n_camere, 1);
       payload.ross1000.n_letti = num(payload.ross1000.n_letti, 1);
       payload.imposta_soggiorno.tariffa_per_notte = num(payload.imposta_soggiorno.tariffa_per_notte, 0);
