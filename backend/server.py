@@ -716,7 +716,16 @@ async def test_alloggiati_credentials(
     if not cfg.get("utente") or not cfg.get("password") or not cfg.get("ws_key"):
         raise HTTPException(400, "Credenziali Alloggiati Web mancanti")
 
-    tok = generate_token(cfg["utente"], cfg["password"], cfg["ws_key"])
+    ws_key_raw = cfg["ws_key"]
+    ws_key_stripped = ws_key_raw.strip()
+    ws_key_debug = {
+        "len_raw": len(ws_key_raw),
+        "len_stripped": len(ws_key_stripped),
+        "first4": ws_key_stripped[:4],
+        "last4": ws_key_stripped[-4:] if len(ws_key_stripped) >= 4 else ws_key_stripped,
+        "has_whitespace": ws_key_raw != ws_key_stripped,
+    }
+    tok = generate_token(cfg["utente"], cfg["password"], ws_key_raw)
     logger.info(f"[AW-TEST] GenerateToken raw response: {tok.get('raw')}")
     if not tok["success"]:
         return {
@@ -724,6 +733,7 @@ async def test_alloggiati_credentials(
             "step": "GenerateToken",
             "message": tok.get("message"),
             "raw": tok.get("raw"),
+            "ws_key_debug": ws_key_debug,
         }
 
     auth = authentication_test(cfg["utente"], tok["token"])

@@ -535,6 +535,14 @@ function TestCredentialsButton({ propertyId }) {
               {result.message}
             </div>
           )}
+          {result.ws_key_debug && (
+            <div className="text-zinc-500 mt-2 border-t border-zinc-700 pt-2 text-[9px]">
+              WsKey nel DB: {result.ws_key_debug.len_stripped} chars · inizia con &quot;{result.ws_key_debug.first4}&quot; · finisce con &quot;{result.ws_key_debug.last4}&quot;
+              {result.ws_key_debug.has_whitespace && (
+                <span className="text-amber-400 ml-2">⚠ spazi trovati (rimossi)</span>
+              )}
+            </div>
+          )}
           {result.test_schedina && (
             <div className="text-zinc-500 mt-2 border-t border-zinc-700 pt-2">
               Metodo usato: <span className="text-amber-400">{result.test_schedina.tipo_account_used}</span><br/>
