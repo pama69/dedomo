@@ -448,9 +448,7 @@ function PropertyEditor({ p, setP, save, cancel, saving, error }) {
             <span className="text-zinc-400 text-[11px] font-mono">{p.calendar?.color || "#10b981"}</span>
           </div>
         </div>
-        {p.property_id && (
-          <PersonalIcalField propertyId={p.property_id} />
-        )}
+        <PersonalIcalField propertyId={p.property_id} />
       </Section>
 
       {error && (
@@ -941,16 +939,33 @@ function AddApartmentForm({ propertyId, onAdded, onCancel }) {
 
 function PersonalIcalField({ propertyId }) {
   const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState(false);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     if (!propertyId) return;
+    setLoading(true);
+    setErr(false);
     api.get(`/calendar/personal-url/${propertyId}`)
       .then((r) => setData(r.data))
-      .catch(() => setData(null));
+      .catch(() => setErr(true))
+      .finally(() => setLoading(false));
   }, [propertyId]);
 
-  if (!data) return null;
+  if (!propertyId) {
+    return (
+      <p className="typo-small text-muted-content italic">
+        Salva la struttura per ottenere l'URL iCal da esportare verso i portali.
+      </p>
+    );
+  }
+  if (loading) return <p className="typo-small text-muted-content">Caricamento URL iCal...</p>;
+  if (err || !data) return (
+    <p className="typo-small" style={{ color: "hsl(var(--destructive))" }}>
+      Errore nel recupero dell'URL iCal. Riprova dopo aver salvato.
+    </p>
+  );
   // L'URL di export DEVE essere assoluto (i portali lo scaricano dai loro server).
   // Preferisci l'url assoluto dal backend; altrimenti costruiscilo dall'origin corrente.
   const envBase = process.env.REACT_APP_BACKEND_URL;
