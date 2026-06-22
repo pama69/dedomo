@@ -101,10 +101,12 @@ export default function Settings() {
 
       if (editing.property_id) {
         await api.put(`/properties/${editing.property_id}`, payload);
+        setEditing(null);
       } else {
-        await api.post("/properties", payload);
+        const res = await api.post("/properties", payload);
+        // Resta in modifica con l'ID appena creato → mostra subito URL iCal
+        setEditing(res.data);
       }
-      setEditing(null);
       await load();
     } catch (e) {
       setError(e.response?.data?.detail || "Errore salvataggio");
