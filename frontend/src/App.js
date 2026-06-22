@@ -38,6 +38,7 @@ import CalendarPage from "@/pages/Calendar";
 import Help from "@/pages/Help";
 import Pricing from "@/pages/Pricing";
 import BillingSuccess from "@/pages/BillingSuccess";
+import GuestPage from "@/pages/GuestPage";
 
 function AppRouter() {
   const location = useLocation();
@@ -61,6 +62,7 @@ function AppRouter() {
       <Route path="/help" element={<Help />} />
       <Route path="/billing/pricing" element={<Pricing />} />
       <Route path="/billing/success" element={<BillingSuccess />} />
+      <Route path="/guest/:token" element={<GuestPage />} />
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>
   );

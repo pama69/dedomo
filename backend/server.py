@@ -1223,7 +1223,75 @@ async def checkin_submit(body: CheckinSubmit, user=Depends(get_current_user)):
         )
 
     results["checkin_id"] = checkin_id
+
+    # Auto-generate guest page token (non-blocking, best-effort)
+    import asyncio as _asyncio
+    from guest_page import generate_guest_token as _gen_token
+    async def _bg_token():
+        try:
+            await _gen_token(checkin_id, db)
+        except Exception as _e:
+            pass
+    _asyncio.create_task(_bg_token())
+
     return results
+
+
+# ====================================================================
+# GUEST PAGE
+# ====================================================================
+
+@api_router.get("/guest/{token}")
+async def public_guest_page(token: str):
+    """Endpoint pubblico — nessuna autenticazione richiesta."""
+    from guest_page import get_guest_page_data
+    data = await get_guest_page_data(token, db)
+    if data.get("error") == "not_found":
+        raise HTTPException(404, "Link non valido")
+    if data.get("error") == "expired":
+        raise HTTPException(410, "Link scaduto")
+    return data
+
+
+@api_router.post("/checkins/{checkin_id}/guest-token")
+async def get_or_create_guest_token(checkin_id: str, user=Depends(get_current_user)):
+    """Genera o recupera il token della pagina ospite per un check-in."""
+    c = await db.checkins.find_one({"checkin_id": checkin_id, "user_id": user["user_id"]}, {"_id": 0})
+    if not c:
+        raise HTTPException(404, "Check-in non trovato")
+    from guest_page import generate_guest_token
+    token = await generate_guest_token(checkin_id, db)
+    base = os.environ.get("PUBLIC_BACKEND_URL", "")
+    return {
+        "token": token,
+        "url": f"{base}/guest/{token}" if base else f"/guest/{token}",
+    }
+
+
+@api_router.post("/checkins/{checkin_id}/send-welcome")
+async def send_guest_welcome(checkin_id: str, body: dict, user=Depends(get_current_user)):
+    """Invia email di benvenuto all'ospite con il link della pagina personale."""
+    c = await db.checkins.find_one({"checkin_id": checkin_id, "user_id": user["user_id"]}, {"_id": 0})
+    if not c:
+        raise HTTPException(404, "Check-in non trovato")
+    from guest_page import generate_guest_token, send_welcome_email, detect_lang
+    token = await generate_guest_token(checkin_id, db)
+    guests = c.get("guests", [])
+    guest_name = guests[0].get("nome", "Ospite") if guests else "Ospite"
+    lang = detect_lang(guests[0].get("paese_nome", "")) if guests else "it"
+    prop = await db.properties.find_one({"property_id": c["property_id"]}, {"_id": 0})
+    property_name = prop.get("nome", "Villa") if prop else "Villa"
+    guest_email = body.get("email", "")
+    ok = await send_welcome_email(
+        guest_name, guest_email, token, lang,
+        property_name, c["data_arrivo"], c["data_partenza"],
+    )
+    base = os.environ.get("PUBLIC_BACKEND_URL", "")
+    return {
+        "token": token,
+        "url": f"{base}/guest/{token}" if base else f"/guest/{token}",
+        "email_sent": ok,
+    }
 
 
 # ====================================================================
