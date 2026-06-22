@@ -721,9 +721,12 @@ async def test_alloggiati_credentials(
     ws_key_debug = {
         "len_raw": len(ws_key_raw),
         "len_stripped": len(ws_key_stripped),
-        "first4": ws_key_stripped[:4],
-        "last4": ws_key_stripped[-4:] if len(ws_key_stripped) >= 4 else ws_key_stripped,
+        "first8": ws_key_stripped[:8],
+        "last8": ws_key_stripped[-8:] if len(ws_key_stripped) >= 8 else ws_key_stripped,
+        "has_plus": "+" in ws_key_stripped,
+        "has_equals": "=" in ws_key_stripped,
         "has_whitespace": ws_key_raw != ws_key_stripped,
+        "utente": cfg.get("utente", ""),
     }
     tok = generate_token(cfg["utente"], cfg["password"], ws_key_raw)
     logger.info(f"[AW-TEST] GenerateToken raw response: {tok.get('raw')}")

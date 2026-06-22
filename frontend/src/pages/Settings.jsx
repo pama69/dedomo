@@ -542,11 +542,11 @@ function TestCredentialsButton({ propertyId }) {
             </div>
           )}
           {result.ws_key_debug && (
-            <div className="text-zinc-500 mt-2 border-t border-zinc-700 pt-2 text-[9px]">
-              WsKey nel DB: {result.ws_key_debug.len_stripped} chars · inizia con &quot;{result.ws_key_debug.first4}&quot; · finisce con &quot;{result.ws_key_debug.last4}&quot;
-              {result.ws_key_debug.has_whitespace && (
-                <span className="text-amber-400 ml-2">⚠ spazi trovati (rimossi)</span>
-              )}
+            <div className="text-zinc-500 mt-2 border-t border-zinc-700 pt-2 text-[9px] flex flex-col gap-0.5">
+              <span>Utente nel DB: <span className="text-zinc-300">{result.ws_key_debug.utente || "—"}</span></span>
+              <span>WsKey nel DB: <span className="text-zinc-300">{result.ws_key_debug.len_stripped} chars</span> · inizia con <span className="text-zinc-300">&quot;{result.ws_key_debug.first8}&quot;</span> · finisce con <span className="text-zinc-300">&quot;{result.ws_key_debug.last8}&quot;</span></span>
+              <span>Contiene <span className="text-zinc-300">+</span>: {result.ws_key_debug.has_plus ? <span className="text-emerald-400">sì</span> : <span className="text-red-400">NO</span>} &nbsp;|&nbsp; Contiene <span className="text-zinc-300">=</span>: {result.ws_key_debug.has_equals ? <span className="text-emerald-400">sì</span> : <span className="text-red-400">NO</span>}</span>
+              {result.ws_key_debug.has_whitespace && <span className="text-amber-400">⚠ spazi trovati agli estremi (rimossi)</span>}
             </div>
           )}
           {result.test_schedina && (
