@@ -233,7 +233,9 @@ function Section({ title, children }) {
   );
 }
 
-function Field({ label, value, onChange, type = "text", testid, placeholder, mono = true, autoComplete }) {
+function Field({ label, value, onChange, type = "text", testid, placeholder, mono = true, autoComplete, noAutofill = false }) {
+  // noAutofill: uses readOnly-until-focus trick to block Chrome autofill on credential fields
+  const [active, setActive] = useState(false);
   return (
     <label className="flex flex-col gap-1.5">
       <span className="typo-meta">{label}</span>
@@ -241,9 +243,13 @@ function Field({ label, value, onChange, type = "text", testid, placeholder, mon
         type={type}
         data-testid={testid}
         value={value ?? ""}
+        readOnly={noAutofill && !active}
+        onFocus={() => noAutofill && setActive(true)}
+        onBlur={() => noAutofill && setActive(false)}
         onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        autoComplete={autoComplete || "off"}
+        placeholder={active || !noAutofill ? placeholder : undefined}
+        autoComplete={autoComplete || "new-password"}
+        name={testid ? `_nofill_${testid}` : undefined}
         className={`input-modern ${mono ? "font-mono" : ""}`}
       />
     </label>
@@ -346,9 +352,9 @@ function PropertyEditor({ p, setP, save, cancel, saving, error }) {
 
       <Section title="Alloggiati Web (Polizia)">
         <Toggle label="Abilita Alloggiati Web" value={p.alloggiati.enabled} onChange={(v) => upd("alloggiati.enabled", v)} testid="aw-enabled" />
-        <Field label="Utente" value={p.alloggiati.utente} onChange={(v) => upd("alloggiati.utente", v)} testid="aw-utente" />
-        <Field label="Password" type="password" value={p.alloggiati.password} onChange={(v) => upd("alloggiati.password", v)} testid="aw-password" autoComplete="new-password" />
-        <Field label="WS Key (incolla qui — visibile per verifica)" type="text" value={p.alloggiati.ws_key} onChange={(v) => upd("alloggiati.ws_key", v)} testid="aw-wskey" autoComplete="off" />
+        <Field label="Utente" value={p.alloggiati.utente} onChange={(v) => upd("alloggiati.utente", v)} testid="aw-utente" noAutofill />
+        <Field label="Password" type="password" value={p.alloggiati.password} onChange={(v) => upd("alloggiati.password", v)} testid="aw-password" noAutofill />
+        <Field label="WS Key (incolla qui — visibile per verifica)" type="text" value={p.alloggiati.ws_key} onChange={(v) => upd("alloggiati.ws_key", v)} testid="aw-wskey" noAutofill />
         <label className="flex flex-col gap-1">
           <span className="text-[10px] tracking-[0.25em] uppercase text-zinc-500">Tipo Account</span>
           <select
@@ -396,8 +402,8 @@ function PropertyEditor({ p, setP, save, cancel, saving, error }) {
           </select>
         </label>
         <Field label="Codice Struttura (rilasciato dalla Regione)" value={p.ross1000.codice_struttura} onChange={(v) => upd("ross1000.codice_struttura", v)} testid="r1k-codstruttura" />
-        <Field label="Utente" value={p.ross1000.utente} onChange={(v) => upd("ross1000.utente", v)} testid="r1k-utente" />
-        <Field label="Password" type="password" value={p.ross1000.password} onChange={(v) => upd("ross1000.password", v)} testid="r1k-password" />
+        <Field label="Utente" value={p.ross1000.utente} onChange={(v) => upd("ross1000.utente", v)} testid="r1k-utente" noAutofill />
+        <Field label="Password" type="password" value={p.ross1000.password} onChange={(v) => upd("ross1000.password", v)} testid="r1k-password" noAutofill />
         <div className="grid grid-cols-2 gap-3">
           <Field label="N. Camere" type="number" value={p.ross1000.n_camere ?? ""} onChange={(v) => upd("ross1000.n_camere", v === "" ? "" : parseInt(v))} testid="r1k-camere" />
           <Field label="N. Letti totali" type="number" value={p.ross1000.n_letti ?? ""} onChange={(v) => upd("ross1000.n_letti", v === "" ? "" : parseInt(v))} testid="r1k-letti" />
