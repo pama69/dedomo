@@ -234,12 +234,14 @@ function Section({ title, children }) {
 }
 
 function Field({ label, value, onChange, type = "text", testid, placeholder, mono = true, autoComplete, noAutofill = false }) {
-  // noAutofill: uses readOnly-until-focus trick to block Chrome autofill on credential fields
   const [active, setActive] = useState(false);
+  // Random id/name per mount so Chrome can't pattern-match to saved credentials
+  const [uid] = useState(() => `_f_${Math.random().toString(36).slice(2)}`);
   return (
     <label className="flex flex-col gap-1.5">
       <span className="typo-meta">{label}</span>
       <input
+        id={noAutofill ? uid : undefined}
         type={type}
         data-testid={testid}
         value={value ?? ""}
@@ -248,8 +250,10 @@ function Field({ label, value, onChange, type = "text", testid, placeholder, mon
         onBlur={() => noAutofill && setActive(false)}
         onChange={(e) => onChange(e.target.value)}
         placeholder={active || !noAutofill ? placeholder : undefined}
-        autoComplete={autoComplete || "new-password"}
-        name={testid ? `_nofill_${testid}` : undefined}
+        autoComplete={noAutofill ? "one-time-code" : (autoComplete || "off")}
+        name={noAutofill ? uid : (testid ? `_nofill_${testid}` : undefined)}
+        data-lpignore="true"
+        data-1p-ignore
         className={`input-modern ${mono ? "font-mono" : ""}`}
       />
     </label>
