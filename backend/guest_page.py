@@ -19,7 +19,8 @@ OPENWEATHERMAP_KEY = os.environ.get("OPENWEATHERMAP_KEY", "")
 RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
 GUEST_EMAIL_FROM = os.environ.get("GUEST_EMAIL_FROM", "ospiti@dedomo.it")
 _OAI_KEY = os.environ.get("OPENAI_API_KEY", "")
-_oai = AsyncOpenAI(api_key=_OAI_KEY) if _OAI_KEY else None
+# Force real OpenAI endpoint — ignore leftover OPENAI_BASE_URL (Emergent proxy, now dead)
+_oai = AsyncOpenAI(api_key=_OAI_KEY, base_url="https://api.openai.com/v1") if _OAI_KEY else None
 
 # Mappa paese (campo Alloggiati Web) → codice lingua
 _COUNTRY_LANG = {
