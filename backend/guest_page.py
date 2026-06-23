@@ -316,7 +316,11 @@ async def send_welcome_email(
     guest_name: str, guest_email: str, token: str, lang: str,
     property_name: str, checkin_date: str, checkout_date: str,
 ) -> bool:
-    if not RESEND_API_KEY or not guest_email:
+    if not RESEND_API_KEY:
+        logger.warning("[RESEND] RESEND_API_KEY non impostata — email non inviata")
+        return False
+    if not guest_email:
+        logger.warning("[RESEND] guest_email vuoto — email non inviata")
         return False
 
     base_url = os.environ.get("PUBLIC_BACKEND_URL", "https://dedomo.app")
@@ -371,6 +375,7 @@ async def send_welcome_email(
 <p>Bon séjour!<br><strong>Paolo · {property_name}</strong></p></div>""",
     }
 
+    logger.info(f"[RESEND] Invio a {guest_email} da {GUEST_EMAIL_FROM} (lang={lang})")
     try:
         async with httpx.AsyncClient(timeout=15) as c:
             r = await c.post(
@@ -383,7 +388,11 @@ async def send_welcome_email(
                     "html": bodies.get(lang, bodies["en"]),
                 },
             )
-            return r.status_code in (200, 201)
+            if r.status_code not in (200, 201):
+                logger.error(f"[RESEND] ERRORE {r.status_code}: {r.text}")
+                return False
+            logger.info(f"[RESEND] OK id={r.json().get('id','?')}")
+            return True
     except Exception as e:
-        logger.error(f"Resend email error: {e}")
+        logger.error(f"[RESEND] Eccezione: {e}")
         return False
