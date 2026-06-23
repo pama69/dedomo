@@ -134,15 +134,19 @@ async def _gpt_search(prompt: str) -> str:
 
 async def fetch_events(comune: str, provincia: str, lang: str) -> list:
     today = datetime.now(timezone.utc).strftime("%d/%m/%Y")
+    today_iso = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     lang_note = {"it": "in italiano", "en": "in English", "de": "auf Deutsch", "fr": "en français"}.get(lang, "in English")
     prompt = (
         f"Oggi è {today}. Cerca online e trova eventi, sagre, feste locali o manifestazioni "
-        f"in programma OGGI o nei prossimi 2 giorni nel raggio di 50 km da {comune} ({provincia}), "
-        f"Abruzzo/Marche/Molise, Italia. Elenca massimo 5 eventi. "
+        f"in programma DA OGGI IN POI (solo eventi futuri, non passati) nei prossimi 7 giorni "
+        f"nel raggio di 50 km da {comune} ({provincia}), Abruzzo/Marche/Molise, Italia. "
+        f"Elenca massimo 5 eventi. Per ogni evento includi il link ufficiale o la pagina di riferimento. "
         f"Risposta {lang_note} in JSON array (solo array, niente altro): "
-        f'[{{"title":"...","location":"...","date":"...","time":"..."}}]'
+        f'[{{"title":"...","location":"...","date":"YYYY-MM-DD","time":"...","url":"https://..."}}]'
     )
-    return _extract_json_list(await _gpt_search(prompt))
+    results = _extract_json_list(await _gpt_search(prompt))
+    # Filter out past events server-side
+    return [ev for ev in results if not ev.get("date") or ev.get("date", "") >= today_iso]
 
 
 async def fetch_markets(comune: str, provincia: str, lang: str) -> list:
@@ -162,9 +166,10 @@ async def fetch_attractions(comune: str, provincia: str, lang: str) -> list:
         f"Suggerisci 8 luoghi da visitare nel raggio di 100 km da {comune} ({provincia}), Abruzzo, Italia. "
         f"Varietà: borghi medievali, parchi naturali, spiagge, città d'arte, esperienze gastronomiche. "
         f"Per ognuno: nome, categoria (borgo/parco/spiaggia/città/gastronomia), "
-        f"distanza approssimativa da {comune} in km, descrizione breve (max 2 frasi). "
+        f"distanza approssimativa da {comune} in km, descrizione breve (max 2 frasi), "
+        f"link Wikipedia o sito ufficiale. "
         f"Risposta {lang_note} in JSON array (solo array, niente altro): "
-        f'[{{"title":"...","type":"borgo","distance_km":25,"description":"..."}}]'
+        f'[{{"title":"...","type":"borgo","distance_km":25,"description":"...","url":"https://..."}}]'
     )
     return _extract_json_list(await _gpt_search(prompt))
 
@@ -254,7 +259,13 @@ async def get_guest_page_data(token: str, db) -> dict:
         except Exception as e:
             logger.error(f"Weather error: {e}")
 
-    if _stale("events", 24):
+    # Force refresh if cached events are all in the past
+    today_iso = now.strftime("%Y-%m-%d")
+    cached_events = cache.get("events") or []
+    all_past = cached_events and all(
+        ev.get("date", "9999") < today_iso for ev in cached_events if ev.get("date")
+    )
+    if _stale("events", 24) or all_past:
         try:
             updates["events"] = await fetch_events(comune, provincia, lang)
             updates["events_at"] = now.isoformat()

@@ -293,33 +293,33 @@ export default function GuestPage() {
             <div className="gp-fadein">
 
               {/* ── METEO ─────────────────────────────────────── */}
-              {data.weather && (
-                <>
-                  <SectionTitle icon="🌤" title={txt.weather} />
-                  <Card className="gp-card-hover">
-                    <div style={{ display: "flex", alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
-                      <WeatherIcon icon={data.weather.icon} size={72} />
-                      <div style={{ flex: 1 }}>
-                        <div style={{
-                          fontFamily: "'Cabinet Grotesk', sans-serif",
-                          fontSize: 42, fontWeight: 800, color: C.text,
-                          letterSpacing: "-0.05em", lineHeight: 1,
-                        }}>
-                          {data.weather.temp}°C
-                        </div>
-                        <div style={{ color: C.textSm, fontSize: 15, marginTop: 4 }}>
-                          {data.weather.description}
-                        </div>
-                        <div style={{ display: "flex", gap: "1.25rem", marginTop: 8, flexWrap: "wrap" }}>
-                          <Pill color={C.sage}>↓ {data.weather.temp_min}°</Pill>
-                          <Pill color={C.tan}>↑ {data.weather.temp_max}°</Pill>
-                          {data.weather.humidity && <Pill>{txt.humidity} {data.weather.humidity}%</Pill>}
-                          {data.weather.wind_kmh && <Pill>{txt.wind} {data.weather.wind_kmh} km/h</Pill>}
-                        </div>
+              <SectionTitle icon="🌤" title={txt.weather} />
+              {data.weather ? (
+                <Card className="gp-card-hover">
+                  <div style={{ display: "flex", alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
+                    <WeatherIcon icon={data.weather.icon} size={72} />
+                    <div style={{ flex: 1 }}>
+                      <div style={{
+                        fontFamily: "'Cabinet Grotesk', sans-serif",
+                        fontSize: 42, fontWeight: 800, color: C.text,
+                        letterSpacing: "-0.05em", lineHeight: 1,
+                      }}>
+                        {data.weather.temp}°C
+                      </div>
+                      <div style={{ color: C.textSm, fontSize: 15, marginTop: 4 }}>
+                        {data.weather.description}
+                      </div>
+                      <div style={{ display: "flex", gap: "1.25rem", marginTop: 8, flexWrap: "wrap" }}>
+                        <Pill color={C.sage}>↓ {data.weather.temp_min}°</Pill>
+                        <Pill color={C.tan}>↑ {data.weather.temp_max}°</Pill>
+                        {data.weather.humidity && <Pill>{txt.humidity} {data.weather.humidity}%</Pill>}
+                        {data.weather.wind_kmh && <Pill>{txt.wind} {data.weather.wind_kmh} km/h</Pill>}
                       </div>
                     </div>
-                  </Card>
-                </>
+                  </div>
+                </Card>
+              ) : (
+                <EmptyNote>{lang === "it" ? "Dati meteo non disponibili." : lang === "de" ? "Wetterdaten nicht verfügbar." : lang === "fr" ? "Données météo non disponibles." : "Weather data not available."}</EmptyNote>
               )}
 
               {/* ── EVENTI ───────────────────────────────────── */}
@@ -328,8 +328,20 @@ export default function GuestPage() {
                 <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
                   {data.events.map((ev, i) => (
                     <Card key={i} className="gp-card-hover" style={{ padding: "1rem 1.25rem" }}>
-                      <div style={{ fontWeight: 600, color: C.text, fontSize: 15 }}>{ev.title}</div>
-                      <div style={{ display: "flex", gap: "0.75rem", marginTop: 4, flexWrap: "wrap" }}>
+                      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "0.5rem" }}>
+                        <div style={{ fontWeight: 700, color: C.text, fontSize: 15, flex: 1 }}>{ev.title}</div>
+                        {ev.url && (
+                          <a href={ev.url} target="_blank" rel="noreferrer" style={{
+                            flexShrink: 0, fontSize: 11, fontWeight: 600,
+                            color: C.sage, textDecoration: "none",
+                            background: C.sageLt, borderRadius: 20,
+                            padding: "3px 10px", whiteSpace: "nowrap",
+                          }}>
+                            Info →
+                          </a>
+                        )}
+                      </div>
+                      <div style={{ display: "flex", gap: "0.75rem", marginTop: 6, flexWrap: "wrap" }}>
                         {ev.location && <MetaChip icon="📍">{ev.location}</MetaChip>}
                         {ev.date && <MetaChip icon="📅">{ev.date}</MetaChip>}
                         {ev.time && <MetaChip icon="🕐">{ev.time}</MetaChip>}
@@ -365,16 +377,25 @@ export default function GuestPage() {
               {data.attractions?.length > 0 ? (
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(280px,1fr))", gap: "0.75rem" }}>
                   {data.attractions.map((a, i) => (
-                    <Card key={i} className="gp-card-hover" style={{ padding: "1.1rem 1.25rem" }}>
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+                    <Card key={i} className="gp-card-hover" style={{ padding: "1.1rem 1.25rem", display: "flex", flexDirection: "column", gap: 6 }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                         <TypeBadge type={a.type} />
                         {a.distance_km && (
                           <span style={{ fontSize: 11, color: C.textSm }}>{a.distance_km} {txt.kmAway}</span>
                         )}
                       </div>
-                      <div style={{ fontWeight: 700, color: C.text, fontSize: 15, marginBottom: 4 }}>{a.title}</div>
+                      <div style={{ fontWeight: 700, color: C.text, fontSize: 15 }}>{a.title}</div>
                       {a.description && (
-                        <div style={{ fontSize: 13, color: C.textSm, lineHeight: 1.5 }}>{a.description}</div>
+                        <div style={{ fontSize: 13, color: C.textSm, lineHeight: 1.5, flex: 1 }}>{a.description}</div>
+                      )}
+                      {a.url && (
+                        <a href={a.url} target="_blank" rel="noreferrer" style={{
+                          display: "inline-block", marginTop: 4,
+                          fontSize: 12, fontWeight: 600, color: C.sage,
+                          textDecoration: "none",
+                        }}>
+                          Scopri di più →
+                        </a>
                       )}
                     </Card>
                   ))}
