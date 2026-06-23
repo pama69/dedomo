@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Link } from "react-router-dom";
 import Layout from "@/components/Layout";
 import api from "@/lib/api";
@@ -287,6 +287,9 @@ export default function Archive() {
                                   #{i + 1} {g.cognome} {g.nome} — {g.tipo_documento} {g.numero_documento}
                                 </span>
                               ))}
+                              {c.guests?.length > 0 && (
+                                <GuestPageLink checkinId={c.checkin_id} />
+                              )}
                       </div>
                       {is_?.calculation && (
                         <div className="border-t border-border pt-3 flex justify-between">
@@ -1124,6 +1127,53 @@ function LocazioneReceiptRow({ checkinId, index, receipt, onDeleted }) {
         />
       )}
       {err && <p className="text-[10px] text-red-400 font-mono">{err}</p>}
+    </div>
+  );
+}
+
+function GuestPageLink({ checkinId }) {
+  const [url, setUrl] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    api.post(`/checkins/${checkinId}/guest-token`)
+      .then((r) => setUrl(r.data.url || ""))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [checkinId]);
+
+  const copy = useCallback(() => {
+    if (!url) return;
+    navigator.clipboard?.writeText(url).catch(() => {});
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }, [url]);
+
+  if (loading) return (
+    <span className="text-zinc-600 text-[10px] font-mono mt-1">carico pagina ospite...</span>
+  );
+  if (!url) return null;
+
+  return (
+    <div className="flex items-center gap-2 mt-1 border border-emerald-500/20 bg-emerald-500/5 px-3 py-2">
+      <span className="text-emerald-500 shrink-0 text-[10px]">🔗</span>
+      <a
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-emerald-400 hover:text-emerald-300 underline truncate flex-1 text-[10px]"
+        title={url}
+      >
+        Pagina personale ospite
+      </a>
+      <button
+        type="button"
+        onClick={copy}
+        className="shrink-0 border border-emerald-500/30 hover:border-emerald-400 text-emerald-400 hover:text-emerald-300 px-2 py-1 text-[10px] cursor-pointer transition-colors"
+      >
+        {copied ? "✓ Copiato" : "Copia link"}
+      </button>
     </div>
   );
 }
