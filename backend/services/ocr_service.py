@@ -12,6 +12,7 @@ import logging
 from typing import Dict, Any
 from openai import AsyncOpenAI
 import openai
+import httpx
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +62,12 @@ async def extract_document_data(image_base64: str, mime_type: str = "image/jpeg"
     if "," in image_base64 and image_base64.startswith("data:"):
         image_base64 = image_base64.split(",", 1)[1]
 
-    client = AsyncOpenAI(api_key=api_key)
+    # Force HTTP/1.1 — Railway has issues with HTTP/2 outbound connections
+    client = AsyncOpenAI(
+        api_key=api_key,
+        http_client=httpx.AsyncClient(http2=False, timeout=60.0),
+        max_retries=1,
+    )
 
     try:
         response = await client.chat.completions.create(
