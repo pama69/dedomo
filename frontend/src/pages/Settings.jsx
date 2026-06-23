@@ -642,6 +642,7 @@ function ApartmentSelector({ propertyId, value, onChange, disabled }) {
   const [loading, setLoading] = useState(false);
   const [items, setItems] = useState([]);
   const [error, setError] = useState("");
+  const [csvRaw, setCsvRaw] = useState("");
   const [loaded, setLoaded] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
 
@@ -649,10 +650,12 @@ function ApartmentSelector({ propertyId, value, onChange, disabled }) {
     if (!propertyId) return;
     setLoading(true);
     setError("");
+    setCsvRaw("");
     try {
       const r = await api.post(`/properties/${propertyId}/alloggiati/appartamenti`);
       if (r.data.success) {
         setItems(r.data.appartamenti || []);
+        setCsvRaw(r.data.csv_raw || "");
         setLoaded(true);
         if (!value && r.data.appartamenti?.length === 1) {
           onChange(r.data.appartamenti[0].id);
@@ -660,6 +663,7 @@ function ApartmentSelector({ propertyId, value, onChange, disabled }) {
       } else {
         // Cod.50 = tabella vuota → user has no apartments yet
         setItems([]);
+        setCsvRaw(r.data.csv_raw || "");
         setLoaded(true);
         setError(r.data.message || "");
       }
@@ -750,6 +754,12 @@ function ApartmentSelector({ propertyId, value, onChange, disabled }) {
               <li>Appartamento gestito esternamente (es. via Turismo 5)</li>
             </ul>
           </div>
+          {csvRaw ? (
+            <div className="border-t border-amber-500/30 pt-3 flex flex-col gap-1">
+              <span className="text-zinc-500">CSV grezzo da Alloggiati Web:</span>
+              <pre className="text-[10px] text-zinc-400 whitespace-pre-wrap break-words bg-black/30 p-2">{csvRaw}</pre>
+            </div>
+          ) : null}
           <div className="border-t border-amber-500/30 pt-3 flex flex-col gap-2">
             <span className="text-zinc-300">Soluzione 1 — Prova ID di default:</span>
             <div className="flex gap-2">
