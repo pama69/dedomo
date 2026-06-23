@@ -1,125 +1,150 @@
-# CLAUDE.md — Dedomo / Ospitalo
+# CLAUDE.md — Dedomo
 
-> Questo file viene letto automaticamente da Claude Code all'avvio di ogni sessione.
-> Aggiornalo prima di chiudere ogni sessione con: "Aggiorna il CLAUDE.md con i progressi di oggi."
+> Letto automaticamente da Claude Code all'avvio. Aggiornare a fine sessione.
 
 ---
 
 ## Progetto
 
-**Dedomo** (brand: **Ospitalo**) è un SaaS per la gestione automatizzata di affitti brevi in Italia.
-Obiettivo principale: automatizzare gli adempimenti burocratici (registrazione polizia, tassa di soggiorno, ricevute) e la gestione operativa degli annunci.
+**Dedomo** — SaaS per affitti brevi in Italia: automatizza adempimenti burocratici (polizia, tassa soggiorno, ricevute) e comunicazione ospiti.
 
-**Owner:** Paolo (non-technical, lavora da Windows con VS Code)
-**Repo GitHub:** `github.com/pama69/dedomo`
-**Hosting:** Railway
+**Owner:** Paolo Manni (non-technical, Windows + VS Code)
+**Repo:** `github.com/pama69/dedomo`
+**Hosting:** Railway (`vigilant-expression-production.up.railway.app`)
+**Deploy:** auto da GitHub push su `main`
 
 ---
 
-## Stack tecnico
+## Stack
 
-| Layer | Tecnologia |
+| Layer | Tech |
 |---|---|
 | Backend | FastAPI + Motor (async MongoDB) |
-| Scheduler | APScheduler (processo persistente — motivo per cui Vercel è escluso) |
-| Database | MongoDB Atlas |
+| Database | MongoDB Atlas (proprio, non Emergent) |
 | Frontend | React 19 + TailwindCSS |
+| Scheduler | APScheduler |
+| OCR | OpenAI GPT-4o-mini Vision |
+| Email | Resend API (dominio `dedomo.it` già verificato) |
 | Pagamenti | Stripe |
-| OCR documenti | OpenAI GPT-4o-mini Vision |
-| Calendario | iCal sync |
 | Hosting | Railway |
 
 ---
 
-## Servizi esterni e credenziali (non mettere valori reali qui)
+## Env vars Railway (nessun valore qui)
 
-- `OPENAI_API_KEY` — GPT-4o-mini Vision per OCR documenti ospiti
-- `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` — billing
-- `MONGODB_URI` — Atlas connection string (cambio da env var, zero modifiche al codice)
-- `RAILWAY_TOKEN` — deploy
-- Credenziali **Alloggiati Web** (Questura) — per ogni struttura, rilasciate manualmente
-
----
-
-## Funzionalità principali
-
-### 1. Alloggiati Web (Polizia di Stato)
-- Formato `.txt` a 168 caratteri per riga, posizioni fisse
-- Nessuna API pubblica → accesso via browser automation / RPA
-- Login con credenziali Questura (username + password per struttura)
-- **Stato:** in sviluppo / da automatizzare completamente
-
-### 2. Ross1000 / Turismo5 (Regione)
-- Notifica presenze turistiche regionali
-- **Stato:** da integrare
-
-### 3. OCR documenti ospiti
-- Foto documento → GPT-4o-mini Vision → estrazione dati strutturati
-- Usato per pre-compilare la scheda Alloggiati
-
-### 4. Stripe billing
-- Abbonamenti SaaS per strutture
-- Webhook per eventi pagamento
-
-### 5. iCal sync
-- Sincronizzazione calendari da Airbnb, Booking, ecc.
-
-### 6. Ricevute (Villa Vittoria)
-- Generazione PDF ricevute per soggiorni
-- Due intestatari: **MANNI** (Paolo Manni) e **BASILE** (Anna M. Basile)
-- Tassa di soggiorno: €1,50 × adulti × notti
+- `MONGO_URL`, `DB_NAME` — Atlas connection
+- `OPENAI_API_KEY` — OCR + guest page AI
+- `RESEND_API_KEY`, `GUEST_EMAIL_FROM` — email ospiti
+- `OPENWEATHERMAP_KEY` — meteo pagina ospite
+- `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`
 
 ---
 
-## Bug noti / Fix pendenti
+## Funzionalità implementate
 
-> Aggiorna questa sezione a ogni sessione
+### Alloggiati Web (Polizia)
+- Invio SOAP schedine a 168 char posizioni fisse
+- Modalità: `standard`, `appartamenti` (IdAppartamento per ogni invio), `appartamenti_file_unico`
+- Per account `appartamenti`: IdAppartamento si sceglie a ogni check-in (Step 2 del flusso)
+- `lista_appartamenti` usa `Tabella(tipo="ListaAppartamenti")` — può essere vuota se appartamenti creati dalla Questura (usare ID manuale in quel caso)
+- WsKey è base64 ~66-68 chars (NON un GUID da 36 chars)
+- Campi credenziali in Settings hanno `readOnly`+`onFocus` anti-autofill Chrome
 
-- [ ] **Rate limiting spoofabile** — il limite IP legge `X-Forwarded-For` che può essere falsificato dal client. Fix: usare l'IP reale dal proxy Railway.
-- [ ] **CORS fragile** — configurazione da irrigidire in produzione.
-- [ ] **`giorni_permanenza` troncato silenziosamente** — valori oltre soglia vengono tagliati senza errore.
-- [ ] **Webhook Stripe senza verifica firma come fallback** — rimuovere il fallback non verificato.
-- [ ] **Zeep SOAP re-instanziato per ogni chiamata** — spostare l'inizializzazione del client a livello di modulo.
+### Ross 1000 / Turismo 5 (Regione)
+- SOAP regionale, invio movimentazioni
+- Formato CSV e SOAP v2
+
+### Imposta di Soggiorno
+- Calcolo locale + ricevuta PDF
+- Endpoint comune configurabile per struttura
+
+### OCR documenti
+- Foto → GPT-4o-mini Vision → dati strutturati pre-compilati
+- Compressione immagine lato client (max 1600px, 78% quality)
+
+### Calendario iCal
+- Sync da Booking/Airbnb/VRBO tramite iCal URL
+- URL iCal personale per ogni struttura
+
+### Pagina Ospite (Progetto 2)
+- Route pubblica `/guest/:token` — no auth richiesta
+- Token generato automaticamente in background dopo ogni check-in
+- Mostra: meteo locale (OpenWeatherMap), eventi/sagre 50km, mercatini 30km, attrazioni 100km
+- AI search tramite GPT-4o-mini `web_search_preview`
+- Cache MongoDB: meteo 3h, eventi 24h, mercatini/attrazioni 7d
+- Design vacanze: crema/salvia/beige, CSS animations
+- i18n: it/en/de/fr (rilevato da `paese_nome` ospite)
+- Email benvenuto tramite Resend
+
+### Auth
+- Emergent Google OAuth ancora attiva (da sostituire con OTP email)
+- `public/index.html` ripulito da script Emergent (era la causa della pagina bianca su Railway)
+- ErrorBoundary in `App.js` mostra errori JS invece di pagina bianca
+
+### Billing
+- Stripe subscription
+- Trial: 10 invii PROD gratuiti
+- Paywall a 402 se quota superata
 
 ---
 
-## Feature in sviluppo
+## Struttura file chiave
 
-> Aggiorna questa sezione a ogni sessione
-
-- [ ] **Dashboard monitoraggio costi API** — FastAPI router + APScheduler che fa polling periodico dei costi di Stripe, OpenAI, MongoDB Atlas, Railway → salva in `cost_snapshots` (MongoDB) → React dashboard protetta da auth.
-
----
-
-## Comandi utili
-
-```bash
-# Avvio dev backend
-uvicorn main:app --reload
-
-# Avvio dev frontend
-npm run dev
-
-# Deploy su Railway
-railway up
+```
+backend/
+  server.py          — FastAPI, tutti gli endpoint API
+  guest_page.py      — logica pagina ospite (weather, events, token, email)
+  services/
+    alloggiati_web.py  — SOAP Alloggiati Web (generate_token, send_schedine, lista_appartamenti)
+    ross1000.py        — CSV/SOAP regionale
+    turismo5.py        — SOAP regionale alternativo
+    imposta_soggiorno.py
+    pdf_service.py     — generazione PDF ricevute
+    ocr_service.py
+    billing.py
+frontend/src/
+  App.js             — Router + ErrorBoundary + route /guest/:token
+  pages/
+    Checkin.jsx       — flusso 5 step check-in (Step 2: selezione appartamento se multi-apt)
+    Settings.jsx      — gestione strutture/credenziali
+    GuestPage.jsx     — pagina pubblica ospite (design vacanze)
+    Archive.jsx       — storico check-in
+    Dashboard.jsx
+  lib/api.js         — axios instance con baseURL /api
 ```
 
 ---
 
-## Convenzioni di codice
+## Bug noti / pendenti
 
-- Python: async/await ovunque con Motor; no operazioni bloccanti nel thread principale
-- Variabili d'ambiente: sempre da `.env` / Railway env vars, mai hardcoded
-- MongoDB: collection `cost_snapshots` per i dati di monitoraggio costi
-- React: componenti funzionali con hooks; no class components
+- [ ] **Rate limiting spoofabile** — `X-Forwarded-For` falsificabile; usare IP reale Railway
+- [ ] **CORS fragile** — irrigidire in produzione
+- [ ] **Zeep SOAP ri-istanziato per ogni chiamata** — spostare a livello modulo
+- [ ] **Webhook Stripe senza verifica firma come fallback** — rimuovere fallback non verificato
+- [ ] **Auth Emergent** — ancora attiva; sostituire con OTP email via Resend + `input-otp.jsx` già presente
+- [ ] **Migrazione dati** — da MongoDB Emergent a Atlas proprio (non ancora fatto)
+- [ ] **Password MongoDB Atlas** — `ItHqVhgqwYWcgQkE` esposta in chat precedente; rigenerare
+- [ ] **DNS dedomo.it** — punta ancora a Emergent (IONOS); da spostare su Railway quando stabile
+- [ ] **Railway service name** — rinominare da "vigilant-expression" a "dedomo"
+- [ ] **Email benvenuto** — manca campo email ospite nel flusso check-in; da aggiungere
 
 ---
 
-## Contesto sessione corrente
+## Sessione corrente — 2026-06-23
 
-> **Sostituisci questa sezione ogni volta che chiudi una sessione.**
+**Fatto:**
+- Fix pagina bianca post-login (rimosso script `emergent-main.js` da `index.html`)
+- Fix iCal URL in Settings (rimane in edit mode dopo primo salvataggio)
+- Implementato Progetto 2 completo (pagina ospite: meteo, eventi, mercatini, attrazioni)
+- Fix selezione appartamento multi-ID in check-in Step 2
+- Fix campi credenziali non si aggiornano (autofill Chrome → `readOnly`+`onFocus`)
+- Fix lista appartamenti mostra errore reale invece di "lista vuota" quando token fallisce
+- WsKey ora visibile in chiaro (era type=password, browser la riscriveva)
+- Debug WsKey nel test credenziali (first8/last8, has_plus, has_equals)
 
-Ultima sessione: _(data)_
-Cosa abbiamo fatto: _(riepilogo)_
-Prossimi passi: _(lista ordinata)_
-Blocchi / domande aperte: _(eventuali problemi irrisolti)_
+**Prossimi passi:**
+1. Testare pagina ospite end-to-end (`/guest/{token}` dopo check-in)
+2. Aggiungere campo email ospite al flusso check-in per invio email benvenuto
+3. Sostituire auth Emergent con OTP email (Resend + `input-otp.jsx`)
+4. Migrare dati da MongoDB Emergent ad Atlas
+5. Rigenerare password MongoDB Atlas (esposta)
