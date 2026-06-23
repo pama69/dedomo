@@ -49,6 +49,9 @@ export default function Checkin() {
   const [privacyAccepted, setPrivacyAccepted] = useState(false);
   const [privacyAcceptedAt, setPrivacyAcceptedAt] = useState("");
   const [showPrivacyModal, setShowPrivacyModal] = useState(false);
+  // Guest email for welcome email + guest page link
+  const [guestEmail, setGuestEmail] = useState("");
+  const [welcomeResult, setWelcomeResult] = useState(null);
 
   useEffect(() => {
     api.get("/properties").then((r) => setProperties(r.data));
@@ -543,6 +546,26 @@ export default function Checkin() {
         />
         <TextField label="Numero Documento" value={g.numero_documento} onChange={(v) => updateGuest(activeGuestIdx, "numero_documento", v.toUpperCase())} testid="guest-numdoc" />
 
+        {activeGuestIdx === 0 && (
+          <div className="flex flex-col gap-1.5">
+            <span className="typo-meta">Email ospite <span className="text-zinc-600">(opzionale — per pagina benvenuto)</span></span>
+            <input
+              type="email"
+              data-testid="guest-email"
+              value={guestEmail}
+              onChange={(e) => setGuestEmail(e.target.value)}
+              placeholder="ospite@example.com"
+              autoComplete="off"
+              className="input-modern font-mono"
+            />
+            {guestEmail && (
+              <span className="text-emerald-500 text-[10px] font-mono">
+                Riceverà il link alla pagina personale dopo il check-in
+              </span>
+            )}
+          </div>
+        )}
+
         <details className="text-[10px] tracking-[0.2em] uppercase text-zinc-600 font-mono">
           <summary className="cursor-pointer hover:text-zinc-400">
             Codici tecnici (avanzato)
@@ -621,7 +644,13 @@ export default function Checkin() {
         ...(appartamentoId !== null ? { id_appartamento_override: appartamentoId } : {}),
       });
       setResult(r.data);
+      setWelcomeResult(null);
       setStep(5);
+      if (guestEmail && r.data.checkin_id) {
+        api.post(`/checkins/${r.data.checkin_id}/send-welcome`, { email: guestEmail })
+          .then((wr) => setWelcomeResult(wr.data))
+          .catch(() => setWelcomeResult({ error: true }));
+      }
     } catch (e) {
       const status = e.response?.status;
       const detail = e.response?.data?.detail;
@@ -850,6 +879,45 @@ export default function Checkin() {
             </a>
           )}
         </div>
+
+        {/* Guest page + welcome email result */}
+        {guestEmail && (
+          <div className={`border p-4 font-mono text-[10px] flex flex-col gap-2 ${
+            welcomeResult === null
+              ? "border-zinc-700 text-zinc-500"
+              : welcomeResult?.error
+              ? "border-red-500/40 text-red-400"
+              : "border-emerald-500/40 text-emerald-400"
+          }`}>
+            {welcomeResult === null && <span>Invio email benvenuto in corso...</span>}
+            {welcomeResult?.error && <span>[ ERR ] Invio email fallito — verifica RESEND_API_KEY</span>}
+            {welcomeResult && !welcomeResult.error && (
+              <>
+                <span className="font-bold">[ OK ] Email benvenuto inviata a {guestEmail}</span>
+                {welcomeResult.url && (
+                  <a
+                    href={welcomeResult.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-zinc-300 underline underline-offset-2 break-all hover:text-white"
+                  >
+                    {welcomeResult.url}
+                  </a>
+                )}
+              </>
+            )}
+          </div>
+        )}
+
+        {/* Show guest page link even without email */}
+        {!guestEmail && welcomeResult?.url && (
+          <div className="border border-zinc-700 p-4 font-mono text-[10px] flex flex-col gap-1">
+            <span className="text-zinc-500">Pagina ospite generata:</span>
+            <a href={welcomeResult.url} target="_blank" rel="noreferrer" className="text-zinc-300 underline break-all hover:text-white">
+              {welcomeResult.url}
+            </a>
+          </div>
+        )}
 
         <button
           onClick={() => navigate("/dashboard")}
