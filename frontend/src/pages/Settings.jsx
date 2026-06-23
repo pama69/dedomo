@@ -699,6 +699,15 @@ function ApartmentSelector({ propertyId, value, onChange, disabled }) {
         >
           {loading ? "Caricamento..." : "Carica miei appartamenti da Alloggiati Web"}
         </button>
+      ) : error && items.length === 0 ? (
+        <div className="border border-red-500/40 bg-red-500/5 p-3 font-mono text-[10px] text-red-400 flex flex-col gap-2">
+          <span className="font-bold">[ ERR ] Impossibile caricare appartamenti</span>
+          <span className="text-zinc-400 break-words">{error}</span>
+          <span className="text-zinc-500">Verifica che le credenziali siano corrette e salvate, poi riprova.</span>
+          <button type="button" onClick={load} disabled={loading} className="self-start text-zinc-500 hover:text-zinc-100 uppercase tracking-widest text-[10px] cursor-pointer">
+            {loading ? "Caricamento..." : "↻ Riprova"}
+          </button>
+        </div>
       ) : items.length > 0 ? (
         <>
           <select
