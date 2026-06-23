@@ -50,7 +50,7 @@ REGOLE:
 
 async def extract_document_data(image_base64: str, mime_type: str = "image/jpeg") -> Dict[str, Any]:
     """Send image to vision model and return structured data."""
-    api_key = os.environ.get("OPENAI_API_KEY") or os.environ.get("EMERGENT_LLM_KEY")
+    api_key = os.environ.get("OPENAI_API_KEY")
     if not api_key:
         return {"error": "OPENAI_API_KEY non configurata"}
 

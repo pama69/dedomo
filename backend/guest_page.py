@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 OPENWEATHERMAP_KEY = os.environ.get("OPENWEATHERMAP_KEY", "")
 RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
 GUEST_EMAIL_FROM = os.environ.get("GUEST_EMAIL_FROM", "ospiti@dedomo.it")
-_OAI_KEY = os.environ.get("OPENAI_API_KEY") or os.environ.get("EMERGENT_LLM_KEY", "")
+_OAI_KEY = os.environ.get("OPENAI_API_KEY", "")
 _oai = AsyncOpenAI(api_key=_OAI_KEY) if _OAI_KEY else None
 
 # Mappa paese (campo Alloggiati Web) → codice lingua
