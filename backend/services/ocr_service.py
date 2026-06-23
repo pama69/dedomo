@@ -8,8 +8,12 @@ import os
 import json
 import base64
 import re
+import logging
 from typing import Dict, Any
 from openai import AsyncOpenAI
+import openai
+
+logger = logging.getLogger(__name__)
 
 
 SYSTEM_PROMPT = """Sei un esperto OCR specializzato in documenti italiani ed esteri: Carta d'Identità (CIE/CIE elettronica/cartacea), Passaporto, Patente di Guida.
@@ -91,5 +95,18 @@ async def extract_document_data(image_base64: str, mime_type: str = "image/jpeg"
         return {"success": True, "data": data}
     except json.JSONDecodeError as e:
         return {"success": False, "error": f"Risposta non valida: {str(e)}", "raw": text if 'text' in dir() else ""}
+    except openai.AuthenticationError as e:
+        logger.error(f"OCR AuthenticationError: {e}")
+        return {"success": False, "error": f"API key non valida: {str(e)}"}
+    except openai.RateLimitError as e:
+        logger.error(f"OCR RateLimitError: {e}")
+        return {"success": False, "error": f"Rate limit OpenAI — credito esaurito o tier troppo basso: {str(e)}"}
+    except openai.APIStatusError as e:
+        logger.error(f"OCR APIStatusError status={e.status_code}: {e.message}")
+        return {"success": False, "error": f"OpenAI errore {e.status_code}: {e.message}"}
+    except openai.APIConnectionError as e:
+        logger.error(f"OCR APIConnectionError: {e}")
+        return {"success": False, "error": f"Connessione OpenAI fallita: {str(e)}"}
     except Exception as e:
-        return {"success": False, "error": f"Errore OCR: {str(e)}"}
+        logger.error(f"OCR Exception {type(e).__name__}: {e}")
+        return {"success": False, "error": f"Errore OCR [{type(e).__name__}]: {str(e)}"}
