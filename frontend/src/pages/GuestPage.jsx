@@ -39,6 +39,8 @@ const T = {
     notFound:    "Link non valido.",
     kmAway:      "km da qui",
     footer:      "Questa pagina è personale e riservata all'ospite.",
+    learnMore:   "Scopri di più →",
+    viewOnMaps:  "Vedi su mappa",
   },
   en: {
     loading:     "Preparing your page…",
@@ -61,6 +63,8 @@ const T = {
     notFound:    "Invalid link.",
     kmAway:      "km away",
     footer:      "This page is personal and reserved for the guest.",
+    learnMore:   "Learn more →",
+    viewOnMaps:  "View on map",
   },
   de: {
     loading:     "Ihre Seite wird vorbereitet…",
@@ -83,6 +87,8 @@ const T = {
     notFound:    "Ungültiger Link.",
     kmAway:      "km entfernt",
     footer:      "Diese Seite ist persönlich und nur für den Gast bestimmt.",
+    learnMore:   "Mehr erfahren →",
+    viewOnMaps:  "Auf Karte anzeigen",
   },
   fr: {
     loading:     "Préparation de votre page…",
@@ -105,6 +111,8 @@ const T = {
     notFound:    "Lien invalide.",
     kmAway:      "km d'ici",
     footer:      "Cette page est personnelle et réservée à l'hôte.",
+    learnMore:   "En savoir plus →",
+    viewOnMaps:  "Voir sur la carte",
   },
 };
 
@@ -225,6 +233,9 @@ export default function GuestPage() {
       <style>{`
         @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
         @keyframes fadeUp { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
+        @keyframes bounce { 0%,80%,100%{transform:translateY(0);opacity:0.35} 40%{transform:translateY(-10px);opacity:1} }
+        @keyframes breathe { 0%,100%{opacity:0.5;transform:scale(1)} 50%{opacity:1;transform:scale(1.08)} }
         .gp-fadein { animation: fadeUp .5s ease both; }
         .gp-card-hover { transition: transform .2s ease, box-shadow .2s ease; }
         .gp-card-hover:hover { transform: translateY(-2px); box-shadow: 0 6px 28px rgba(60,53,39,0.12); }
@@ -272,11 +283,50 @@ export default function GuestPage() {
 
           {/* Loading */}
           {loading && (
-            <div style={{ display: "flex", flexDirection: "column", gap: "1rem", marginTop: "1rem" }}>
-              <Skeleton h={110} />
-              <Skeleton h={80} />
-              <Skeleton h={80} />
-              <Skeleton h={80} />
+            <div style={{
+              display: "flex", flexDirection: "column",
+              alignItems: "center", justifyContent: "center",
+              padding: "4rem 1rem", gap: "1.75rem",
+            }}>
+              {/* Spinning ring + leaf */}
+              <div style={{ position: "relative", width: 80, height: 80 }}>
+                <svg viewBox="0 0 80 80" style={{ position: "absolute", inset: 0, animation: "spin 1.6s linear infinite" }}>
+                  <circle cx="40" cy="40" r="34"
+                    fill="none"
+                    stroke={C.sage}
+                    strokeWidth="3"
+                    strokeLinecap="round"
+                    strokeDasharray="48 165"
+                  />
+                </svg>
+                <div style={{
+                  position: "absolute", inset: 0,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontSize: 30, animation: "breathe 2.4s ease-in-out infinite",
+                }}>
+                  🌿
+                </div>
+              </div>
+
+              {/* Loading text */}
+              <p style={{
+                color: C.textSm, fontSize: 13,
+                letterSpacing: "0.08em", textTransform: "uppercase",
+                animation: "breathe 2.4s ease-in-out infinite",
+              }}>
+                {T.it.loading}
+              </p>
+
+              {/* Bouncing dots */}
+              <div style={{ display: "flex", gap: "0.5rem" }}>
+                {[0, 1, 2].map((i) => (
+                  <div key={i} style={{
+                    width: 7, height: 7, borderRadius: "50%",
+                    background: C.sage,
+                    animation: `bounce 1.3s ease-in-out ${i * 0.18}s infinite`,
+                  }} />
+                ))}
+              </div>
             </div>
           )}
 
@@ -361,7 +411,19 @@ export default function GuestPage() {
                     <Card key={i} className="gp-card-hover" style={{ padding: "1rem 1.25rem" }}>
                       <div style={{ fontWeight: 600, color: C.text, fontSize: 15 }}>{m.title}</div>
                       <div style={{ display: "flex", gap: "0.75rem", marginTop: 4, flexWrap: "wrap" }}>
-                        {m.location && <MetaChip icon="📍">{m.location}</MetaChip>}
+                        {m.location && (
+                          <MetaChip icon="📍">
+                            <a
+                              href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(m.location)}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              title={txt.viewOnMaps}
+                              style={{ color: C.sage, textDecoration: "underline", textUnderlineOffset: 2 }}
+                            >
+                              {m.location}
+                            </a>
+                          </MetaChip>
+                        )}
                         {m.days && <MetaChip icon="📅">{m.days}</MetaChip>}
                         {m.time && <MetaChip icon="🕐">{m.time}</MetaChip>}
                       </div>
@@ -394,7 +456,7 @@ export default function GuestPage() {
                           fontSize: 12, fontWeight: 600, color: C.sage,
                           textDecoration: "none",
                         }}>
-                          Scopri di più →
+                          {txt.learnMore}
                         </a>
                       )}
                     </Card>
