@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 OPENWEATHERMAP_KEY = os.environ.get("OPENWEATHERMAP_KEY", "")
 RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
 GUEST_EMAIL_FROM = os.environ.get("GUEST_EMAIL_FROM", "ospiti@dedomo.it")
+UNSPLASH_ACCESS_KEY = os.environ.get("UNSPLASH_ACCESS_KEY", "")
 _OAI_KEY = os.environ.get("OPENAI_API_KEY", "")
 # Force real OpenAI endpoint — ignore leftover OPENAI_BASE_URL (Emergent proxy, now dead)
 _oai = AsyncOpenAI(api_key=_OAI_KEY, base_url="https://api.openai.com/v1") if _OAI_KEY else None
@@ -217,6 +218,30 @@ async def fetch_wikimedia_image(title: str, lang: str = "en") -> str:
     return ""
 
 
+async def fetch_unsplash_image(query: str) -> str:
+    """Fallback immagine da Unsplash quando Wikipedia non ha foto.
+    Usato per luoghi/esperienze senza pagina Wikipedia (es. cantine, tour).
+    """
+    if not UNSPLASH_ACCESS_KEY or not query:
+        return ""
+    try:
+        async with httpx.AsyncClient(timeout=8) as c:
+            r = await c.get(
+                "https://api.unsplash.com/search/photos",
+                params={"query": query, "per_page": 1, "orientation": "landscape"},
+                headers={"Authorization": f"Client-ID {UNSPLASH_ACCESS_KEY}"},
+            )
+            if r.status_code != 200:
+                logger.warning(f"Unsplash HTTP {r.status_code} per '{query}'")
+                return ""
+            results = r.json().get("results", [])
+            if results:
+                return results[0].get("urls", {}).get("regular", "") or ""
+    except Exception as e:
+        logger.warning(f"Unsplash error per '{query}': {e}")
+    return ""
+
+
 async def fetch_attractions(comune: str, provincia: str, lang: str) -> list:
     lang_note = {"it": "in italiano", "en": "in English", "de": "auf Deutsch", "fr": "en français"}.get(lang, "in English")
     prompt = (
@@ -234,7 +259,11 @@ async def fetch_attractions(comune: str, provincia: str, lang: str) -> list:
 
     async def _enrich(a: dict) -> dict:
         title = a.get("title", "")
-        a["image_url"] = await fetch_wikimedia_image(title, lang)
+        img = await fetch_wikimedia_image(title, lang)
+        if not img:
+            # Fallback Unsplash con nome luogo + contesto geografico
+            img = await fetch_unsplash_image(f"{title} {provincia} Italy".strip())
+        a["image_url"] = img
         a["maps_url"] = (
             f"https://www.google.com/maps/search/?api=1&query="
             f"{quote(title + ', ' + provincia + ', Italia')}"
@@ -349,13 +378,15 @@ async def get_guest_page_data(token: str, db) -> dict:
         except Exception as e:
             logger.error(f"Markets error: {e}")
 
-    # Le immagini valide arrivano SOLO da Wikimedia. Le cache legacy contengono URL
-    # allucinati da GPT (es. siti .it inesistenti → 404): vanno rigenerate.
-    # Un image_url vuoto ("") è invece legittimo (Wikipedia non ha foto) e NON
-    # deve forzare un refresh ad ogni caricamento.
+    # Le immagini valide arrivano da Wikimedia o (fallback) Unsplash. Le cache legacy
+    # contengono URL allucinati da GPT (es. siti .it inesistenti → 404): vanno
+    # rigenerate. Un image_url vuoto ("") è invece legittimo (nessuna foto trovata)
+    # e NON deve forzare un refresh ad ogni caricamento.
+    _VALID_IMG_HOSTS = ("wikimedia.org", "images.unsplash.com")
     cached_attractions = cache.get("attractions") or []
     has_legacy_image = any(
-        (a.get("image_url") or "") and "wikimedia.org" not in (a.get("image_url") or "")
+        (a.get("image_url") or "")
+        and not any(h in a.get("image_url", "") for h in _VALID_IMG_HOSTS)
         for a in cached_attractions
     )
     # TTL 48h: i suggerimenti ruotano ~ogni 2 giorni durante il soggiorno
