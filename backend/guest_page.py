@@ -352,7 +352,8 @@ async def get_guest_page_data(token: str, db) -> dict:
     # Forza refresh se tutte le attrazioni in cache non hanno immagine (bug pregresso)
     cached_attractions = cache.get("attractions") or []
     all_no_images = bool(cached_attractions) and all(not a.get("image_url") for a in cached_attractions)
-    if _stale("attractions", 168) or all_no_images:
+    # TTL 48h: i suggerimenti ruotano ~ogni 2 giorni durante il soggiorno
+    if _stale("attractions", 48) or all_no_images:
         try:
             updates["attractions"] = await fetch_attractions(comune, provincia, lang)
             updates["attractions_at"] = now.isoformat()
