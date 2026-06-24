@@ -152,24 +152,32 @@ async def fetch_events(comune: str, provincia: str, lang: str) -> list:
 async def fetch_markets(comune: str, provincia: str, lang: str) -> list:
     lang_note = {"it": "in italiano", "en": "in English", "de": "auf Deutsch", "fr": "en français"}.get(lang, "in English")
     prompt = (
-        f"Elenca i mercati rionali e settimanali presenti nei comuni entro 30 km da {comune} ({provincia}), "
-        f"Abruzzo/Marche/Molise, Italia. Massimo 6 mercati. "
+        f"Cerca online i mercati rionali e settimanali nei comuni entro 15 km da {comune} ({provincia}), Italia. "
+        f"Consulta i siti ufficiali dei comuni, pro-loco e portali locali per trovare i calendari aggiornati. "
+        f"Massimo 6 mercati. IMPORTANTE: per 'location' indica la posizione PRECISA del mercato: "
+        f"il nome della piazza o via specifica e il nome del comune (es. 'Piazza Garibaldi, Lanciano'). "
+        f"NON indicare solo il nome della città. "
         f"Risposta {lang_note} in JSON array (solo array, niente altro): "
-        f'[{{"title":"Mercato di ...","location":"...","days":"es. Lunedì e venerdì","time":"8:00-13:00"}}]'
+        f'[{{"title":"Mercato di ...","location":"Piazza XX Settembre, Lanciano","days":"Martedì e sabato","time":"7:30-13:30"}}]'
     )
     return _extract_json_list(await _gpt_search(prompt))
 
 
 async def fetch_attractions(comune: str, provincia: str, lang: str) -> list:
     lang_note = {"it": "in italiano", "en": "in English", "de": "auf Deutsch", "fr": "en français"}.get(lang, "in English")
+    lang_pref = {"it": "italiano", "en": "inglese", "de": "tedesco", "fr": "francese"}.get(lang, "inglese")
     prompt = (
-        f"Suggerisci 8 luoghi da visitare nel raggio di 100 km da {comune} ({provincia}), Abruzzo, Italia. "
+        f"Suggerisci 6 luoghi da visitare nel raggio di 100 km da {comune} ({provincia}), Italia. "
         f"Varietà: borghi medievali, parchi naturali, spiagge, città d'arte, esperienze gastronomiche. "
         f"Per ognuno: nome, categoria (borgo/parco/spiaggia/città/gastronomia), "
-        f"distanza approssimativa da {comune} in km, descrizione breve (max 2 frasi), "
-        f"link Wikipedia o sito ufficiale. "
+        f"distanza approssimativa da {comune} in km, descrizione breve (max 2 frasi). "
+        f"Per 'url': cerca il sito della pro-loco, dell'ente turismo locale, del parco naturale o del comune. "
+        f"EVITA ASSOLUTAMENTE Wikipedia e Wikivoyage. Preferisci siti in {lang_pref}, altrimenti in italiano. "
+        f"Scegli pagine ricche di foto e descrizioni, non pagine istituzionali vuote. "
+        f"Per 'image_url': trova un URL diretto a una foto rappresentativa del luogo presente sul sito scelto "
+        f"(es. immagine hero, gallery, og:image). Deve essere un link diretto a un file .jpg/.png/.webp. "
         f"Risposta {lang_note} in JSON array (solo array, niente altro): "
-        f'[{{"title":"...","type":"borgo","distance_km":25,"description":"...","url":"https://..."}}]'
+        f'[{{"title":"...","type":"borgo","distance_km":25,"description":"...","url":"https://...","image_url":"https://...foto.jpg"}}]'
     )
     return _extract_json_list(await _gpt_search(prompt))
 

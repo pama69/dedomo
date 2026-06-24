@@ -439,26 +439,39 @@ export default function GuestPage() {
               {data.attractions?.length > 0 ? (
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(280px,1fr))", gap: "0.75rem" }}>
                   {data.attractions.map((a, i) => (
-                    <Card key={i} className="gp-card-hover" style={{ padding: "1.1rem 1.25rem", display: "flex", flexDirection: "column", gap: 6 }}>
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                        <TypeBadge type={a.type} />
-                        {a.distance_km && (
-                          <span style={{ fontSize: 11, color: C.textSm }}>{a.distance_km} {txt.kmAway}</span>
+                    <Card key={i} className="gp-card-hover" style={{ padding: 0, display: "flex", flexDirection: "column", gap: 0, overflow: "hidden" }}>
+                      {a.image_url && (
+                        <img
+                          src={a.image_url.replace(/^http:\/\//i, "https://")}
+                          alt={a.title}
+                          onError={(e) => { e.target.style.display = "none"; }}
+                          style={{
+                            width: "100%", height: 150,
+                            objectFit: "cover", display: "block",
+                          }}
+                        />
+                      )}
+                      <div style={{ padding: "1rem 1.25rem", display: "flex", flexDirection: "column", gap: 6 }}>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                          <TypeBadge type={a.type} />
+                          {a.distance_km && (
+                            <span style={{ fontSize: 11, color: C.textSm }}>{a.distance_km} {txt.kmAway}</span>
+                          )}
+                        </div>
+                        <div style={{ fontWeight: 700, color: C.text, fontSize: 15 }}>{a.title}</div>
+                        {a.description && (
+                          <div style={{ fontSize: 13, color: C.textSm, lineHeight: 1.5, flex: 1 }}>{a.description}</div>
+                        )}
+                        {a.url && (
+                          <a href={a.url} target="_blank" rel="noreferrer" style={{
+                            display: "inline-block", marginTop: 4,
+                            fontSize: 12, fontWeight: 600, color: C.sage,
+                            textDecoration: "none",
+                          }}>
+                            {txt.learnMore}
+                          </a>
                         )}
                       </div>
-                      <div style={{ fontWeight: 700, color: C.text, fontSize: 15 }}>{a.title}</div>
-                      {a.description && (
-                        <div style={{ fontSize: 13, color: C.textSm, lineHeight: 1.5, flex: 1 }}>{a.description}</div>
-                      )}
-                      {a.url && (
-                        <a href={a.url} target="_blank" rel="noreferrer" style={{
-                          display: "inline-block", marginTop: 4,
-                          fontSize: 12, fontWeight: 600, color: C.sage,
-                          textDecoration: "none",
-                        }}>
-                          {txt.learnMore}
-                        </a>
-                      )}
                     </Card>
                   ))}
                 </div>
