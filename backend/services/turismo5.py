@@ -90,7 +90,8 @@ def build_movimentazione_xml(
                 # Order MUST follow the official Turismo 5 v3 WSDL (arrivoBean):
                 # idswh, tipoalloggiato, idcapo, cognome, nome, sesso, cittadinanza,
                 # statoresidenza, luogoresidenza, datanascita, statonascita,
-                # comunenascita, tipoturismo, mezzotrasporto, canaleprenotazione,
+                # comunenascita, tipodocumento, numerodocumento, statodocumento,
+                # tipoturismo, mezzotrasporto, canaleprenotazione,
                 # titolostudio, professione, esenzioneimposta
                 SubElement(ae, "idswh").text = str(a.get("idswh", ""))
                 SubElement(ae, "tipoalloggiato").text = str(a.get("tipoalloggiato", "16"))
@@ -107,6 +108,10 @@ def build_movimentazione_xml(
                 SubElement(ae, "datanascita").text = _fmt_date(a.get("datanascita", ""))
                 SubElement(ae, "statonascita").text = a.get("statonascita", "")
                 SubElement(ae, "comunenascita").text = a.get("comunenascita", "")
+                # Document fields — required by Ross 1000 / Turismo 5
+                SubElement(ae, "tipodocumento").text = a.get("tipodocumento", "")
+                SubElement(ae, "numerodocumento").text = a.get("numerodocumento", "")
+                SubElement(ae, "statodocumento").text = a.get("statodocumento", "")
                 # tipoturismo / mezzotrasporto are required: default to "Non specificato"
                 SubElement(ae, "tipoturismo").text = a.get("tipoturismo") or "Non specificato"
                 SubElement(ae, "mezzotrasporto").text = a.get("mezzotrasporto") or "Non specificato"

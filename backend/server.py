@@ -1082,6 +1082,11 @@ async def checkin_submit(body: CheckinSubmit, user=Depends(get_current_user)):
                 "statonascita": g.stato_nascita or ITALIA_CODE,
                 # comunenascita: only for italians (comune ISTAT), empty for foreigners
                 "comunenascita": "" if g.is_foreign else (g.codice_comune_nascita or ""),
+                # Document fields — required by Ross 1000 / Turismo 5
+                "tipodocumento": g.tipo_documento or "",
+                "numerodocumento": g.numero_documento or "",
+                # stato di rilascio: same 9-digit ISTAT code used by Alloggiati Web
+                "statodocumento": g.stato_rilascio_documento or ITALIA_CODE,
                 # Required defaults per Turismo 5 v3 spec
                 "tipoturismo": "Non specificato",
                 "mezzotrasporto": "Non specificato",
@@ -1156,6 +1161,8 @@ async def checkin_submit(body: CheckinSubmit, user=Depends(get_current_user)):
                     "cittadinanza": g.cittadinanza,
                     "tipo_documento": g.tipo_documento,
                     "numero_documento": g.numero_documento,
+                    "stato_residenza": g.cittadinanza or ITALIA_CODE,
+                    "stato_rilascio_documento": g.stato_rilascio_documento or ITALIA_CODE,
                 }
                 for g in body.guests
             ]

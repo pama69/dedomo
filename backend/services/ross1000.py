@@ -42,6 +42,7 @@ def build_movimenti_csv(guests: List[Dict[str, Any]], struttura_code: str = "") 
             "cittadinanza",
             "tipo_documento",
             "numero_documento",
+            "stato_rilascio_documento",
             "stato_residenza",
             "comune_residenza",
         ]
@@ -61,6 +62,7 @@ def build_movimenti_csv(guests: List[Dict[str, Any]], struttura_code: str = "") 
                 g.get("cittadinanza", ""),
                 g.get("tipo_documento", ""),
                 g.get("numero_documento", ""),
+                g.get("stato_rilascio_documento", ""),
                 g.get("stato_residenza", ""),
                 g.get("comune_residenza", ""),
             ]
