@@ -39,6 +39,8 @@ import Help from "@/pages/Help";
 import Pricing from "@/pages/Pricing";
 import BillingSuccess from "@/pages/BillingSuccess";
 import GuestPage from "@/pages/GuestPage";
+import Landing from "@/pages/Landing";
+import Privacy from "@/pages/Privacy";
 
 function AppRouter() {
   const location = useLocation();
@@ -48,8 +50,9 @@ function AppRouter() {
   }
   return (
     <Routes>
-      <Route path="/" element={<Navigate to="/dashboard" replace />} />
+      <Route path="/" element={<Landing />} />
       <Route path="/login" element={<Login />} />
+      <Route path="/privacy" element={<Privacy />} />
       <Route path="/auth/callback" element={<AuthCallback />} />
       <Route path="/dashboard" element={<Dashboard />} />
       <Route path="/checkin" element={<Checkin />} />
