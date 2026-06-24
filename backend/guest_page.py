@@ -349,11 +349,17 @@ async def get_guest_page_data(token: str, db) -> dict:
         except Exception as e:
             logger.error(f"Markets error: {e}")
 
-    # Forza refresh se tutte le attrazioni in cache non hanno immagine (bug pregresso)
+    # Le immagini valide arrivano SOLO da Wikimedia. Le cache legacy contengono URL
+    # allucinati da GPT (es. siti .it inesistenti → 404): vanno rigenerate.
+    # Un image_url vuoto ("") è invece legittimo (Wikipedia non ha foto) e NON
+    # deve forzare un refresh ad ogni caricamento.
     cached_attractions = cache.get("attractions") or []
-    all_no_images = bool(cached_attractions) and all(not a.get("image_url") for a in cached_attractions)
+    has_legacy_image = any(
+        (a.get("image_url") or "") and "wikimedia.org" not in (a.get("image_url") or "")
+        for a in cached_attractions
+    )
     # TTL 48h: i suggerimenti ruotano ~ogni 2 giorni durante il soggiorno
-    if _stale("attractions", 48) or all_no_images:
+    if _stale("attractions", 48) or has_legacy_image:
         try:
             updates["attractions"] = await fetch_attractions(comune, provincia, lang)
             updates["attractions_at"] = now.isoformat()
