@@ -8,7 +8,9 @@ import uuid
 import json
 import re
 import logging
+import asyncio
 from datetime import datetime, timezone
+from urllib.parse import quote
 
 import httpx
 from openai import AsyncOpenAI
@@ -163,23 +165,52 @@ async def fetch_markets(comune: str, provincia: str, lang: str) -> list:
     return _extract_json_list(await _gpt_search(prompt))
 
 
+async def fetch_wikimedia_image(title: str, lang: str = "en") -> str:
+    """Recupera l'immagine principale di un luogo da Wikimedia Commons via Wikipedia API."""
+    for wiki_lang in ([lang] if lang in ("it", "en", "de", "fr") else []) + ["it", "en"]:
+        params = {
+            "action": "query", "titles": title,
+            "prop": "pageimages", "format": "json",
+            "pithumbsize": 640, "redirects": 1,
+        }
+        try:
+            async with httpx.AsyncClient(timeout=6) as c:
+                r = await c.get(f"https://{wiki_lang}.wikipedia.org/w/api.php", params=params)
+                pages = r.json().get("query", {}).get("pages", {})
+                for page in pages.values():
+                    src = page.get("thumbnail", {}).get("source", "")
+                    if src:
+                        return src
+        except Exception:
+            pass
+    return ""
+
+
 async def fetch_attractions(comune: str, provincia: str, lang: str) -> list:
     lang_note = {"it": "in italiano", "en": "in English", "de": "auf Deutsch", "fr": "en français"}.get(lang, "in English")
-    lang_pref = {"it": "italiano", "en": "inglese", "de": "tedesco", "fr": "francese"}.get(lang, "inglese")
     prompt = (
         f"Suggerisci 6 luoghi da visitare nel raggio di 100 km da {comune} ({provincia}), Italia. "
         f"Varietà: borghi medievali, parchi naturali, spiagge, città d'arte, esperienze gastronomiche. "
-        f"Per ognuno: nome, categoria (borgo/parco/spiaggia/città/gastronomia), "
+        f"Per ognuno: nome preciso del luogo (come appare su Wikipedia/Google Maps), "
+        f"categoria (borgo/parco/spiaggia/città/gastronomia), "
         f"distanza approssimativa da {comune} in km, descrizione breve (max 2 frasi). "
-        f"Per 'url': cerca il sito della pro-loco, dell'ente turismo locale, del parco naturale o del comune. "
-        f"EVITA ASSOLUTAMENTE Wikipedia e Wikivoyage. Preferisci siti in {lang_pref}, altrimenti in italiano. "
-        f"Scegli pagine ricche di foto e descrizioni, non pagine istituzionali vuote. "
-        f"Per 'image_url': trova un URL diretto a una foto rappresentativa del luogo presente sul sito scelto "
-        f"(es. immagine hero, gallery, og:image). Deve essere un link diretto a un file .jpg/.png/.webp. "
         f"Risposta {lang_note} in JSON array (solo array, niente altro): "
-        f'[{{"title":"...","type":"borgo","distance_km":25,"description":"...","url":"https://...","image_url":"https://...foto.jpg"}}]'
+        f'[{{"title":"...","type":"borgo","distance_km":25,"description":"..."}}]'
     )
-    return _extract_json_list(await _gpt_search(prompt))
+    results = _extract_json_list(await _gpt_search(prompt))
+    if not results:
+        return []
+
+    async def _enrich(a: dict) -> dict:
+        title = a.get("title", "")
+        a["image_url"] = await fetch_wikimedia_image(title, lang)
+        a["maps_url"] = (
+            f"https://www.google.com/maps/search/?api=1&query="
+            f"{quote(title + ', ' + provincia + ', Italia')}"
+        )
+        return a
+
+    return list(await asyncio.gather(*[_enrich(a) for a in results]))
 
 
 # ──────────────────────────────────────────────────────────────
