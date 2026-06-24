@@ -373,6 +373,7 @@ export default function Checkin() {
 
   const renderStep3 = () => {
     const g = guests[activeGuestIdx] || emptyGuest();
+    const warn = guestWarnings(g);
     return (
       <>
         <StepHeader n="03" label={`Ospite ${activeGuestIdx + 1} / ${guests.length}`} />
@@ -478,12 +479,12 @@ export default function Checkin() {
         </div>
 
         <div className="grid grid-cols-2 gap-3">
-          <TextField label="Cognome" value={g.cognome} onChange={(v) => updateGuest(activeGuestIdx, "cognome", v.toUpperCase())} testid="guest-cognome" />
-          <TextField label="Nome" value={g.nome} onChange={(v) => updateGuest(activeGuestIdx, "nome", v.toUpperCase())} testid="guest-nome" />
+          <TextField label="Cognome" value={g.cognome} onChange={(v) => updateGuest(activeGuestIdx, "cognome", v.toUpperCase())} testid="guest-cognome" warn={warn.cognome} />
+          <TextField label="Nome" value={g.nome} onChange={(v) => updateGuest(activeGuestIdx, "nome", v.toUpperCase())} testid="guest-nome" warn={warn.nome} />
         </div>
         <div className="grid grid-cols-2 gap-3">
           <SelectField label="Sesso" value={g.sesso} onChange={(v) => updateGuest(activeGuestIdx, "sesso", v)} testid="guest-sesso" options={[["M", "M"], ["F", "F"]]} />
-          <DateField label="Data Nascita" value={g.data_nascita} onChange={(v) => updateGuest(activeGuestIdx, "data_nascita", v)} testid="guest-nascita" />
+          <DateField label="Data Nascita" value={g.data_nascita} onChange={(v) => updateGuest(activeGuestIdx, "data_nascita", v)} testid="guest-nascita" warn={warn.data_nascita} />
         </div>
 
         <div className="flex items-center gap-2">
@@ -547,7 +548,7 @@ export default function Checkin() {
             ["PATEN", "Patente"],
           ]}
         />
-        <TextField label="Numero Documento" value={g.numero_documento} onChange={(v) => updateGuest(activeGuestIdx, "numero_documento", v.toUpperCase())} testid="guest-numdoc" />
+        <TextField label="Numero Documento" value={g.numero_documento} onChange={(v) => updateGuest(activeGuestIdx, "numero_documento", v.toUpperCase())} testid="guest-numdoc" warn={warn.numero_documento} />
 
         {activeGuestIdx === 0 && (
           <div className="flex flex-col gap-1.5">
@@ -969,7 +970,7 @@ function StepHeader({ n, label }) {
   );
 }
 
-function TextField({ label, value, onChange, testid, type = "text" }) {
+function TextField({ label, value, onChange, testid, type = "text", warn }) {
   return (
     <label className="flex flex-col gap-1.5">
       <span className="typo-meta">{label}</span>
@@ -978,10 +979,36 @@ function TextField({ label, value, onChange, testid, type = "text" }) {
         data-testid={testid}
         value={value ?? ""}
         onChange={(e) => onChange(e.target.value)}
-        className="input-modern font-mono"
+        className={`input-modern font-mono ${warn ? "ring-1 ring-amber-500/70 border-amber-500/70" : ""}`}
       />
+      {warn && <span className="text-amber-400 text-[10px] font-mono">⚠ {warn}</span>}
     </label>
   );
+}
+
+// Controlli leggeri sui dati estratti dall'OCR: evidenziano (non bloccano)
+// i campi sospetti prima dell'invio ai portali.
+function guestWarnings(g) {
+  const w = {};
+  if (!g.cognome?.trim()) w.cognome = "Cognome mancante";
+  if (!g.nome?.trim()) w.nome = "Nome mancante";
+  if (!g.data_nascita) {
+    w.data_nascita = "Data di nascita mancante";
+  } else {
+    const d = new Date(g.data_nascita);
+    if (isNaN(d.getTime())) {
+      w.data_nascita = "Data non valida";
+    } else if (d > new Date()) {
+      w.data_nascita = "Data nel futuro — verifica";
+    } else {
+      const age = (Date.now() - d.getTime()) / (365.25 * 24 * 3600 * 1000);
+      if (age > 120) w.data_nascita = "Oltre 120 anni — verifica l'anno";
+    }
+  }
+  const num = (g.numero_documento || "").trim();
+  if (!num) w.numero_documento = "Numero documento mancante";
+  else if (num.length < 4) w.numero_documento = "Numero troppo corto — verifica";
+  return w;
 }
 
 function DateField(props) {
