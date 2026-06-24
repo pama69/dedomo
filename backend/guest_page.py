@@ -175,9 +175,11 @@ async def fetch_wikimedia_image(title: str, lang: str = "en") -> str:
         return ""
     seen: set = set()
     langs = [l for l in (([lang] if lang in ("it", "en", "de", "fr") else []) + ["it", "en"]) if not (l in seen or seen.add(l))]  # type: ignore[func-returns-value]
+    # Wikipedia richiede User-Agent descrittivo — IP cloud vengono bloccati con 403 senza
+    wiki_headers = {"User-Agent": "Dedomo/1.0 (https://dedomo.it; pama69@gmail.com) python-httpx"}
     for wiki_lang in langs:
         try:
-            async with httpx.AsyncClient(timeout=8, follow_redirects=True) as c:
+            async with httpx.AsyncClient(timeout=8, follow_redirects=True, headers=wiki_headers) as c:
                 # 1. REST API: gestisce redirect e varianti di titolo in modo affidabile
                 r = await c.get(
                     f"https://{wiki_lang}.wikipedia.org/api/rest_v1/page/summary/{quote(title, safe='')}",
