@@ -41,6 +41,7 @@ import BillingSuccess from "@/pages/BillingSuccess";
 import GuestPage from "@/pages/GuestPage";
 import Landing from "@/pages/Landing";
 import Privacy from "@/pages/Privacy";
+import HouseManual from "@/pages/HouseManual";
 
 function AppRouter() {
   const location = useLocation();
@@ -62,6 +63,7 @@ function AppRouter() {
       <Route path="/admin" element={<Admin />} />
       <Route path="/calendar" element={<CalendarPage />} />
       <Route path="/settings" element={<Settings />} />
+      <Route path="/settings/properties/:propertyId/manual" element={<HouseManual />} />
       <Route path="/help" element={<Help />} />
       <Route path="/billing/pricing" element={<Pricing />} />
       <Route path="/billing/success" element={<BillingSuccess />} />

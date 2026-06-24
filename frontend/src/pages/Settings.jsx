@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import Layout from "@/components/Layout";
 import api from "@/lib/api";
 import DownloadManualButton from "@/components/DownloadManualButton";
@@ -54,6 +55,7 @@ const newProperty = () => ({
 });
 
 export default function Settings() {
+  const navigate = useNavigate();
   const [list, setList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(null); // property object being edited
@@ -198,6 +200,14 @@ export default function Settings() {
                 </div>
               </div>
               <div className="flex gap-1 flex-shrink-0">
+                <button
+                  onClick={() => navigate(`/settings/properties/${p.property_id}/manual`)}
+                  data-testid={`manual-property-${p.property_id}`}
+                  className="btn-ghost"
+                  title="Compila il manuale per l'ospite"
+                >
+                  Manuale
+                </button>
                 <button
                   onClick={() => setEditing(p)}
                   data-testid={`edit-property-${p.property_id}`}

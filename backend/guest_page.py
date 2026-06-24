@@ -274,6 +274,133 @@ async def fetch_attractions(comune: str, provincia: str, lang: str) -> list:
 
 
 # ──────────────────────────────────────────────────────────────
+# HOUSE MANUAL
+# ──────────────────────────────────────────────────────────────
+
+# Campi testuali traducibili: (path, label_in_prompt)
+_MANUAL_TEXT_FIELDS = [
+    ("checkin.note", "checkin note"),
+    ("checkout.note", "checkout note"),
+    ("trash.text", "trash collection info"),
+    ("parking.text", "parking info"),
+    ("emergency.text", "emergency contacts"),
+]
+
+
+def _manual_content_hash(manual: dict) -> str:
+    """Hash dei soli campi testuali traducibili. Cambia → cache traduzioni stale."""
+    import hashlib, json
+    texts = {}
+    for path, _ in _MANUAL_TEXT_FIELDS:
+        section, key = path.split(".")
+        texts[path] = (manual.get(section) or {}).get(key) or ""
+    # custom sections: titolo + testo
+    for c in (manual.get("custom") or []):
+        texts[f"custom.{c.get('id','')}.title"] = c.get("title") or ""
+        texts[f"custom.{c.get('id','')}.text"] = c.get("text") or ""
+    return hashlib.sha1(json.dumps(texts, sort_keys=True).encode()).hexdigest()[:16]
+
+
+async def translate_manual(manual: dict, target_lang: str, db, property_id: str) -> dict:
+    """Restituisce il manuale tradotto in target_lang.
+    - target_lang == "it" → ritorna l'originale invariato.
+    - Altrimenti usa GPT-4o-mini con cache in properties.house_manual.translations[hash][lang].
+    """
+    if not manual or target_lang == "it":
+        return manual or {}
+
+    content_hash = _manual_content_hash(manual)
+    cache = (manual.get("translations") or {}).get(content_hash, {}).get(target_lang)
+    if cache:
+        merged = {**manual, **cache}
+        merged.pop("translations", None)
+        return merged
+
+    if not _oai:
+        return manual  # niente OpenAI → mostriamo l'italiano
+
+    # Costruisce input JSON con i soli testi da tradurre
+    to_translate: dict = {}
+    for path, _ in _MANUAL_TEXT_FIELDS:
+        section, key = path.split(".")
+        v = (manual.get(section) or {}).get(key)
+        if v:
+            to_translate[path] = v
+    for c in (manual.get("custom") or []):
+        cid = c.get("id") or ""
+        if c.get("title"):
+            to_translate[f"custom.{cid}.title"] = c["title"]
+        if c.get("text"):
+            to_translate[f"custom.{cid}.text"] = c["text"]
+
+    if not to_translate:
+        return manual
+
+    lang_full = {"en": "English", "de": "German", "fr": "French"}.get(target_lang, "English")
+    prompt = (
+        f"Translate the following Italian holiday-rental house manual texts into {lang_full}. "
+        f"Keep a warm, hospitable tone. Preserve any phone numbers, days/times, addresses verbatim. "
+        f"Return ONLY a JSON object with the same keys, no markdown.\n\n"
+        f"Input:\n{json.dumps(to_translate, ensure_ascii=False)}"
+    )
+    try:
+        resp = await _oai.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}],
+            response_format={"type": "json_object"},
+            temperature=0.2,
+        )
+        translated = json.loads(resp.choices[0].message.content or "{}")
+    except Exception as e:
+        logger.error(f"translate_manual error: {e}")
+        return manual
+
+    # Ricostruisce manual tradotto + persiste nella cache
+    out = json.loads(json.dumps(manual))  # deep copy
+    for path, _ in _MANUAL_TEXT_FIELDS:
+        if path in translated:
+            section, key = path.split(".")
+            out.setdefault(section, {})[key] = translated[path]
+    for c in (out.get("custom") or []):
+        cid = c.get("id") or ""
+        tk = f"custom.{cid}.title"
+        if tk in translated:
+            c["title"] = translated[tk]
+        xk = f"custom.{cid}.text"
+        if xk in translated:
+            c["text"] = translated[xk]
+
+    # Persist cache (campi tradotti) sotto translations[hash][lang]
+    try:
+        translations_update = {}
+        for path, _ in _MANUAL_TEXT_FIELDS:
+            if path in translated:
+                section, key = path.split(".")
+                translations_update.setdefault(section, {})[key] = translated[path]
+        custom_translated = []
+        for c in (out.get("custom") or []):
+            cid = c.get("id") or ""
+            entry = {"id": cid}
+            if f"custom.{cid}.title" in translated:
+                entry["title"] = c["title"]
+            if f"custom.{cid}.text" in translated:
+                entry["text"] = c["text"]
+            if len(entry) > 1:
+                custom_translated.append(entry)
+        if custom_translated:
+            translations_update["custom"] = custom_translated
+        await db.properties.update_one(
+            {"property_id": property_id},
+            {"$set": {f"house_manual.translations.{content_hash}.{target_lang}": translations_update}},
+        )
+    except Exception as e:
+        logger.warning(f"translate_manual cache write failed: {e}")
+
+    out.pop("translations", None)
+    return out
+
+
+# ──────────────────────────────────────────────────────────────
 # TOKEN
 # ──────────────────────────────────────────────────────────────
 
@@ -404,6 +531,15 @@ async def get_guest_page_data(token: str, db) -> dict:
 
     checkin = await db.checkins.find_one({"checkin_id": checkin_id}, {"_id": 0, "data_arrivo": 1, "data_partenza": 1})
 
+    # House manual — tradotto on-demand (cache per hash contenuto)
+    raw_manual = (prop or {}).get("house_manual") or {}
+    try:
+        house_manual = await translate_manual(raw_manual, lang, db, token_doc["property_id"])
+    except Exception as e:
+        logger.error(f"translate_manual failed: {e}")
+        house_manual = raw_manual
+    house_manual.pop("translations", None)
+
     return {
         "guest_name": token_doc.get("guest_name", "Ospite"),
         "property_name": property_name,
@@ -412,6 +548,7 @@ async def get_guest_page_data(token: str, db) -> dict:
         "lang": lang,
         "checkin_date": checkin.get("data_arrivo") if checkin else None,
         "checkout_date": checkin.get("data_partenza") if checkin else None,
+        "house_manual": house_manual,
         "weather": cache.get("weather"),
         "events": cache.get("events") or [],
         "markets": cache.get("markets") or [],

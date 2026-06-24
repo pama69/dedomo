@@ -1,6 +1,12 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
+import { QRCodeSVG } from "qrcode.react";
 import api from "@/lib/api";
+
+// Escape per WIFI: secondo WPA QR spec — solo ; , : " e \
+const escWifi = (s) => (s || "").replace(/([\\;,":])/g, "\\$1");
+const wifiQrString = (ssid, password) =>
+  `WIFI:T:${password ? "WPA" : "nopass"};S:${escWifi(ssid)};P:${escWifi(password)};;`;
 
 // ── Palette vacanza ──────────────────────────────────────────
 const C = {
@@ -41,6 +47,17 @@ const T = {
     footer:      "Questa pagina è personale e riservata all'ospite.",
     learnMore:   "Scopri di più →",
     viewOnMaps:  "📍 Vedi su Google Maps",
+    house:       "La tua casa",
+    houseDesc:   "Tutto quello che serve sapere per il tuo soggiorno",
+    wifi:        "Wi-Fi",
+    wifiCopy:    "Copia password",
+    wifiCopied:  "Copiato!",
+    wifiQrHint:  "Inquadra il QR con il telefono per collegarti",
+    checkinT:    "Check-in",
+    checkoutT:   "Check-out",
+    trashT:      "Raccolta rifiuti",
+    parkingT:    "Parcheggio",
+    emergencyT:  "Emergenze",
   },
   en: {
     loading:     "Preparing your page…",
@@ -65,6 +82,17 @@ const T = {
     footer:      "This page is personal and reserved for the guest.",
     learnMore:   "Learn more →",
     viewOnMaps:  "📍 View on Google Maps",
+    house:       "Your home",
+    houseDesc:   "Everything you need to know during your stay",
+    wifi:        "Wi-Fi",
+    wifiCopy:    "Copy password",
+    wifiCopied:  "Copied!",
+    wifiQrHint:  "Scan the QR code with your phone to connect",
+    checkinT:    "Check-in",
+    checkoutT:   "Check-out",
+    trashT:      "Trash collection",
+    parkingT:    "Parking",
+    emergencyT:  "Emergency contacts",
   },
   de: {
     loading:     "Ihre Seite wird vorbereitet…",
@@ -89,6 +117,17 @@ const T = {
     footer:      "Diese Seite ist persönlich und nur für den Gast bestimmt.",
     learnMore:   "Mehr erfahren →",
     viewOnMaps:  "📍 Auf Google Maps anzeigen",
+    house:       "Ihre Unterkunft",
+    houseDesc:   "Alles, was Sie für Ihren Aufenthalt wissen müssen",
+    wifi:        "WLAN",
+    wifiCopy:    "Passwort kopieren",
+    wifiCopied:  "Kopiert!",
+    wifiQrHint:  "Scannen Sie den QR-Code mit Ihrem Telefon",
+    checkinT:    "Check-in",
+    checkoutT:   "Check-out",
+    trashT:      "Müllabfuhr",
+    parkingT:    "Parken",
+    emergencyT:  "Notfallkontakte",
   },
   fr: {
     loading:     "Préparation de votre page…",
@@ -113,6 +152,17 @@ const T = {
     footer:      "Cette page est personnelle et réservée à l'hôte.",
     learnMore:   "En savoir plus →",
     viewOnMaps:  "📍 Voir sur Google Maps",
+    house:       "Votre logement",
+    houseDesc:   "Tout ce qu'il faut savoir pour votre séjour",
+    wifi:        "Wi-Fi",
+    wifiCopy:    "Copier le mot de passe",
+    wifiCopied:  "Copié !",
+    wifiQrHint:  "Scannez le QR avec votre téléphone pour vous connecter",
+    checkinT:    "Arrivée",
+    checkoutT:   "Départ",
+    trashT:      "Collecte des déchets",
+    parkingT:    "Stationnement",
+    emergencyT:  "Numéros d'urgence",
   },
 };
 
@@ -342,6 +392,9 @@ export default function GuestPage() {
           {!loading && data && !error && (
             <div className="gp-fadein">
 
+              {/* ── LA TUA CASA ──────────────────────────────── */}
+              <HouseSection data={data} txt={txt} />
+
               {/* ── METEO ─────────────────────────────────────── */}
               <SectionTitle icon="🌤" title={txt.weather} />
               {data.weather ? (
@@ -535,5 +588,124 @@ function EmptyNote({ children }) {
       padding: "1rem 1.25rem",
       color: C.textSm, fontSize: 13, fontStyle: "italic",
     }}>{children}</div>
+  );
+}
+
+// ── House Manual Section ─────────────────────────────────────
+function HouseSection({ data, txt }) {
+  const m = data?.house_manual || {};
+  const wifi = m.wifi || {};
+  const ci = m.checkin || {};
+  const co = m.checkout || {};
+  const ciFrom = ci.from || ci.from_ || "";
+  const trash = (m.trash || {}).text;
+  const parking = (m.parking || {}).text;
+  const emergency = (m.emergency || {}).text;
+  const custom = (m.custom || []).slice().sort((a, b) => (a.order || 0) - (b.order || 0));
+
+  const hasAnything =
+    wifi.ssid || (ciFrom || ci.to || ci.note) || (co.by || co.note) ||
+    trash || parking || emergency || custom.length > 0;
+  if (!hasAnything) return null;
+
+  const formatCheckin = () => {
+    const range = [ciFrom, ci.to].filter(Boolean).join(" – ");
+    return [range, ci.note].filter(Boolean).join(" · ");
+  };
+  const formatCheckout = () => [co.by && `entro le ${co.by}`, co.note].filter(Boolean).join(" · ");
+
+  return (
+    <>
+      <SectionTitle icon="🏡" title={txt.house} subtitle={txt.houseDesc} />
+      <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
+        {wifi.ssid && <WifiCard wifi={wifi} txt={txt} />}
+        {(ciFrom || ci.to || ci.note) && (
+          <InfoCard icon="🔑" title={txt.checkinT} text={formatCheckin()} />
+        )}
+        {(co.by || co.note) && (
+          <InfoCard icon="👋" title={txt.checkoutT} text={formatCheckout()} />
+        )}
+        {trash && <InfoCard icon="♻️" title={txt.trashT} text={trash} />}
+        {parking && <InfoCard icon="🚗" title={txt.parkingT} text={parking} />}
+        {emergency && <InfoCard icon="🚨" title={txt.emergencyT} text={emergency} />}
+        {custom.map((c) => (
+          <InfoCard key={c.id} icon={c.icon || "📝"} title={c.title} text={c.text} />
+        ))}
+      </div>
+    </>
+  );
+}
+
+function WifiCard({ wifi, txt }) {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(wifi.password || "");
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {}
+  };
+  return (
+    <Card className="gp-card-hover">
+      <div style={{ display: "flex", alignItems: "flex-start", gap: "1rem", flexWrap: "wrap" }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 8 }}>
+            <span style={{ fontSize: 18 }}>📶</span>{txt.wifi}
+          </div>
+          <div style={{ fontFamily: "monospace", fontSize: 14, color: C.text, wordBreak: "break-all" }}>
+            <div><span style={{ color: C.textSm, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.05em" }}>SSID</span> · {wifi.ssid}</div>
+            {wifi.password && (
+              <div style={{ marginTop: 4 }}>
+                <span style={{ color: C.textSm, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.05em" }}>Password</span> · {wifi.password}
+              </div>
+            )}
+          </div>
+          {wifi.password && (
+            <button
+              onClick={copy}
+              style={{
+                marginTop: 10, fontSize: 12, fontWeight: 600,
+                background: copied ? C.sage : C.sageLt,
+                color: copied ? C.white : C.sageDk,
+                border: "none", borderRadius: 20,
+                padding: "5px 14px", cursor: "pointer",
+                transition: "all 0.2s",
+              }}
+            >
+              {copied ? txt.wifiCopied : txt.wifiCopy}
+            </button>
+          )}
+        </div>
+        {wifi.password && (
+          <div style={{ textAlign: "center", flexShrink: 0 }}>
+            <div style={{ background: C.white, padding: 8, borderRadius: 8, border: `1px solid ${C.border}` }}>
+              <QRCodeSVG value={wifiQrString(wifi.ssid, wifi.password)} size={96} level="M" />
+            </div>
+            <div style={{ fontSize: 10, color: C.textSm, marginTop: 4, maxWidth: 120 }}>
+              {txt.wifiQrHint}
+            </div>
+          </div>
+        )}
+      </div>
+    </Card>
+  );
+}
+
+function InfoCard({ icon, title, text }) {
+  if (!text) return null;
+  return (
+    <Card className="gp-card-hover" style={{ padding: "1rem 1.25rem" }}>
+      <div style={{ display: "flex", alignItems: "flex-start", gap: "0.6rem" }}>
+        <span style={{ fontSize: 20, lineHeight: 1.2 }}>{icon}</span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          {title && (
+            <div style={{ fontWeight: 700, color: C.text, fontSize: 14, marginBottom: 4 }}>{title}</div>
+          )}
+          <div style={{ color: C.textSm, fontSize: 13, lineHeight: 1.5, whiteSpace: "pre-wrap" }}>
+            {text}
+          </div>
+        </div>
+      </div>
+    </Card>
   );
 }

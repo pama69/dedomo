@@ -320,6 +320,52 @@ class ImpostaSoggiornoConfig(BaseModel):
     enabled: bool = True
 
 
+class WifiInfo(BaseModel):
+    ssid: str = ""
+    password: str = ""
+
+
+class CheckinTimes(BaseModel):
+    from_: str = Field("", alias="from")
+    to: str = ""
+    note: str = ""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class CheckoutTimes(BaseModel):
+    by: str = ""
+    note: str = ""
+
+
+class SimpleTextSection(BaseModel):
+    text: str = ""
+
+
+class CustomSection(BaseModel):
+    id: str = Field(default_factory=lambda: uuid.uuid4().hex[:8])
+    icon: str = "📝"
+    title: str = ""
+    text: str = ""
+    order: int = 0
+
+
+class HouseManual(BaseModel):
+    """Manuale casa per l'ospite. Tutti i campi opzionali — quelli vuoti
+    non vengono mostrati nella guest page.
+    """
+    wifi: WifiInfo = WifiInfo()
+    checkin: CheckinTimes = CheckinTimes()
+    checkout: CheckoutTimes = CheckoutTimes()
+    trash: SimpleTextSection = SimpleTextSection()
+    parking: SimpleTextSection = SimpleTextSection()
+    emergency: SimpleTextSection = SimpleTextSection()
+    custom: List[CustomSection] = []
+    # Traduzioni cacheate: {"<hash_contenuto>": {"en": {...}, "de": {...}, "fr": {...}}}
+    # Quando il contenuto cambia l'hash cambia → le traduzioni vecchie diventano stale.
+    translations: Dict[str, Any] = {}
+
+
 class CalendarConfig(BaseModel):
     """External iCal URLs to import bookings from."""
     booking_ical_url: str = ""
@@ -346,6 +392,7 @@ class PropertyCreate(BaseModel):
     ross1000: Ross1000Credentials = Ross1000Credentials()
     imposta_soggiorno: ImpostaSoggiornoConfig = ImpostaSoggiornoConfig()
     calendar: CalendarConfig = CalendarConfig()
+    house_manual: HouseManual = HouseManual()
 
 
 class Property(PropertyCreate):
@@ -409,6 +456,24 @@ async def update_property(
         {"property_id": property_id, "user_id": user["user_id"]}, {"_id": 0}
     )
     return p
+
+
+@api_router.put("/properties/{property_id}/manual")
+async def update_house_manual(
+    property_id: str, body: HouseManual, user=Depends(get_current_user)
+):
+    """Salva il manuale casa per una proprietà. Resetta le traduzioni:
+    verranno rigenerate alla prima visita dell'ospite in lingua diversa
+    dall'italiano (cache per hash del contenuto)."""
+    payload = body.model_dump(by_alias=True)
+    payload["translations"] = {}  # contenuto cambiato → cache stale
+    result = await db.properties.update_one(
+        {"property_id": property_id, "user_id": user["user_id"]},
+        {"$set": {"house_manual": payload}},
+    )
+    if result.matched_count == 0:
+        raise HTTPException(404, "Proprietà non trovata")
+    return {"success": True, "house_manual": payload}
 
 
 @api_router.delete("/properties/{property_id}")
