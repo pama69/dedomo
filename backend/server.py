@@ -23,7 +23,6 @@ from typing import List, Optional, Dict, Any
 from datetime import datetime, timezone, timedelta, date
 
 # Service imports
-from services.ocr_service import extract_document_data
 from services.alloggiati_web import (
     build_schedina,
     generate_token,
@@ -805,20 +804,6 @@ async def test_alloggiati_credentials(
 # ====================================================================
 # OCR
 # ====================================================================
-
-class OcrRequest(BaseModel):
-    image_base64: str
-    mime_type: str = "image/jpeg"
-
-
-@api_router.post("/ocr/document")
-async def ocr_document(req: OcrRequest, user=Depends(get_current_user)):
-    """Extract guest data from a document photo."""
-    result = await extract_document_data(req.image_base64, req.mime_type)
-    if not result.get("success"):
-        raise HTTPException(500, result.get("error", "OCR fallito"))
-    return result["data"]
-
 
 # ====================================================================
 # CHECK-IN SUBMISSION

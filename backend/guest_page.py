@@ -166,17 +166,46 @@ async def fetch_markets(comune: str, provincia: str, lang: str) -> list:
 
 
 async def fetch_wikimedia_image(title: str, lang: str = "en") -> str:
-    """Recupera l'immagine principale di un luogo da Wikimedia Commons via Wikipedia API."""
-    for wiki_lang in ([lang] if lang in ("it", "en", "de", "fr") else []) + ["it", "en"]:
-        params = {
-            "action": "query", "titles": title,
-            "prop": "pageimages", "format": "json",
-            "pithumbsize": 640, "redirects": 1,
-        }
+    """Recupera l'immagine principale di un luogo da Wikipedia.
+
+    Strategia: REST API summary (tollerante su titoli e redirect) → search API
+    (trova l'articolo più vicino) → pageimages sul titolo trovato.
+    """
+    if not title:
+        return ""
+    seen: set = set()
+    langs = [l for l in (([lang] if lang in ("it", "en", "de", "fr") else []) + ["it", "en"]) if not (l in seen or seen.add(l))]  # type: ignore[func-returns-value]
+    for wiki_lang in langs:
         try:
-            async with httpx.AsyncClient(timeout=6) as c:
-                r = await c.get(f"https://{wiki_lang}.wikipedia.org/w/api.php", params=params)
-                pages = r.json().get("query", {}).get("pages", {})
+            async with httpx.AsyncClient(timeout=8, follow_redirects=True) as c:
+                # 1. REST API: gestisce redirect e varianti di titolo in modo affidabile
+                r = await c.get(
+                    f"https://{wiki_lang}.wikipedia.org/api/rest_v1/page/summary/{quote(title, safe='')}",
+                )
+                if r.status_code == 200:
+                    src = r.json().get("thumbnail", {}).get("source", "")
+                    if src:
+                        return src
+
+                # 2. Search API: trova l'articolo più simile al titolo GPT
+                r2 = await c.get(
+                    f"https://{wiki_lang}.wikipedia.org/w/api.php",
+                    params={"action": "query", "list": "search", "srsearch": title,
+                            "srlimit": 1, "format": "json"},
+                )
+                results = r2.json().get("query", {}).get("search", [])
+                if not results:
+                    continue
+                found_title = results[0]["title"]
+
+                # 3. Recupera immagine per il titolo trovato
+                r3 = await c.get(
+                    f"https://{wiki_lang}.wikipedia.org/w/api.php",
+                    params={"action": "query", "titles": found_title,
+                            "prop": "pageimages", "format": "json",
+                            "pithumbsize": 640, "redirects": 1},
+                )
+                pages = r3.json().get("query", {}).get("pages", {})
                 for page in pages.values():
                     src = page.get("thumbnail", {}).get("source", "")
                     if src:
@@ -318,7 +347,10 @@ async def get_guest_page_data(token: str, db) -> dict:
         except Exception as e:
             logger.error(f"Markets error: {e}")
 
-    if _stale("attractions", 168):
+    # Forza refresh se tutte le attrazioni in cache non hanno immagine (bug pregresso)
+    cached_attractions = cache.get("attractions") or []
+    all_no_images = bool(cached_attractions) and all(not a.get("image_url") for a in cached_attractions)
+    if _stale("attractions", 168) or all_no_images:
         try:
             updates["attractions"] = await fetch_attractions(comune, provincia, lang)
             updates["attractions_at"] = now.isoformat()

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import Layout from "@/components/Layout";
 import api from "@/lib/api";
+import { extractDocumentClient } from "@/lib/ocr-client";
 import PaywallModal from "@/components/PaywallModal";
 import PrivacyModal from "@/components/PrivacyModal";
 
@@ -270,11 +271,13 @@ export default function Checkin() {
     }
     try {
       const { base64: b64, mime } = await compressImage(file);
-      const r = await api.post("/ocr/document", {
-        image_base64: b64,
-        mime_type: mime,
-      });
-      const data = r.data;
+      const result = await extractDocumentClient(b64, mime);
+      if (!result.success) {
+        setOcrError(result.error || "Errore OCR sconosciuto");
+        setOcrLoading(false);
+        return;
+      }
+      const data = result.data;
 
       // Detect foreign guest from OCR result
       const isForeign = !!data.is_foreign ||
