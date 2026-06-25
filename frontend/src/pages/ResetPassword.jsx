@@ -118,4 +118,19 @@ export default function ResetPassword() {
 
           <div className="flex flex-col gap-1">
             <label className="typo-meta" style={{ color: "hsl(var(--muted-foreground))" }}>Nuova password</label>
-            <PasswordInput value={password} onChange={(e) =>
+            <PasswordInput value={password} onChange={(e) => setPassword(e.target.value)} />
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <label className="typo-meta" style={{ color: "hsl(var(--muted-foreground))" }}>Conferma password</label>
+            <PasswordInput value={confirm} onChange={(e) => setConfirm(e.target.value)} placeholder="Ripeti la password" />
+          </div>
+
+          <button type="submit" disabled={loading} className="btn-primary w-full py-4 text-base">
+            {loading ? "Salvataggio..." : "Salva nuova password"}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}

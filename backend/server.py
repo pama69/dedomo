@@ -3887,4 +3887,3 @@ if FRONTEND_DIR.exists():
         if file_path.is_file():
             return FileResponse(str(file_path))
         return FileResponse(str(FRONTEND_DIR / "index.html"))
-          

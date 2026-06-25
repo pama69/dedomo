@@ -110,4 +110,26 @@ export default function Login() {
           </div>
 
           <div className="flex flex-col gap-1">
-            <lab
+            <label className="typo-meta" style={{ color: "hsl(var(--muted-foreground))" }}>Password</label>
+            <PasswordInput value={password} onChange={(e) => setPassword(e.target.value)} />
+          </div>
+
+          <div className="flex justify-end">
+            <Link to="/forgot-password" className="typo-small" style={{ color: "hsl(var(--accent))" }}>
+              Password dimenticata?
+            </Link>
+          </div>
+
+          <button type="submit" disabled={loading} className="btn-primary w-full py-4 text-base">
+            {loading ? "Accesso in corso..." : "Accedi"}
+          </button>
+
+          <p className="typo-small text-center" style={{ color: "hsl(var(--muted-foreground))" }}>
+            Non hai un account?{" "}
+            <Link to="/register" style={{ color: "hsl(var(--accent))" }}>Registrati</Link>
+          </p>
+        </form>
+      </div>
+    </div>
+  );
+}

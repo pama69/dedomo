@@ -119,4 +119,19 @@ export default function Register() {
 
           <div className="flex flex-col gap-1">
             <label className="typo-meta" style={{ color: "hsl(var(--muted-foreground))" }}>Conferma password</label>
-            <PasswordInput value={confirm} onChange=
+            <PasswordInput value={confirm} onChange={(e) => setConfirm(e.target.value)} placeholder="Ripeti la password" />
+          </div>
+
+          <button type="submit" disabled={loading} className="btn-primary w-full py-4 text-base mt-2">
+            {loading ? "Registrazione in corso..." : "Crea account"}
+          </button>
+
+          <p className="typo-small text-center" style={{ color: "hsl(var(--muted-foreground))" }}>
+            Hai già un account?{" "}
+            <Link to="/login" style={{ color: "hsl(var(--accent))" }}>Accedi</Link>
+          </p>
+        </form>
+      </div>
+    </div>
+  );
+}
