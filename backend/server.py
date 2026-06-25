@@ -381,7 +381,7 @@ async def auth_reset_password(req: ResetPasswordRequest):
         raise HTTPException(status_code=400, detail="Link scaduto. Richiedi un nuovo reset.")
 
     new_hash = pwd_context.hash(req.password)
-    await db.users.update_one({"user_id": rec["user_id"]}, {"$set": {"password_hash": new_hash}})
+    await db.users.update_one({"user_id": rec["user_id"]}, {"$set": {"password_hash": new_hash, "email_verified": True}})
     await db.email_tokens.delete_many({"user_id": rec["user_id"], "type": "reset"})
     # Invalida tutte le sessioni attive
     await db.user_sessions.delete_many({"user_id": rec["user_id"]})
@@ -3887,3 +3887,4 @@ if FRONTEND_DIR.exists():
         if file_path.is_file():
             return FileResponse(str(file_path))
         return FileResponse(str(FRONTEND_DIR / "index.html"))
+          
