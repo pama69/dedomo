@@ -173,26 +173,51 @@ frontend/src/
 
 ---
 
-## Sessione corrente — 2026-06-24
+## Workflow git (regola fissa)
+
+Dopo ogni modifica: `git commit` immediato, poi chiedere a Paolo "pusha?". Il push va eseguito **solo su ok esplicito di Paolo**.
+
+---
+
+## Sessione 2026-06-24
 
 **Fatto:**
 - OCR spostato client-side (`ocr-client.js`) — risolto CONNECTION ERROR Railway
 - Campo email ospite aggiunto in Checkin.jsx Step 3 (capofamiglia)
-- Email benvenuto automatica dopo check-in via Resend — funzionante (debug 401 key sbagliata risolto)
+- Email benvenuto automatica dopo check-in via Resend — funzionante
 - Archivio: link "Pagina personale ospite" sotto ogni capofamiglia con copia link
-- Guest page: animazione caricamento (spinner + foglia + dots)
-- Guest page: attrazioni con immagini Wikimedia Commons (affidabili, parallele)
-- Guest page: link Google Maps per attrazioni (al posto di siti web spesso rotti)
-- Guest page: mercati 15km con posizione precisa (piazza/via specifica)
-- Guest page: titoli sezioni più personali/caldi in 4 lingue
-- Guest page: "Scopri di più" tradotto per lingua ospite
-- Guest page: eventi solo futuri, con pulsante Info →
+- Guest page: animazione caricamento, immagini Wikimedia, link Google Maps attrazioni, mercati 15km posizione precisa, titoli caldi 4 lingue, eventi solo futuri
 
-**Regola:** chiedere sempre conferma prima di `git push`
+## Sessione 2026-06-25
+
+**Fatto:**
+- Risolto deploy Railway fallito: commit `ca6ffa4` aveva corrotto Login.jsx, Register.jsx, ResetPassword.jsx (troncati) e server.py (null bytes)
+- File JSX riscritti completi con EyeIcon + PasswordInput (toggle mostra/nascondi password)
+- server.py ripulito dai null bytes
+- Lock file git (`HEAD.lock`, `index.lock`) rimossi — causavano blocco su `git commit`
+- Push completato: commit `9dfeac6` su main → Railway ha fatto redeploy ✅
+- Auth: mantenuto solo email + password (rimossa idea OTP — scocciatura inutile)
+- Sessioni 30 giorni già implementate — nessun login frequente
+- Anti-abuse: blocco domini email usa-e-getta (~300 domini) in registrazione
+- Help.jsx: rimossi riferimenti a Google OAuth
+- Fix ricevute Alloggiati Web (portato da Emergent):
+  - Polling parte da 24h dopo l'invio (non 1h)
+  - Soglia retry: da `< 14` a `< 400` (14 giorni × 24 poll)
+  - `/admin/refresh-receipts` usa `force_all=True` → bypassa counter e finestra 24h
+  - Logica timezone Italy/UTC per `send_date` (DST inline, fallback UTC se date diverse)
+- Stripe verificato: webhook `memorable-celebration` punta a `dedomo.it` (attivo, 0% errori)
+  - ⚠️ DNS `dedomo.it` ancora su Emergent → webhook va a Emergent, non Railway
 
 **Prossimi passi prioritari:**
-1. Sostituire auth Emergent con OTP email (Resend + `input-otp.jsx`)
-2. Migrare dati da MongoDB Emergent ad Atlas
-3. Rigenerare password MongoDB Atlas (esposta)
-4. DNS `dedomo.it` → Railway (IONOS)
-5. Idee feature future: check soddisfazione 24h, manuale casa digitale QR, coordinamento pulizie, AI risposta recensioni, generatore contratto locazione
+1. **Stripe webhook** — aggiornare URL a Railway + Signing Secret in Railway Variables (vedi memory)
+2. **Migrare dati** da MongoDB Emergent ad Atlas (Atlas quasi vuoto)
+3. **Rigenerare password MongoDB Atlas** — quella attuale è stata esposta in chat
+4. **DNS `dedomo.it`** → Railway (da IONOS)
+5. **Rename Railway service** da "vigilant-expression" a "dedomo"
+
+**Idee feature future:**
+- Check soddisfazione ospite 24h dopo check-out
+- Manuale casa digitale con QR code
+- Coordinamento pulizie
+- AI risposta recensioni
+- Generatore contratto locazione breve
