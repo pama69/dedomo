@@ -11,15 +11,16 @@ const CHAPTERS = [
     n: "01",
     title: "Primo accesso",
     intro:
-      "Dedomo si autentica esclusivamente tramite Google. Non gestisce password proprie: massima sicurezza e niente account da ricordare.",
+      "Dedomo usa email e password. Dopo la registrazione riceverai un'email di conferma: clicca il link per attivare l'account e poi accedi.",
     steps: [
       "Apri il link dell'applicazione nel browser (Chrome o Safari consigliati).",
-      "Premi il pulsante ACCEDI CON GOOGLE.",
-      "Seleziona l'account Google da usare. Al primo accesso Google chiederà i permessi base (nome, email).",
-      "Verrai reindirizzato in automatico alla Dashboard.",
+      "Se è il primo accesso, premi REGISTRATI e inserisci email e password (minimo 8 caratteri).",
+      "Controlla la tua casella email: riceverai un link di conferma da noreply@dedomo.it.",
+      "Clicca il link nell'email per attivare l'account, poi torna alla pagina di login.",
+      "Inserisci email e password e premi ACCEDI.",
     ],
-    tip: "Usa sempre lo stesso account Google: tutte le tue strutture, credenziali e archivio sono legate a quell'identità.",
-    images: [{ src: "01_login.png", caption: "Schermata di accesso. Un solo pulsante: accedi con Google." }],
+    tip: "Usa sempre la stessa email: tutte le tue strutture, credenziali e archivio sono legate a quell'identità. Se dimentichi la password usa il link 'Password dimenticata?' nella schermata di login.",
+    images: [{ src: "01_login.png", caption: "Schermata di accesso: inserisci email e password." }],
   },
   {
     id: "dashboard",
