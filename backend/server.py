@@ -15,10 +15,13 @@ import os
 import io
 import base64
 import uuid
+import secrets
 import logging
 import requests
+import httpx
 from pathlib import Path
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, EmailStr, Field, ConfigDict
+from passlib.context import CryptContext
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timezone, timedelta, date
 
@@ -80,30 +83,79 @@ async def health():
 
 
 # ====================================================================
-# AUTH (Emergent Google OAuth)
-# REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS,
-# THIS BREAKS THE AUTH
+# AUTH — email + password
 # ====================================================================
 
-EMERGENT_AUTH_SESSION_URL = (
-    "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data"
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+RESEND_API_KEY_AUTH = os.environ.get("RESEND_API_KEY", "")
+AUTH_EMAIL_FROM = os.environ.get("GUEST_EMAIL_FROM", "noreply@dedomo.it")
+PUBLIC_BACKEND_URL = os.environ.get("PUBLIC_BACKEND_URL", "https://dedomo.app")
+
+ADMIN_EMAILS = set(
+    e.strip().lower() for e in os.environ.get("ADMIN_EMAILS", "").split(",") if e.strip()
 )
+SUPERUSER_EMAILS = set(
+    e.strip().lower() for e in os.environ.get("SUPERUSER_EMAILS", "").split(",") if e.strip()
+)
+LOCAL_IP_WHITELIST = {"127.0.0.1", "::1", "localhost"}
+
+
+def _client_ip(request: Request) -> str:
+    xff = request.headers.get("x-forwarded-for", "")
+    if xff:
+        return xff.split(",")[0].strip()
+    cf = request.headers.get("cf-connecting-ip", "")
+    if cf:
+        return cf.strip()
+    return request.client.host if request.client else ""
+
+
+async def _send_auth_email(to: str, subject: str, html: str) -> bool:
+    if not RESEND_API_KEY_AUTH:
+        logging.warning("[AUTH EMAIL] RESEND_API_KEY non impostata")
+        return False
+    try:
+        async with httpx.AsyncClient(timeout=15) as c:
+            r = await c.post(
+                "https://api.resend.com/emails",
+                headers={"Authorization": f"Bearer {RESEND_API_KEY_AUTH}", "Content-Type": "application/json"},
+                json={"from": AUTH_EMAIL_FROM, "to": [to], "subject": subject, "html": html},
+            )
+        ok = r.status_code in (200, 201)
+        if ok:
+            logging.info(f"[AUTH EMAIL] Inviata a {to}")
+        else:
+            logging.error(f"[AUTH EMAIL] Errore {r.status_code}: {r.text}")
+        return ok
+    except Exception as e:
+        logging.error(f"[AUTH EMAIL] Eccezione: {e}")
+        return False
+
+
+def _make_session_cookie(response: Response, token: str):
+    response.set_cookie(
+        key="session_token",
+        value=token,
+        max_age=30 * 24 * 60 * 60,
+        httponly=True,
+        secure=True,
+        samesite="none",
+        path="/",
+    )
 
 
 async def get_current_user(request: Request) -> Dict[str, Any]:
-    """Validate session via cookie first, then Authorization header fallback."""
+    """Valida sessione via cookie, poi header Authorization come fallback."""
     token = request.cookies.get("session_token")
     if not token:
         auth_header = request.headers.get("Authorization", "")
         if auth_header.startswith("Bearer "):
             token = auth_header[7:]
-
     if not token:
         raise HTTPException(status_code=401, detail="Non autenticato")
 
-    session = await db.user_sessions.find_one(
-        {"session_token": token}, {"_id": 0}
-    )
+    session = await db.user_sessions.find_one({"session_token": token}, {"_id": 0})
     if not session:
         raise HTTPException(status_code=401, detail="Sessione non valida")
 
@@ -123,146 +175,217 @@ async def get_current_user(request: Request) -> Dict[str, Any]:
     return user
 
 
-ADMIN_EMAILS = set(
-    e.strip().lower() for e in os.environ.get("ADMIN_EMAILS", "").split(",") if e.strip()
-)
-
-
 async def get_admin_user(user=Depends(get_current_user)) -> Dict[str, Any]:
-    """Same as get_current_user but enforces that the user's email is in the
-    ADMIN_EMAILS whitelist."""
     email = (user.get("email") or "").lower()
     if not ADMIN_EMAILS or email not in ADMIN_EMAILS:
         raise HTTPException(status_code=403, detail="Accesso amministratore richiesto")
     return user
 
 
-class SessionRequest(BaseModel):
-    session_id: str
+# ---- Modelli ----
+
+class RegisterRequest(BaseModel):
+    email: EmailStr
+    password: str
+
+class LoginRequest(BaseModel):
+    email: EmailStr
+    password: str
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    password: str
 
 
-# IPs that are always allowed to register multiple users (admin/dev override)
-LOCAL_IP_WHITELIST = {"127.0.0.1", "::1", "localhost"}
-SUPERUSER_EMAILS = set(
-    e.strip().lower() for e in os.environ.get("SUPERUSER_EMAILS", "").split(",") if e.strip()
-)
+# ---- Endpoints ----
 
+@api_router.post("/auth/register", status_code=201)
+async def auth_register(req: RegisterRequest, request: Request):
+    """Registra un nuovo utente e invia email di verifica."""
+    email = req.email.lower().strip()
 
-def _client_ip(request: Request) -> str:
-    """Extract client IP, honouring X-Forwarded-For (proxy/Cloudflare)."""
-    xff = request.headers.get("x-forwarded-for", "")
-    if xff:
-        return xff.split(",")[0].strip()
-    cf = request.headers.get("cf-connecting-ip", "")
-    if cf:
-        return cf.strip()
-    return request.client.host if request.client else ""
+    if len(req.password) < 8:
+        raise HTTPException(status_code=422, detail="La password deve essere di almeno 8 caratteri")
 
-
-@api_router.post("/auth/session")
-async def auth_session(req: SessionRequest, request: Request, response: Response):
-    """Exchange Emergent session_id for our session_token."""
-    try:
-        r = requests.get(
-            EMERGENT_AUTH_SESSION_URL,
-            headers={"X-Session-ID": req.session_id},
-            timeout=15,
-        )
-        if r.status_code != 200:
-            raise HTTPException(status_code=401, detail="Sessione non valida")
-        data = r.json()
-    except requests.RequestException as e:
-        raise HTTPException(status_code=500, detail=f"Errore Auth: {str(e)}")
-
-    email = data["email"]
     existing = await db.users.find_one({"email": email}, {"_id": 0})
-    if existing and existing.get("disabled"):
-        raise HTTPException(status_code=403, detail="UTENTE DISABILITATO")
-
-    client_ip = _client_ip(request)
-
     if existing:
-        user_id = existing["user_id"]
-        await db.users.update_one(
-            {"user_id": user_id},
-            {"$set": {"name": data.get("name"), "picture": data.get("picture")}},
-        )
+        # Non rivelare se l'email esiste (sicurezza), ma rispondiamo OK
+        # L'utente non riceverà email se già verificato
+        if existing.get("email_verified"):
+            return {"detail": "Se l'indirizzo è nuovo riceverai un'email di conferma."}
+        # Non verificato: reinvia
+        await db.email_tokens.delete_many({"user_id": existing["user_id"], "type": "verify"})
     else:
-        # NEW REGISTRATION: IP rate limit
-        # Block if another (different) user already registered from this IP,
-        # except: localhost/whitelist OR superuser emails OR ip in admin whitelist
-        allow_ip_override = (
-            (client_ip in LOCAL_IP_WHITELIST)
-            or ((email or "").lower() in SUPERUSER_EMAILS)
-            or ((email or "").lower() in ADMIN_EMAILS)
-        )
-        if not allow_ip_override and client_ip:
-            other_reg = await db.ip_registrations.find_one({"ip": client_ip})
-            if other_reg:
-                # Allow override if admin has whitelisted this IP
-                wl = await db.ip_whitelist.find_one({"ip": client_ip})
-                if not wl:
-                    raise HTTPException(
-                        status_code=409,
-                        detail=(
-                            "Registrazione non consentita: è già stato creato "
-                            "un account da questo indirizzo IP. Contatta il supporto "
-                            "se ritieni si tratti di un errore."
-                        ),
-                    )
+        # Nuovo utente
+        client_ip = _client_ip(request)
+        is_super = email in SUPERUSER_EMAILS
+        is_admin = email in ADMIN_EMAILS
         user_id = f"user_{uuid.uuid4().hex[:12]}"
-        # Auto-grant unlimited on superuser email
-        is_super = (email or "").lower() in SUPERUSER_EMAILS
-        await db.users.insert_one(
-            {
-                "user_id": user_id,
-                "email": email,
-                "name": data.get("name"),
-                "picture": data.get("picture"),
-                "registration_ip": client_ip,
-                "unlimited": is_super,
-                "created_at": datetime.now(timezone.utc).isoformat(),
-            }
-        )
-        if client_ip:
-            await db.ip_registrations.insert_one({
-                "ip": client_ip,
-                "user_id": user_id,
-                "email": email,
-                "created_at": datetime.now(timezone.utc).isoformat(),
-            })
-
-    # Safety net: ensure superuser email is always flagged unlimited
-    if (email or "").lower() in SUPERUSER_EMAILS:
-        await db.users.update_one({"user_id": user_id}, {"$set": {"unlimited": True}})
-
-    session_token = data["session_token"]
-    expires_at = datetime.now(timezone.utc) + timedelta(days=7)
-    await db.user_sessions.insert_one(
-        {
+        await db.users.insert_one({
             "user_id": user_id,
-            "session_token": session_token,
-            "expires_at": expires_at.isoformat(),
+            "email": email,
+            "password_hash": pwd_context.hash(req.password),
+            "email_verified": False,
+            "unlimited": is_super,
+            "registration_ip": client_ip,
             "created_at": datetime.now(timezone.utc).isoformat(),
-        }
-    )
+        })
+        existing = {"user_id": user_id, "email": email}
 
-    response.set_cookie(
-        key="session_token",
-        value=session_token,
-        max_age=7 * 24 * 60 * 60,
-        httponly=True,
-        secure=True,
-        samesite="none",
-        path="/",
+    # Genera token verifica
+    token = secrets.token_urlsafe(32)
+    expires = datetime.now(timezone.utc) + timedelta(hours=24)
+    await db.email_tokens.insert_one({
+        "token": token,
+        "user_id": existing["user_id"],
+        "type": "verify",
+        "expires_at": expires.isoformat(),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+
+    verify_url = f"{PUBLIC_BACKEND_URL}/verify-email?token={token}"
+    await _send_auth_email(
+        to=email,
+        subject="Dedomo — Conferma la tua email",
+        html=f"""
+<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px;background:#0d0f14;color:#e8e8e8;border-radius:12px">
+  <h2 style="color:#14B981;margin-bottom:8px">Benvenuto su Dedomo</h2>
+  <p style="color:#aaa;margin-bottom:24px">Clicca il pulsante per confermare il tuo indirizzo email.</p>
+  <a href="{verify_url}" style="display:inline-block;background:#14B981;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:600">Conferma email</a>
+  <p style="color:#666;font-size:12px;margin-top:24px">Il link scade tra 24 ore. Se non hai creato un account su Dedomo, ignora questa email.</p>
+</div>""",
     )
+    return {"detail": "Se l'indirizzo è nuovo riceverai un'email di conferma."}
+
+
+@api_router.get("/auth/verify-email")
+async def auth_verify_email(token: str):
+    """Verifica l'email dall'URL ricevuto via email."""
+    rec = await db.email_tokens.find_one({"token": token, "type": "verify"}, {"_id": 0})
+    if not rec:
+        raise HTTPException(status_code=400, detail="Link non valido o già usato")
+
+    expires_at = rec["expires_at"]
+    if isinstance(expires_at, str):
+        expires_at = datetime.fromisoformat(expires_at)
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    if expires_at < datetime.now(timezone.utc):
+        raise HTTPException(status_code=400, detail="Link scaduto. Registrati di nuovo.")
+
+    await db.users.update_one({"user_id": rec["user_id"]}, {"$set": {"email_verified": True}})
+    await db.email_tokens.delete_many({"user_id": rec["user_id"], "type": "verify"})
+    return {"detail": "Email verificata. Puoi accedere."}
+
+
+@api_router.post("/auth/login")
+async def auth_login(req: LoginRequest, response: Response):
+    """Login con email e password."""
+    email = req.email.lower().strip()
+    user = await db.users.find_one({"email": email}, {"_id": 0})
+
+    # Messaggio generico per non rivelare info sull'esistenza dell'account
+    invalid = HTTPException(status_code=401, detail="Email o password non corretti")
+
+    if not user:
+        pwd_context.dummy_verify()
+        raise invalid
+    if user.get("disabled"):
+        raise HTTPException(status_code=403, detail="Account disabilitato. Contatta il supporto.")
+    if not pwd_context.verify(req.password, user.get("password_hash", "")):
+        raise invalid
+    if not user.get("email_verified"):
+        raise HTTPException(status_code=403, detail="Email non ancora verificata. Controlla la tua casella.")
+
+    # Safety net superuser
+    if email in SUPERUSER_EMAILS and not user.get("unlimited"):
+        await db.users.update_one({"user_id": user["user_id"]}, {"$set": {"unlimited": True}})
+
+    session_token = secrets.token_urlsafe(32)
+    expires_at = datetime.now(timezone.utc) + timedelta(days=30)
+    await db.user_sessions.insert_one({
+        "user_id": user["user_id"],
+        "session_token": session_token,
+        "expires_at": expires_at.isoformat(),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+    _make_session_cookie(response, session_token)
     return {
-        "user_id": user_id,
-        "email": email,
-        "name": data.get("name"),
-        "picture": data.get("picture"),
-        "is_admin": (email or "").lower() in ADMIN_EMAILS,
+        "user_id": user["user_id"],
+        "email": user["email"],
+        "name": user.get("name"),
+        "is_admin": email in ADMIN_EMAILS,
+        "unlimited": bool(user.get("unlimited", False)),
     }
+
+
+@api_router.post("/auth/forgot-password")
+async def auth_forgot_password(req: ForgotPasswordRequest):
+    """Invia email con link per reimpostare la password."""
+    email = req.email.lower().strip()
+    user = await db.users.find_one({"email": email}, {"_id": 0})
+
+    # Risposta identica che l'utente esista o meno (sicurezza)
+    generic = {"detail": "Se l'indirizzo è registrato riceverai un'email con le istruzioni."}
+
+    if not user or not user.get("email_verified"):
+        return generic
+
+    # Rate limit: max 1 token di reset attivo per volta
+    await db.email_tokens.delete_many({"user_id": user["user_id"], "type": "reset"})
+
+    token = secrets.token_urlsafe(32)
+    expires = datetime.now(timezone.utc) + timedelta(hours=1)
+    await db.email_tokens.insert_one({
+        "token": token,
+        "user_id": user["user_id"],
+        "type": "reset",
+        "expires_at": expires.isoformat(),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+
+    reset_url = f"{PUBLIC_BACKEND_URL}/reset-password?token={token}"
+    await _send_auth_email(
+        to=email,
+        subject="Dedomo — Reimposta la tua password",
+        html=f"""
+<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px;background:#0d0f14;color:#e8e8e8;border-radius:12px">
+  <h2 style="color:#14B981;margin-bottom:8px">Reimposta password</h2>
+  <p style="color:#aaa;margin-bottom:24px">Clicca il pulsante per scegliere una nuova password. Il link è valido per 1 ora.</p>
+  <a href="{reset_url}" style="display:inline-block;background:#14B981;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:600">Reimposta password</a>
+  <p style="color:#666;font-size:12px;margin-top:24px">Se non hai richiesto il reset, ignora questa email.</p>
+</div>""",
+    )
+    return generic
+
+
+@api_router.post("/auth/reset-password")
+async def auth_reset_password(req: ResetPasswordRequest):
+    """Reimposta la password usando il token ricevuto via email."""
+    if len(req.password) < 8:
+        raise HTTPException(status_code=422, detail="La password deve essere di almeno 8 caratteri")
+
+    rec = await db.email_tokens.find_one({"token": req.token, "type": "reset"}, {"_id": 0})
+    if not rec:
+        raise HTTPException(status_code=400, detail="Link non valido o già usato")
+
+    expires_at = rec["expires_at"]
+    if isinstance(expires_at, str):
+        expires_at = datetime.fromisoformat(expires_at)
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    if expires_at < datetime.now(timezone.utc):
+        raise HTTPException(status_code=400, detail="Link scaduto. Richiedi un nuovo reset.")
+
+    new_hash = pwd_context.hash(req.password)
+    await db.users.update_one({"user_id": rec["user_id"]}, {"$set": {"password_hash": new_hash}})
+    await db.email_tokens.delete_many({"user_id": rec["user_id"], "type": "reset"})
+    # Invalida tutte le sessioni attive
+    await db.user_sessions.delete_many({"user_id": rec["user_id"]})
+    return {"detail": "Password aggiornata. Puoi accedere con le nuove credenziali."}
 
 
 @api_router.get("/auth/me")
@@ -282,8 +405,19 @@ async def auth_logout(request: Request, response: Response):
     token = request.cookies.get("session_token")
     if token:
         await db.user_sessions.delete_one({"session_token": token})
-    response.delete_cookie("session_token", path="/")
+    response.delete_cookie("session_token", path="/", samesite="none", secure=True)
     return {"success": True}
+
+
+@api_router.delete("/auth/account")
+async def auth_delete_account(request: Request, response: Response, user: Dict[str, Any] = Depends(get_current_user)):
+    """Cancella l'account e tutti i dati associati."""
+    user_id = user["user_id"]
+    await db.user_sessions.delete_many({"user_id": user_id})
+    await db.email_tokens.delete_many({"user_id": user_id})
+    await db.users.delete_one({"user_id": user_id})
+    response.delete_cookie("session_token", path="/", samesite="none", secure=True)
+    return {"detail": "Account eliminato."}
 
 
 # ====================================================================

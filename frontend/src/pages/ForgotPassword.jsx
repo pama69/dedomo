@@ -1,32 +1,43 @@
 import { useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link } from "react-router-dom";
 import api from "@/lib/api";
-import { useAuth } from "@/contexts/AuthContext";
 
-export default function Login() {
-  const [params] = useSearchParams();
-  const navigate = useNavigate();
-  const { setUser } = useAuth();
-
+export default function ForgotPassword() {
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState(params.get("error") === "disabled" ? "Account disabilitato. Contatta il supporto." : "");
+  const [sent, setSent] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
     setLoading(true);
     try {
-      const res = await api.post("/auth/login", { email, password });
-      setUser(res.data);
-      navigate("/dashboard", { replace: true });
+      await api.post("/auth/forgot-password", { email });
+      setSent(true);
     } catch (err) {
-      setError(err.response?.data?.detail || "Errore durante l'accesso");
+      setError(err.response?.data?.detail || "Errore. Riprova.");
     } finally {
       setLoading(false);
     }
   };
+
+  if (sent) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-background px-4">
+        <div className="w-full max-w-md surface-card p-8 flex flex-col items-center gap-6 text-center">
+          <span style={{ fontSize: 48 }}>✉️</span>
+          <h2 className="typo-heading text-primary-content">Email inviata</h2>
+          <p className="typo-body" style={{ color: "hsl(var(--muted-foreground))" }}>
+            Se <strong>{email}</strong> è registrata, riceverai un link per reimpostare la password.
+            <br /><br />
+            Il link scade tra 1 ora.
+          </p>
+          <Link to="/login" className="btn-primary px-8 py-3">Torna al login</Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-background px-4 relative overflow-hidden">
@@ -46,12 +57,10 @@ export default function Login() {
               className="w-2 h-2 rounded-full"
               style={{ backgroundColor: "hsl(var(--accent))", boxShadow: "0 0 12px hsl(var(--accent) / 0.6)" }}
             />
-            <span className="typo-meta" style={{ color: "hsl(var(--accent))" }}>Sistema operativo</span>
+            <span className="typo-meta" style={{ color: "hsl(var(--accent))" }}>Recupero accesso</span>
           </div>
-          <h1 data-testid="dedomo-logotype" className="typo-display text-primary-content">
-            DEDOMO
-          </h1>
-          <p className="typo-meta mt-5">Comunicazione Ospiti · Case Vacanza</p>
+          <h1 className="typo-display text-primary-content">DEDOMO</h1>
+          <p className="typo-meta mt-5">Inserisci la tua email per ricevere il link di reset</p>
         </div>
 
         <form onSubmit={handleSubmit} className="w-full flex flex-col gap-4">
@@ -77,38 +86,8 @@ export default function Login() {
               required
               placeholder="tua@email.it"
               className="w-full px-4 py-3 rounded-lg border bg-transparent text-sm outline-none focus:ring-1"
-              style={{
-                borderColor: "hsl(var(--border))",
-                color: "hsl(var(--foreground))",
-              }}
+              style={{ borderColor: "hsl(var(--border))", color: "hsl(var(--foreground))" }}
             />
-          </div>
-
-          <div className="flex flex-col gap-1">
-            <label className="typo-meta" style={{ color: "hsl(var(--muted-foreground))" }}>Password</label>
-            <input
-              type="password"
-              autoComplete="current-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              placeholder="••••••••"
-              className="w-full px-4 py-3 rounded-lg border bg-transparent text-sm outline-none focus:ring-1"
-              style={{
-                borderColor: "hsl(var(--border))",
-                color: "hsl(var(--foreground))",
-              }}
-            />
-          </div>
-
-          <div className="flex justify-end">
-            <Link
-              to="/forgot-password"
-              className="typo-small"
-              style={{ color: "hsl(var(--accent))" }}
-            >
-              Password dimenticata?
-            </Link>
           </div>
 
           <button
@@ -116,14 +95,11 @@ export default function Login() {
             disabled={loading}
             className="btn-primary w-full py-4 text-base"
           >
-            {loading ? "Accesso in corso..." : "Accedi"}
+            {loading ? "Invio in corso..." : "Invia link di reset"}
           </button>
 
           <p className="typo-small text-center" style={{ color: "hsl(var(--muted-foreground))" }}>
-            Non hai un account?{" "}
-            <Link to="/register" style={{ color: "hsl(var(--accent))" }}>
-              Registrati
-            </Link>
+            <Link to="/login" style={{ color: "hsl(var(--accent))" }}>← Torna al login</Link>
           </p>
         </form>
       </div>

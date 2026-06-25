@@ -1,5 +1,5 @@
 import "@/App.css";
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { Component } from "react";
 import { AuthProvider } from "@/contexts/AuthContext";
 
@@ -26,7 +26,10 @@ class ErrorBoundary extends Component {
   }
 }
 import Login from "@/pages/Login";
-import AuthCallback from "@/pages/AuthCallback";
+import Register from "@/pages/Register";
+import ForgotPassword from "@/pages/ForgotPassword";
+import ResetPassword from "@/pages/ResetPassword";
+import VerifyEmail from "@/pages/VerifyEmail";
 import Dashboard from "@/pages/Dashboard";
 import Checkin from "@/pages/Checkin";
 import Settings from "@/pages/Settings";
@@ -44,17 +47,15 @@ import Privacy from "@/pages/Privacy";
 import HouseManual from "@/pages/HouseManual";
 
 function AppRouter() {
-  const location = useLocation();
-  // Check URL fragment synchronously to handle OAuth callback before other routes
-  if (location.hash?.includes("session_id=")) {
-    return <AuthCallback />;
-  }
   return (
     <Routes>
       <Route path="/" element={<Landing />} />
       <Route path="/login" element={<Login />} />
+      <Route path="/register" element={<Register />} />
+      <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
+      <Route path="/verify-email" element={<VerifyEmail />} />
       <Route path="/privacy" element={<Privacy />} />
-      <Route path="/auth/callback" element={<AuthCallback />} />
       <Route path="/dashboard" element={<Dashboard />} />
       <Route path="/checkin" element={<Checkin />} />
       <Route path="/archive" element={<Archive />} />

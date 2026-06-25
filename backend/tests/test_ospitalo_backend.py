@@ -18,11 +18,11 @@ class TestHealthAndAuth:
         r = anon_client.get(f"{base_url}/api/auth/me")
         assert r.status_code == 401
 
-    def test_auth_session_invalid(self, anon_client, base_url):
-        # Emergent backend should reject a bogus session_id -> 401
+    def test_auth_login_invalid(self, anon_client, base_url):
+        # Login con credenziali inesistenti -> 401
         r = anon_client.post(
-            f"{base_url}/api/auth/session",
-            json={"session_id": "definitely-not-a-real-session-id-xyz"},
+            f"{base_url}/api/auth/login",
+            json={"email": "nonexistent@example.com", "password": "wrongpassword"},
         )
         assert r.status_code == 401
 
