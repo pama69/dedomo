@@ -1839,13 +1839,21 @@ async def download_alloggiati_ricevuta(
 
 @api_router.post("/admin/refresh-receipts")
 async def trigger_receipts_refresh(user=Depends(get_current_user)):
-    """Manually trigger the receipts download job (useful for testing)."""
-    await fetch_alloggiati_receipts()
+    """Manually trigger receipts download with force_all=True.
+    Bypasses the 24h window and attempt counter, so even check-ins whose
+    normal retry counter was exhausted are retried.
+    """
+    result = await fetch_alloggiati_receipts(force_all=True)
     count = await db.checkins.count_documents({
         "user_id": user["user_id"],
         "alloggiati_ricevuta_pdf": {"$exists": True, "$ne": ""},
     })
-    return {"success": True, "total_cached_receipts": count}
+    return {
+        "success": True,
+        "processed": result.get("processed", 0),
+        "downloaded": result.get("downloaded", 0),
+        "total_cached_receipts": count,
+    }
 
 
 # ====================================================================
@@ -3795,38 +3803,52 @@ async def retry_failed_submissions():
 scheduler: Optional[AsyncIOScheduler] = None
 
 
-async def fetch_alloggiati_receipts():
+async def fetch_alloggiati_receipts(force_all: bool = False) -> dict:
     """Periodic job: for every PROD checkin older than 24h without a cached
     Alloggiati Web receipt, try to download it via Ricevuta API and store it.
+
+    force_all=True bypasses the 24h window and attempt counter (used by the
+    manual "Recupera ricevute" button to retry even exhausted check-ins).
     """
-    # Polling window: try receipts from anywhere between 1h and 14d after creation.
-    # Receipts are normally generated 24h after sending, but can sometimes appear earlier.
-    # We poll hourly so the first few attempts before 24h are essentially free.
-    cutoff_recent = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
     cutoff_oldest = (datetime.now(timezone.utc) - timedelta(days=14)).isoformat()
-    pending = await db.checkins.find(
-        {
-            "mode": "PROD",
-            "results.alloggiati_web.success": True,
-            # Skip checkins where all schedine were rejected (SchedineValide=0)
-            "results.alloggiati_web.schedine_valide": {"$gt": 0},
-            "alloggiati_ricevuta_pdf": {"$in": [None, ""]},
-            "created_at": {"$lte": cutoff_recent, "$gte": cutoff_oldest},
-            # Skip checkins we already tried 14+ times (likely no receipt will ever appear)
-            "$or": [
-                {"alloggiati_ricevuta_attempts": {"$exists": False}},
-                {"alloggiati_ricevuta_attempts": {"$lt": 14}},
-            ],
-        },
-        {"_id": 0},
-    ).to_list(200)
+    query: dict = {
+        "mode": "PROD",
+        "results.alloggiati_web.success": True,
+        # Skip checkins where all schedine were rejected (SchedineValide=0)
+        "results.alloggiati_web.schedine_valide": {"$gt": 0},
+        "alloggiati_ricevuta_pdf": {"$in": [None, ""]},
+        "created_at": {"$gte": cutoff_oldest},
+    }
+    if not force_all:
+        # Normal polling: only start after 24h; give up after 400 attempts
+        # (14 days × 24 polls/day = 336 max → ample margin).
+        cutoff_recent = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
+        query["created_at"] = {"$lte": cutoff_recent, "$gte": cutoff_oldest}
+        query["$or"] = [
+            {"alloggiati_ricevuta_attempts": {"$exists": False}},
+            {"alloggiati_ricevuta_attempts": {"$lt": 400}},
+        ]
+    pending = await db.checkins.find(query, {"_id": 0}).to_list(200)
 
     if not pending:
-        return
+        return {"processed": 0, "downloaded": 0}
 
-    logger.info(f"[receipts-job] {len(pending)} check-in da processare")
+    logger.info(f"[receipts-job] {len(pending)} check-in da processare (force_all={force_all})")
+
+    import calendar as _cal
+
+    def _last_sunday(year: int, month: int) -> datetime:
+        """Return the last Sunday of the given month (UTC midnight)."""
+        last_day = _cal.monthrange(year, month)[1]
+        d = datetime(year, month, last_day, tzinfo=timezone.utc)
+        # weekday(): 0=Mon … 6=Sun → subtract (weekday+1)%7 days to land on Sunday
+        return d - timedelta(days=(d.weekday() + 1) % 7)
+
+    processed = 0
+    downloaded = 0
 
     for c in pending:
+        processed += 1
         try:
             prop = await db.properties.find_one(
                 {"property_id": c["property_id"], "user_id": c["user_id"]}, {"_id": 0}
@@ -3842,9 +3864,29 @@ async def fetch_alloggiati_receipts():
                 logger.warning(f"[receipts-job] auth failed for {c['checkin_id']}")
                 continue
 
-            # Use the date when the schedina was actually sent (created_at)
-            send_date = c["created_at"][:10]  # YYYY-MM-DD
+            # Determine the Italian date (Europe/Rome) when the schedina was sent.
+            # Alloggiati Web indexes receipts by the *Italian* calendar date, so a
+            # check-in sent at 23:30 UTC in summer (01:30 Italian time next day) must
+            # use the Italian date, not the UTC date.
+            _utc_dt = datetime.fromisoformat(c["created_at"].replace("Z", "+00:00"))
+            _year = _utc_dt.year
+            _dst_start = _last_sunday(_year, 3).replace(hour=1)   # clocks forward at 01:00 UTC
+            _dst_end   = _last_sunday(_year, 10).replace(hour=1)  # clocks back   at 01:00 UTC
+            _offset = timedelta(hours=2) if _dst_start <= _utc_dt < _dst_end else timedelta(hours=1)
+            _it_date  = (_utc_dt + _offset).date().isoformat()
+            _utc_date = _utc_dt.date().isoformat()
+
+            # Try Italian date first; fall back to UTC date if they differ
+            send_date = _it_date
             ric = get_ricevuta_pdf(cfg["utente"], tok["token"], send_date)
+            if not (ric.get("success") and ric.get("pdf_base64")) and _it_date != _utc_date:
+                logger.info(
+                    f"[receipts-job] Italian date {_it_date} yielded no receipt for "
+                    f"{c['checkin_id']}, trying UTC date {_utc_date}"
+                )
+                send_date = _utc_date
+                ric = get_ricevuta_pdf(cfg["utente"], tok["token"], send_date)
+
             if ric.get("success") and ric.get("pdf_base64"):
                 await db.checkins.update_one(
                     {"checkin_id": c["checkin_id"]},
@@ -3855,7 +3897,8 @@ async def fetch_alloggiati_receipts():
                         }
                     },
                 )
-                logger.info(f"[receipts-job] saved receipt for {c['checkin_id']}")
+                downloaded += 1
+                logger.info(f"[receipts-job] saved receipt for {c['checkin_id']} (date={send_date})")
             else:
                 raw = ric.get("raw") or {}
                 outcome = raw.get("RicevutaResult") or {}
@@ -3864,13 +3907,15 @@ async def fetch_alloggiati_receipts():
                     f"esito={outcome.get('esito')} ErroreCod={outcome.get('ErroreCod')} "
                     f"ErroreDes={outcome.get('ErroreDes')} has_pdf={bool(ric.get('pdf_base64'))}"
                 )
-                # Increment attempt counter so we eventually give up
+                # Increment attempt counter so we eventually give up on normal polling
                 await db.checkins.update_one(
                     {"checkin_id": c["checkin_id"]},
                     {"$inc": {"alloggiati_ricevuta_attempts": 1}},
                 )
         except Exception as e:
             logger.error(f"[receipts-job] error on {c.get('checkin_id')}: {e}")
+
+    return {"processed": processed, "downloaded": downloaded}
 
 
 async def daily_ross1000_zero_movement():
