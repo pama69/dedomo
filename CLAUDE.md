@@ -4,6 +4,34 @@
 
 ---
 
+## 📌 Sessione corrente — 2026-06-25 (pomeriggio)
+
+**Tema della sessione:** miglioramenti guest page (immagini, attrazioni), Manuale Casa (feature grossa), Ross 1000 campi documento, landing pubblica ripristinata, validazione OCR.
+
+**Stato:** tutti i commit della giornata sono su `main` (HEAD `a7eada4` — docs). Railway già deployato.
+
+**🆕 Feature nuove di oggi:**
+- **Manuale Casa** per ogni proprietà: `/settings/properties/:id/manual` con Wi-Fi+QR, check-in/out, rifiuti, parcheggio, emergenze + sezioni libere. Mostrato in cima alla guest page, tradotto on-demand via GPT-4o-mini con cache per hash sha1 dei testi
+- **Landing page pubblica** ripristinata da repo separata `dedomo-emergent`, route `/` ora mostra landing autocontenuta (no più redirect a `/dashboard`)
+- **Fallback immagini Unsplash** quando Wikipedia non ha foto (cantine, tour) — env `UNSPLASH_ACCESS_KEY`
+- **Validazione OCR campi sospetti** in Checkin.jsx (bordo ambra, non bloccante)
+
+**🛠️ Fix di oggi:**
+- Wikipedia 403 su Railway → User-Agent `Dedomo/1.0 (pama69@gmail.com)`
+- TTL attrazioni 168h → 48h (rotazione suggerimenti)
+- Cache attrazioni: rigenerata se URL non sono Wikimedia o Unsplash (era ferma su URL fasulli)
+- Ross 1000: aggiunti `tipodocumento`/`numerodocumento`/`statodocumento` al SOAP (mancavano, segnalati obbligatori)
+
+**🔎 Verifiche residue richieste da Paolo:**
+- Test Ross 1000 al primo check-in PROD (confermare che i 3 campi documento arrivino bene a Turismo 5 Abruzzo)
+
+**🌐 Env vars Railway aggiunte oggi:**
+- `UNSPLASH_ACCESS_KEY` — confermata da Paolo
+
+**Cronologia dettagliata della sessione:** vedi `## Archivio sessioni` in fondo a questo file.
+
+---
+
 ## Progetto
 
 **Dedomo** — SaaS per affitti brevi in Italia: automatizza adempimenti burocratici (polizia, tassa soggiorno, ricevute) e comunicazione ospiti.
@@ -197,7 +225,11 @@ Dopo ogni modifica: `git commit` immediato, poi chiedere a Paolo "pusha?". Il pu
 
 ---
 
-## Sessione 2026-06-24
+## Archivio sessioni
+
+> Cronologia dettagliata delle sessioni passate. Per lo stato corrente del progetto vedi il blocco "📌 Sessione corrente" in cima al file.
+
+### Sessione 2026-06-24
 
 **Fatto:**
 - OCR spostato client-side (`ocr-client.js`) — risolto CONNECTION ERROR Railway
@@ -206,7 +238,7 @@ Dopo ogni modifica: `git commit` immediato, poi chiedere a Paolo "pusha?". Il pu
 - Archivio: link "Pagina personale ospite" sotto ogni capofamiglia con copia link
 - Guest page: animazione caricamento, immagini Wikimedia, link Google Maps attrazioni, mercati 15km posizione precisa, titoli caldi 4 lingue, eventi solo futuri
 
-## Sessione 2026-06-25
+### Sessione 2026-06-25 (mattina)
 
 **Fatto:**
 - Risolto deploy Railway fallito: commit `ca6ffa4` aveva corrotto Login.jsx, Register.jsx, ResetPassword.jsx (troncati) e server.py (null bytes)
@@ -245,7 +277,7 @@ Dopo ogni modifica: `git commit` immediato, poi chiedere a Paolo "pusha?". Il pu
 
 ---
 
-## Sessione 2026-06-25 (continua)
+### Sessione 2026-06-25 (pomeriggio)
 
 **Fix guest page — immagini attrazioni:**
 - `fetch_wikimedia_image` riscritta: prima REST API summary, poi search API come fallback (tollera titoli imprecisi di GPT, redirect, varianti)
