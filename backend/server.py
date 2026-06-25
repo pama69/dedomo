@@ -331,7 +331,7 @@ async def auth_forgot_password(req: ForgotPasswordRequest):
     # Risposta identica che l'utente esista o meno (sicurezza)
     generic = {"detail": "Se l'indirizzo è registrato riceverai un'email con le istruzioni."}
 
-    if not user or not user.get("email_verified"):
+    if not user:
         return generic
 
     # Rate limit: max 1 token di reset attivo per volta
