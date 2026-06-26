@@ -37,20 +37,31 @@ def _decode_private_key() -> str:
 VAPID_PRIVATE_KEY_PEM = _decode_private_key()
 
 
-def _build_vapid():
-    """Costruisce un oggetto Vapid da PEM. Ritorna (vapid, error)."""
+_VAPID_OBJ = None
+_VAPID_ERR = None
+
+
+def _get_vapid():
+    """Costruisce (una sola volta) un oggetto Vapid dal PEM. Ritorna (vapid, error)."""
+    global _VAPID_OBJ, _VAPID_ERR
+    if _VAPID_OBJ is not None or _VAPID_ERR is not None:
+        return _VAPID_OBJ, _VAPID_ERR
     try:
         from py_vapid import Vapid02
-        v = Vapid02.from_pem(VAPID_PRIVATE_KEY_PEM.encode("utf-8"))
-        return v, None
+        _VAPID_OBJ = Vapid02.from_pem(VAPID_PRIVATE_KEY_PEM.encode("utf-8"))
     except Exception as e:
-        return None, f"Vapid.from_pem fallito: {e}"
+        _VAPID_ERR = f"Vapid.from_pem fallito: {type(e).__name__}: {e}"
+    return _VAPID_OBJ, _VAPID_ERR
 
 
 async def send_push(db, user_id: str, title: str, body: str, url: str = "/archive"):
     """Invia una notifica Web Push. Ritorna (ok: bool, error: str|None)."""
     if not VAPID_PRIVATE_KEY_PEM or not VAPID_PUBLIC_KEY:
         return False, "VAPID keys non configurate sul server"
+
+    vapid, verr = _get_vapid()
+    if verr:
+        return False, verr
 
     sub_doc = await db.push_subscriptions.find_one({"user_id": user_id})
     if not sub_doc:
@@ -62,7 +73,7 @@ async def send_push(db, user_id: str, title: str, body: str, url: str = "/archiv
         webpush(
             subscription_info=subscription,
             data=json.dumps({"title": title, "body": body, "url": url}),
-            vapid_private_key=VAPID_PRIVATE_KEY_PEM,
+            vapid_private_key=vapid,
             vapid_claims={"sub": f"mailto:{VAPID_CLAIMS_EMAIL}"},
         )
         logger.info(f"[PUSH] Notifica inviata a user {user_id}: {title}")
