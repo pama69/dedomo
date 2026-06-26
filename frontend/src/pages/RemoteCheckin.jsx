@@ -238,13 +238,30 @@ function GuestForm({ token, guest, onChange, t, index, onRemove, canRemove }) {
       if (result.error) { setOcrErr(result.error); return; }
       const isForeign = result.data ? result.data.stato_nascita_iso3 !== "ITA" : result.stato_nascita_iso3 !== "ITA";
       const d = result.data || result;
+
+      let statoCodice = guest.stato_nascita;
+      let paeseNome = d.stato_nascita_nome || "";
+      let cittadinanzaCodice = guest.cittadinanza;
+
+      if (isForeign && paeseNome) {
+        try {
+          const paesiRes = await fetch(pub(`/public/remote-checkin/${token}/paesi?q=${encodeURIComponent(paeseNome)}`));
+          const paesiData = await paesiRes.json();
+          if (paesiData.length > 0) {
+            statoCodice = paesiData[0].codice;
+            paeseNome = paesiData[0].nome;
+            cittadinanzaCodice = paesiData[0].codice;
+          }
+        } catch { /* usa valori OCR grezzi */ }
+      }
+
       onChange({
         ...guest,
         cognome: d.cognome || guest.cognome,
         nome: d.nome || guest.nome,
         sesso: d.sesso || guest.sesso,
         data_nascita: d.data_nascita || guest.data_nascita,
-        luogo_nascita: d.luogo_nascita || guest.luogo_nascita,
+        luogo_nascita: paeseNome || d.luogo_nascita || guest.luogo_nascita,
         tipo_documento: d.tipo_documento === "CARTA_IDENTITA" ? "IDENT"
           : d.tipo_documento === "CARTA_IDENTITA_ELETTRONICA" ? "IDELE"
           : d.tipo_documento === "PASSAPORTO" ? "PASOR"
@@ -252,7 +269,9 @@ function GuestForm({ token, guest, onChange, t, index, onRemove, canRemove }) {
           : guest.tipo_documento,
         numero_documento: d.numero_documento || guest.numero_documento,
         is_foreign: isForeign,
-        paese_nome: isForeign ? (d.stato_nascita_nome || "") : "",
+        paese_nome: paeseNome,
+        stato_nascita: statoCodice,
+        cittadinanza: cittadinanzaCodice,
       });
     } catch { setOcrErr("Errore lettura documento"); }
     finally {

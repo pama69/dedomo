@@ -1,8 +1,14 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import api from "@/lib/api";
 
 export default function NewRemoteCheckinModal({ properties, onClose, onCreated }) {
   const [propertyId, setPropertyId] = useState(properties[0]?.property_id || "");
+
+  useEffect(() => {
+    if (!propertyId && properties.length > 0) {
+      setPropertyId(properties[0].property_id);
+    }
+  }, [properties]);
   const [dataArrivo, setDataArrivo] = useState("");
   const [dataPartenza, setDataPartenza] = useState("");
   const [email, setEmail] = useState("");
