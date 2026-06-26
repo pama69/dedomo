@@ -6,7 +6,13 @@ import App from "@/App";
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("/sw.js").catch(() => {});
+    navigator.serviceWorker.register("/sw.js").then((reg) => {
+      // Forza il controllo di aggiornamenti ogni volta che l'utente torna sulla tab,
+      // bypassando l'HTTP cache di sw.js (altrimenti il browser non vede la nuova versione)
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "visible") reg.update();
+      });
+    }).catch(() => {});
   });
 }
 

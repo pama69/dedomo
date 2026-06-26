@@ -6,12 +6,12 @@ self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     (async () => {
-      // Cancella ogni cache lasciata da Service Worker precedenti
-      // (es. workbox/CRA o build Emergent) che servivano pagine vecchie
-      // e costringevano a fare Ctrl+Shift+R a ogni deploy.
       const keys = await caches.keys();
       await Promise.all(keys.map((k) => caches.delete(k)));
       await clients.claim();
+      // Ricarica tutte le tab aperte così vedono subito la nuova build
+      const allClients = await clients.matchAll({ type: "window", includeUncontrolled: true });
+      await Promise.all(allClients.map((c) => c.navigate(c.url)));
     })()
   );
 });
