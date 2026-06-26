@@ -2661,6 +2661,22 @@ async def resend_remote_checkin(remote_id: str, user=Depends(get_current_user)):
     return {"ok": sent}
 
 
+@api_router.post("/remote-checkins/{remote_id}/cancel-schedule")
+async def cancel_remote_checkin_schedule(remote_id: str, user=Depends(get_current_user)):
+    doc = await db.remote_checkins.find_one(
+        {"remote_id": remote_id, "user_id": user["user_id"]}, {"_id": 0, "status": 1}
+    )
+    if not doc:
+        raise HTTPException(404)
+    if doc["status"] != "authorized":
+        raise HTTPException(400, "Nessun invio programmato da annullare")
+    await db.remote_checkins.update_one(
+        {"remote_id": remote_id},
+        {"$set": {"status": "submitted"}, "$unset": {"scheduled_for": "", "authorized_at": ""}},
+    )
+    return {"ok": True}
+
+
 @api_router.post("/remote-checkins/{remote_id}/authorize")
 async def authorize_remote_checkin(remote_id: str, user=Depends(get_current_user)):
     from zoneinfo import ZoneInfo

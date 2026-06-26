@@ -1440,8 +1440,17 @@ function RemoteCheckinSection({ properties }) {
                     <span className={`text-[10px] font-mono ${sl.cls}`}>{sl.label}</span>
                   </div>
                   {it.status === "authorized" && (
-                    <div className="border border-red-500/30 bg-red-500/5 px-3 py-2 text-[10px] font-mono text-red-400">
-                      Inoltro programmato il {new Date(it.data_arrivo).toLocaleDateString("it-IT")} alle 23:59
+                    <div className="border border-red-500/30 bg-red-500/5 px-3 py-2 text-[10px] font-mono text-red-400 flex items-center justify-between gap-2">
+                      <span>Inoltro programmato il {new Date(it.data_arrivo).toLocaleDateString("it-IT")} alle 23:59</span>
+                      <button
+                        onClick={async () => {
+                          try { await api.post(`/remote-checkins/${it.remote_id}/cancel-schedule`); load(); }
+                          catch { alert("Errore annullamento"); }
+                        }}
+                        className="border border-red-500/50 text-red-400 hover:bg-red-500/10 px-2 py-1 text-[9px] uppercase tracking-widest cursor-pointer shrink-0"
+                      >
+                        Annulla
+                      </button>
                     </div>
                   )}
                   {it.status === "done" && (
