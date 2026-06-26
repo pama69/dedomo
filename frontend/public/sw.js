@@ -30,8 +30,8 @@ self.addEventListener("push", (event) => {
   const title = data.title || "Dedomo";
   const options = {
     body: data.body || "",
-    icon: data.icon || undefined,
-    badge: data.badge || undefined,
+    icon: data.icon || "/icon-192.png",
+    badge: data.badge || "/icon-192.png",
     data: { url: data.url || "/dashboard" },
     vibrate: [100, 50, 100],
     requireInteraction: false,

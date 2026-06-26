@@ -87,6 +87,8 @@ export function usePushNotifications() {
       const reg = await navigator.serviceWorker.ready;
       await reg.showNotification("Dedomo — Test locale", {
         body: "Se vedi questa notifica, il sistema funziona.",
+        icon: "/icon-192.png",
+        badge: "/icon-192.png",
         vibrate: [100, 50, 100],
       });
       return { ok: true };

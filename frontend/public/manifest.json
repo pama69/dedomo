@@ -1,0 +1,22 @@
+{
+  "short_name": "Dedomo",
+  "name": "Dedomo · Comunicazione Ospiti",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": "/dashboard",
+  "display": "standalone",
+  "theme_color": "#060608",
+  "background_color": "#05050A"
+}
