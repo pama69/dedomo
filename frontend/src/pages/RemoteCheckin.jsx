@@ -286,7 +286,7 @@ function GuestForm({ token, guest, onChange, t, index, onRemove, canRemove }) {
         >
           {ocrBusy ? t.scanning : `📷 ${t.upload}`}
         </button>
-        {ocrErr && <p className="text-red-400 text-[11px] font-mono mt-1">{ocrErr}</p>}
+        {ocrErr && <p className="text-zinc-500 text-[11px] mt-1">{ocrErr} — compila manualmente.</p>}
         <p className="text-zinc-600 text-[10px] mt-1">{t.ocrHint}</p>
       </div>
 

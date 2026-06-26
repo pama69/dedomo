@@ -28,7 +28,7 @@ Restituisci ESCLUSIVAMENTE un JSON valido (no markdown, no testo extra) con ques
 export async function extractDocumentClient(imageBase64, mimeType = "image/jpeg") {
   const apiKey = process.env.REACT_APP_OPENAI_API_KEY;
   if (!apiKey) {
-    return { error: "REACT_APP_OPENAI_API_KEY non configurata in .env.local" };
+    return { error: "Scansione documento non disponibile" };
   }
 
   try {

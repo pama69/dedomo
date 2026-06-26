@@ -3,12 +3,14 @@ import { useNavigate } from "react-router-dom";
 import Layout from "@/components/Layout";
 import api from "@/lib/api";
 import DownloadManualButton from "@/components/DownloadManualButton";
+import NewRemoteCheckinModal from "@/components/NewRemoteCheckinModal";
 
 export default function Dashboard() {
   const navigate = useNavigate();
   const [recent, setRecent] = useState([]);
   const [properties, setProperties] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [showRemoteModal, setShowRemoteModal] = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -23,6 +25,7 @@ export default function Dashboard() {
   }, []);
 
   return (
+    <>
     <Layout>
       {/* ── HERO CHECK-IN ── */}
       <button
@@ -72,7 +75,7 @@ export default function Dashboard() {
 
       {/* ── REMOTE CHECK-IN ── */}
       <button
-        onClick={() => navigate("/archive")}
+        onClick={() => setShowRemoteModal(true)}
         className="group relative w-full overflow-hidden cursor-pointer transition-all active:scale-[0.998]"
         style={{
           background: "linear-gradient(135deg, hsl(0 20% 10%) 0%, hsl(0 15% 8%) 100%)",
@@ -273,6 +276,14 @@ export default function Dashboard() {
         </div>
       </div>
     </Layout>
+    {showRemoteModal && (
+      <NewRemoteCheckinModal
+        properties={properties}
+        onClose={() => setShowRemoteModal(false)}
+        onCreated={() => setShowRemoteModal(false)}
+      />
+    )}
+    </>
   );
 }
 
