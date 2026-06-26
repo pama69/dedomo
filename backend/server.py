@@ -1863,7 +1863,7 @@ async def download_alloggiati_ricevuta(
     )
 
 
-@api_router.post("/admin/test-push")
+@api_router.post("/push/test")
 async def test_push_notification(user=Depends(get_current_user)):
     """Invia una notifica push di test all'utente corrente."""
     sent = await send_push(

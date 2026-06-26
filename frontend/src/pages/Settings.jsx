@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import Layout from "@/components/Layout";
 import api from "@/lib/api";
 import DownloadManualButton from "@/components/DownloadManualButton";
+import { usePushNotifications } from "@/lib/usePushNotifications";
 
 const emptyAlloggiati = {
   utente: "",
@@ -230,6 +231,7 @@ export default function Settings() {
       )}
 
       <OwnerBankInfoSection properties={list} />
+      <PushNotificationSection />
     </Layout>
   );
 }
@@ -1279,6 +1281,100 @@ function OwnerBankInfoModal({ cf, intestatario, onClose, onSaved }) {
           </>
         )}
       </div>
+    </div>
+  );
+}
+
+// ============================================================
+// NOTIFICHE PUSH
+// ============================================================
+
+function PushNotificationSection() {
+  const { isSupported, isSubscribed, permission, isIOS, isStandalone, loading, subscribe, unsubscribe } =
+    usePushNotifications();
+  const [testStatus, setTestStatus] = useState("");
+  const [testLoading, setTestLoading] = useState(false);
+
+  const sendTest = async () => {
+    setTestLoading(true);
+    setTestStatus("");
+    try {
+      const r = await api.post("/push/test");
+      setTestStatus(r.data.sent ? "✓ Notifica inviata — controlla il dispositivo" : "✗ Nessuna subscription attiva");
+    } catch (e) {
+      setTestStatus("Errore: " + (e.response?.data?.detail || e.message));
+    } finally {
+      setTestLoading(false);
+    }
+  };
+
+  return (
+    <div className="border border-border p-4 flex flex-col gap-3 bg-surface-1">
+      <span className="text-[10px] tracking-[0.25em] uppercase text-zinc-400">Notifiche Push</span>
+
+      {!isSupported && (
+        <p className="text-[11px] text-zinc-500 font-mono">
+          Il tuo browser non supporta le notifiche push.
+        </p>
+      )}
+
+      {isSupported && isIOS && !isStandalone && (
+        <div className="border border-amber-500/30 bg-amber-500/5 p-3 flex flex-col gap-1">
+          <p className="text-[11px] text-amber-300">Su iPhone le notifiche richiedono un passaggio:</p>
+          <p className="text-[11px] text-zinc-400">
+            Tocca <span className="text-zinc-200">Condividi ↑</span> in Safari →{" "}
+            <span className="text-zinc-200">"Aggiungi alla schermata Home"</span> → riapri Dedomo dall'icona.
+          </p>
+        </div>
+      )}
+
+      {isSupported && permission === "denied" && (
+        <p className="text-[11px] text-red-400 font-mono">
+          Notifiche bloccate dal browser. Vai nelle impostazioni del browser per riabilitarle.
+        </p>
+      )}
+
+      {isSupported && permission !== "denied" && (
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center gap-3">
+            <span className={`text-[11px] font-mono ${isSubscribed ? "text-emerald-400" : "text-zinc-500"}`}>
+              {isSubscribed ? "✓ Notifiche attive" : "○ Notifiche non attive"}
+            </span>
+            {isSubscribed ? (
+              <button
+                onClick={unsubscribe}
+                disabled={loading}
+                className="border border-zinc-700 hover:border-zinc-500 text-zinc-500 hover:text-zinc-300 px-3 py-1 uppercase tracking-widest text-[9px] cursor-pointer disabled:opacity-50"
+              >
+                {loading ? "..." : "Disattiva"}
+              </button>
+            ) : (
+              <button
+                onClick={subscribe}
+                disabled={loading || (isIOS && !isStandalone)}
+                className="border border-emerald-500/60 hover:bg-emerald-500/10 text-emerald-400 px-3 py-1 uppercase tracking-widest text-[9px] cursor-pointer disabled:opacity-50"
+              >
+                {loading ? "..." : "Attiva"}
+              </button>
+            )}
+          </div>
+
+          {isSubscribed && (
+            <div className="flex items-center gap-3">
+              <button
+                onClick={sendTest}
+                disabled={testLoading}
+                className="border border-zinc-600 hover:border-zinc-400 text-zinc-400 px-3 py-1 uppercase tracking-widest text-[9px] cursor-pointer disabled:opacity-50"
+              >
+                {testLoading ? "Invio..." : "Prova notifiche"}
+              </button>
+              {testStatus && (
+                <span className="text-[10px] font-mono text-zinc-500">{testStatus}</span>
+              )}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
