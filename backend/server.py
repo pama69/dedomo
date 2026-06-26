@@ -587,7 +587,7 @@ class Ross1000Credentials(BaseModel):
 class ImpostaSoggiornoConfig(BaseModel):
     tariffa_per_notte: float = 0.0
     max_notti_tassabili: int = 7
-    esenti_under_anni: int = 12
+    esenti_under_anni: int = 16
     endpoint_comune: str = ""
     enabled: bool = True
 
