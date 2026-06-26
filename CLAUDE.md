@@ -6,27 +6,26 @@
 
 ## 📌 Sessione corrente — 2026-06-26
 
-**Tema della sessione:** scheda ospiti più completa in Archivio, numerazione progressiva ricevute IS e Locazione, debug email Resend, miglioramenti guest page (immagini Wikimedia, link Google Maps, caricamento animato).
+**Tema della sessione:** Remote Check-in completo (invio form ospite → OCR → autorizzazione → invio programmato 23:59); OCR spostato a backend; UX miglioramenti form ospite.
 
-**Stato:** commit `dba2012` su `main` locale — **non ancora pushato** (in attesa ok Paolo).
+**Stato:** commit `dbeb6b5` pushato su `main` → Railway in produzione.
 
-**🆕 Feature nuove di oggi:**
-- **Archivio — scheda ospite arricchita:** data nascita + nazionalità visibili sotto ogni ospite del check-in
-- **Archivio — GuestPageLink:** link "Pagina personale ospite" sotto ogni capofamiglia con pulsante copia
-- **Numerazione progressiva ricevute** (client-side, senza chiamate extra):
-  - `nextComuneNum(items, propertyId)` — max numero `comune_receipts` per stessa struttura + anno corrente + 1
-  - `nextLocazioneNum(items, propertyId)` — max numero `locazione_receipts` (formato `RL-2026/NNN`) + 1
-  - `GenerateReceiptButton`: campo pre-compilato all'apertura, completamente modificabile
-  - `GenerateLocazioneButton`: auto-incrementale backend rimane default; se si deseleziona, campo pre-riempito con suggerito
+**🆕 Feature nuove di questa parte di sessione:**
+- **Check-in Remoto end-to-end:** bottone rosso in Dashboard → `NewRemoteCheckinModal` → email ospite → form ospite compilato → host rivede/autorizza → invio automatico Alloggiati alle 23:59 del giorno di arrivo
+- **OCR spostato a backend** (vedi sezione OCR aggiornata sotto) — `POST /api/ocr` autenticato + `POST /api/public/remote-checkin/{token}/ocr` pubblico
+- **Invio programmato 23:59** via APScheduler (job ogni 2 min), ZoneInfo Europe/Rome, optimistic locking anti-double-send
+- **Annulla programmazione** — bottone "ANNULLA" nel box rosso in Archive → reverte a `submitted`
+- **Push notification** all'host quando l'ospite compila il form
+- **Date di nascita GG/MM/AAAA** nel form ospite — tre input numerici separati (non più `type="date"` con picker Android orribile)
+- **Email invito remoto** ridisegnata: header verde scuro gradient, saluto caldo in italiano, nota procedura manuale, multilingue it/en/de/fr
+- **OCR blink** — "Analisi del documento in corso…" rosso lampeggiante durante scansione (`animate-ocr-blink`)
+- **Autocomplete UX** — debounce 200ms, "Ricerca in corso…" ambra lampeggiante, "Nessun risultato" se vuoto, bordo ambra durante loading
 
-**🛠️ Fix di oggi:**
-- Email benvenuto Resend: aggiunto logging dettagliato `[RESEND]` per diagnosticare 401 (causato da API key con whitespace invisibile al paste in Railway)
-- Guest page: immagini attrazioni da Wikimedia Commons (non più URL GPT fasulli); link Google Maps invece di Wikipedia
-- Guest page: animazione caricamento (spinner SVG + emoji foglia pulsante + pallini rimbalzanti)
-- Mercati rionali: raggio 15km, posizione precisa (piazza/via), link Google Maps clicabile
+**Status flow remote check-in:** `sent` → `submitted` → `authorized` → `sending` → `done` / `failed`
 
 **🔎 Verifiche residue:**
 - Test Ross 1000 al primo check-in PROD (tipodocumento/numerodocumento/statodocumento)
+- Rinomina Railway "vigilant-expression" → aggiornare `PUBLIC_BACKEND_URL` dopo la rinomina
 
 **Cronologia dettagliata della sessione:** vedi `## Archivio sessioni` in fondo a questo file.
 
@@ -51,7 +50,7 @@
 | Database | MongoDB Atlas (cluster0.vs5uc3c.mongodb.net, AWS Frankfurt) |
 | Frontend | React 19 + CRA5 + TailwindCSS + shadcn/ui |
 | Scheduler | APScheduler |
-| OCR | OpenAI GPT-4o-mini Vision — **client-side** (browser → OpenAI diretto) |
+| OCR | OpenAI GPT-4o-mini Vision — **server-side** (`services/ocr_service.py`) |
 | Email | Resend API (`RESEND_API_KEY` + `GUEST_EMAIL_FROM`) |
 | Pagamenti | Stripe |
 | Hosting | Railway |
@@ -61,8 +60,7 @@
 ## Env vars Railway (nessun valore qui)
 
 - `MONGO_URL`, `DB_NAME` — Atlas connection
-- `OPENAI_API_KEY` — guest page AI (backend: meteo, eventi, mercati, attrazioni)
-- `REACT_APP_OPENAI_API_KEY` — OCR client-side (build-time, esposta al browser — accettato)
+- `OPENAI_API_KEY` — guest page AI (backend: meteo, eventi, mercati, attrazioni) + OCR backend
 - `RESEND_API_KEY`, `GUEST_EMAIL_FROM` — email benvenuto ospiti
 - `OPENWEATHERMAP_KEY` — meteo pagina ospite
 - `PUBLIC_BACKEND_URL` — URL pubblico app (es. `https://vigilant-expression-production.up.railway.app`)
@@ -88,11 +86,24 @@
 - Calcolo locale + ricevuta PDF
 - Ricevuta inviabile via email al cliente con link PDF pubblico (share_token)
 
-### OCR documenti — CLIENT-SIDE
-- `frontend/src/lib/ocr-client.js` — browser chiama `api.openai.com` direttamente con `fetch()`
-- Bypassata limitazione Railway (blocca HTTP/2 outbound verso OpenAI)
-- Chiave in `REACT_APP_OPENAI_API_KEY` (Railway Variables, build-time)
-- Endpoint `/api/ocr/document` **rimosso** da server.py
+### OCR documenti — BACKEND
+- `services/ocr_service.py` — chiama OpenAI Vision server-side con `OPENAI_API_KEY`
+- `POST /api/ocr` — endpoint autenticato (flusso check-in normale in `Checkin.jsx`)
+- `POST /api/public/remote-checkin/{token}/ocr` — endpoint pubblico (form ospite remoto, validato via token)
+- `frontend/src/lib/ocr-client.js`: `extractDocumentClient()` → `/api/ocr`; `extractDocumentPublic(token,...)` → endpoint pubblico
+- `REACT_APP_OPENAI_API_KEY` non è più necessaria — OCR è interamente server-side
+
+### Remote Check-in
+- Flow: host crea → ospite riceve email → compila form → host rivede → autorizza → invio 23:59 ora italiana
+- `remote_checkins` collection MongoDB: `status` enum `sent/submitted/authorized/sending/done/failed`
+- `POST /remote-checkins` — crea, invia email con link token
+- `POST /api/public/remote-checkin/{token}/submit` — ospite invia dati (pubblico)
+- `POST /remote-checkins/{id}/authorize` — host autorizza; schedula invio alle 23:59 del `data_arrivo`
+- `POST /remote-checkins/{id}/cancel-schedule` — reverte a `submitted`
+- APScheduler job ogni 2 min: `_process_scheduled_remote_checkins()` con optimistic locking
+- `components/NewRemoteCheckinModal.jsx` — modal condiviso tra Dashboard e Archive
+- `pages/RemoteCheckin.jsx` — form pubblico ospite con OCR, autocomplete comuni/paesi, date GG/MM/AAAA
+- Notifica push all'host al submit ospite (`send_push()`)
 
 ### Calendario iCal
 - Sync da Booking/Airbnb/VRBO tramite iCal URL
@@ -167,7 +178,7 @@ backend/
     ross1000.py         — CSV/SOAP regionale
     imposta_soggiorno.py
     pdf_service.py      — generazione PDF ricevute
-    ocr_service.py      — (mantenuto ma non usato dall'API — OCR è client-side)
+    ocr_service.py      — OCR server-side: chiamato da /api/ocr e /api/public/remote-checkin/{token}/ocr
     billing.py
 
 frontend/src/
@@ -182,8 +193,11 @@ frontend/src/
     Settings.jsx       — strutture/credenziali; pulsante "Manuale" per ogni proprietà
     HouseManual.jsx    — pagina manuale casa per ospite (Wi-Fi, check-in/out, custom)
     GuestPage.jsx      — pagina pubblica ospite (design vacanze, i18n 4 lingue, sezione casa)
-    Archive.jsx        — storico check-in + GuestPageLink component
-    Dashboard.jsx
+    Archive.jsx        — storico check-in + GuestPageLink + gestione remote check-in (status, annulla, autorizza)
+    Dashboard.jsx      — bottone rosso "Check-in Remoto" → NewRemoteCheckinModal
+    RemoteCheckin.jsx  — form pubblico ospite: OCR, autocomplete comuni/paesi, date GG/MM/AAAA
+  components/
+    NewRemoteCheckinModal.jsx — modal condiviso Dashboard+Archive per creare remote check-in
   public/
     landing.html       — landing pubblica autocontenuta (immagini base64, font CDN, 214KB)
 ```
@@ -193,8 +207,8 @@ frontend/src/
 ## Gotcha tecnici da ricordare
 
 - **Chrome autofill**: SOLO `type="text"` funziona per impedirlo (type="password" viene sovrascritto indipendentemente da readOnly, autoComplete, random name)
-- **Railway outbound**: blocca HTTP/2 verso `api.openai.com` — OCR deve restare client-side; `httpx` HTTP/1.1 funziona (SOAP, Resend, OpenWeatherMap)
-- **REACT_APP_***: devono essere in Railway Variables al momento del build (non in `.env.local` locale)
+- **Railway outbound HTTP/2**: `httpx` HTTP/1.1 funziona (SOAP, Resend, OpenWeatherMap, OpenAI SDK). OCR è ora backend — nessun problema perché `openai` Python SDK usa HTTP/1.1
+- **REACT_APP_***: devono essere in Railway Variables al momento del build (non in `.env.local` locale). `REACT_APP_OPENAI_API_KEY` non è più necessaria (OCR spostato a backend)
 - **OPENAI_BASE_URL**: se impostata (legacy Emergent), sovrascrive la base_url del client — forzare sempre `base_url="https://api.openai.com/v1"` in AsyncOpenAI()
 - **Guest page cache**: è per `checkin_id` — nuovi check-in ottengono dati freschi con i prompt aggiornati; quelli vecchi vedono cache fino a scadenza (48h attrazioni, 7d mercati, 24h eventi, 3h meteo)
 - **Wikimedia images**: chiamate parallele con `asyncio.gather` — 6 immagini in ~1-2s totali. **REST API summary** prima, search API come fallback per titoli imprecisi
@@ -372,6 +386,24 @@ Dopo ogni modifica: `git commit` immediato, poi chiedere a Paolo "pusha?". Il pu
 - `GenerateReceiptButton`: `onClick` setta `numero = String(suggestedNumero)` prima di aprire il form; hint "◎ suggerito" sotto il campo
 - `GenerateLocazioneButton`: toggle `autoNumero` rimane; quando si deseleziona e campo è vuoto, pre-riempie con `suggestedNumero`; hint mostrato
 
-**Commit della sessione:**
+**Commit della sessione (prima parte):**
 1. `7889443` feat: archivio ospiti - data nascita e nazionalità nella scheda dettaglio
 2. `dba2012` feat(archive): numerazione progressiva ricevute IS e Locazione
+
+**Seconda parte sessione — Remote Check-in:**
+- **OCR spostato a backend**: `services/ocr_service.py` già esisteva con OpenAI Vision; aggiunto `POST /api/ocr` (autenticato) e `POST /api/public/remote-checkin/{token}/ocr` (pubblico). `REACT_APP_OPENAI_API_KEY` non serve più
+- **Dashboard**: bottone rosso-ombreggiato "Check-in Remoto" sotto il pulsantone principale → apre `NewRemoteCheckinModal` direttamente
+- **`NewRemoteCheckinModal`**: estratto in `frontend/src/components/NewRemoteCheckinModal.jsx` (condiviso tra Dashboard e Archive). `useEffect` per settare `propertyId` quando `properties` carica (fix bottone disabilitato)
+- **Invio programmato 23:59**: `authorize_remote_checkin` calcola 23:59 Europe/Rome il giorno di arrivo (ZoneInfo), salva `scheduled_for`; APScheduler job ogni 2 min esegue i dovuti
+- **Annulla schedule**: `POST /remote-checkins/{id}/cancel-schedule` → reverte a `submitted`; bottone "ANNULLA" nel box rosso in Archive
+- **Push notification**: `send_push()` all'host quando ospite compila il form
+- **Date di nascita GG/MM/AAAA**: componente `DateDMY` (tre input numerici) in `RemoteCheckin.jsx` — sostituisce `type="date"`
+- **Email invito**: ridisegnata con header verde scuro gradient, saluto italiano caldo, istruzioni chiare, nota procedura manuale, multilingue
+- **OCR blink**: "Analisi del documento in corso…" rosso + `animate-ocr-blink` durante scansione
+- **Autocomplete fix**: debounce 200ms, indicatore ambra lampeggiante, "Nessun risultato — prova un'altra grafia"
+- **Auto-risoluzione ISTAT** dopo OCR estero: query `/paesi?q=<nome>` immediata, `isValid()` accetta anche solo `paese_nome` senza codice ISTAT
+- Commit remoto: `dbeb6b5` — pushato
+
+**Verifiche residue:**
+- Test Ross 1000 al primo check-in PROD
+- Se rinomina Railway "vigilant-expression": aggiornare `PUBLIC_BACKEND_URL` in Railway Variables

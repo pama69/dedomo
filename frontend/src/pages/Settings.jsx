@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Layout from "@/components/Layout";
 import api from "@/lib/api";
-import DownloadManualButton from "@/components/DownloadManualButton";
 import { usePushNotifications } from "@/lib/usePushNotifications";
 
 const emptyAlloggiati = {
@@ -147,16 +146,6 @@ export default function Settings() {
         </button>
       </div>
 
-      <div className="flex items-center justify-end gap-2 -mt-3">
-        <a
-          href="/help"
-          data-testid="settings-open-help"
-          className="btn-ghost"
-        >
-          Apri guida online →
-        </a>
-        <DownloadManualButton testid="settings-download-manual" />
-      </div>
 
       {loading ? (
         <div className="flex flex-col gap-2">

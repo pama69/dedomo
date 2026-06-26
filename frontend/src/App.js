@@ -38,7 +38,6 @@ import Owners from "@/pages/Owners";
 import OwnerArchive from "@/pages/OwnerArchive";
 import Admin from "@/pages/Admin";
 import CalendarPage from "@/pages/Calendar";
-import Help from "@/pages/Help";
 import Pricing from "@/pages/Pricing";
 import BillingSuccess from "@/pages/BillingSuccess";
 import GuestPage from "@/pages/GuestPage";
@@ -67,7 +66,6 @@ function AppRouter() {
       <Route path="/calendar" element={<CalendarPage />} />
       <Route path="/settings" element={<Settings />} />
       <Route path="/settings/properties/:propertyId/manual" element={<HouseManual />} />
-      <Route path="/help" element={<Help />} />
       <Route path="/billing/pricing" element={<Pricing />} />
       <Route path="/billing/success" element={<BillingSuccess />} />
       <Route path="/guest/:token" element={<GuestPage />} />

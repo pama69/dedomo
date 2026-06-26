@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Layout from "@/components/Layout";
 import api from "@/lib/api";
-import DownloadManualButton from "@/components/DownloadManualButton";
 import NewRemoteCheckinModal from "@/components/NewRemoteCheckinModal";
 
 export default function Dashboard() {
@@ -255,26 +254,6 @@ export default function Dashboard() {
         )}
       </section>
 
-      {/* ── GUIDA ── */}
-      <div
-        className="surface-card p-5 flex flex-wrap items-center justify-between gap-4"
-      >
-        <div className="flex flex-col gap-1">
-          <span className="typo-meta">Guida d'uso</span>
-          <span className="typo-body text-primary-content">Manuale passo-passo in italiano</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => navigate("/help")}
-            data-testid="dashboard-open-help"
-            className="btn-ghost"
-          >
-            Apri guida online →
-          </button>
-          <DownloadManualButton testid="dashboard-download-manual" />
-        </div>
-      </div>
     </Layout>
     {showRemoteModal && (
       <NewRemoteCheckinModal
