@@ -1652,7 +1652,9 @@ async def push_vapid_key():
 
 
 @api_router.post("/push/subscribe")
-async def push_subscribe(sub: dict, user=Depends(get_current_user)):
+async def push_subscribe(request: Request, user=Depends(get_current_user)):
+    sub = await request.json()
+    logger.info(f"[PUSH] subscribe user={user['user_id']} endpoint={str(sub.get('endpoint',''))[:60]}")
     await db.push_subscriptions.update_one(
         {"user_id": user["user_id"]},
         {"$set": {"subscription": sub, "updated_at": datetime.now(timezone.utc).isoformat()}},
@@ -1663,8 +1665,16 @@ async def push_subscribe(sub: dict, user=Depends(get_current_user)):
 
 @api_router.delete("/push/subscribe")
 async def push_unsubscribe(user=Depends(get_current_user)):
+    logger.info(f"[PUSH] unsubscribe user={user['user_id']}")
     await db.push_subscriptions.delete_one({"user_id": user["user_id"]})
     return {"ok": True}
+
+
+@api_router.get("/push/status")
+async def push_status(user=Depends(get_current_user)):
+    """Debug: verifica se la subscription è salvata nel DB."""
+    doc = await db.push_subscriptions.find_one({"user_id": user["user_id"]}, {"_id": 0})
+    return {"saved": doc is not None, "endpoint": str(doc["subscription"].get("endpoint", ""))[:60] if doc else None}
 
 
 # ====================================================================

@@ -1294,6 +1294,7 @@ function PushNotificationSection() {
     usePushNotifications();
   const [testStatus, setTestStatus] = useState("");
   const [testLoading, setTestLoading] = useState(false);
+  const [subError, setSubError] = useState("");
 
   const sendTest = async () => {
     setTestLoading(true);
@@ -1350,13 +1351,14 @@ function PushNotificationSection() {
               </button>
             ) : (
               <button
-                onClick={subscribe}
+                onClick={async () => { setSubError(""); const r = await subscribe(); if (!r.ok) setSubError(r.error || "Errore sconosciuto"); }}
                 disabled={loading || (isIOS && !isStandalone)}
                 className="border border-emerald-500/60 hover:bg-emerald-500/10 text-emerald-400 px-3 py-1 uppercase tracking-widest text-[9px] cursor-pointer disabled:opacity-50"
               >
                 {loading ? "..." : "Attiva"}
               </button>
             )}
+            {subError && <span className="text-[10px] font-mono text-red-400">{subError}</span>}
           </div>
 
           {isSubscribed && (

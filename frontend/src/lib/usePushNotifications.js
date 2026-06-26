@@ -41,18 +41,17 @@ export function usePushNotifications() {
   }, []);
 
   const subscribe = useCallback(async () => {
-    if (!isSupported) return false;
+    if (!isSupported) return { ok: false, error: "Push non supportato" };
     setLoading(true);
     try {
-      // Fetch VAPID public key from backend
       const { data } = await api.get("/push/vapid-public-key");
       const vapidPublicKey = data.public_key;
-      if (!vapidPublicKey) throw new Error("VAPID key non disponibile");
+      if (!vapidPublicKey) throw new Error("VAPID key non configurata sul server");
 
       const reg = await navigator.serviceWorker.ready;
       const perm = await Notification.requestPermission();
       setPermission(perm);
-      if (perm !== "granted") return false;
+      if (perm !== "granted") return { ok: false, error: "Permesso negato dal browser" };
 
       const sub = await reg.pushManager.subscribe({
         userVisibleOnly: true,
@@ -61,10 +60,10 @@ export function usePushNotifications() {
 
       await api.post("/push/subscribe", sub.toJSON());
       setIsSubscribed(true);
-      return true;
+      return { ok: true };
     } catch (e) {
       console.error("[Push] Errore subscribe:", e);
-      return false;
+      return { ok: false, error: e.message || String(e) };
     } finally {
       setLoading(false);
     }
