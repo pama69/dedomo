@@ -57,6 +57,7 @@ from services.turismo5 import (
 from services.imposta_soggiorno import calcola_imposta
 from services.push_service import send_push, VAPID_PUBLIC_KEY
 from services.pdf_service import generate_tax_receipt, generate_comune_receipt
+from services.ocr_service import extract_document_data
 from services.retry_service import (
     classify_error,
     build_retry_entry,
@@ -2717,6 +2718,27 @@ async def _get_alloggiati_token_for_remote(token: str):
     if not tok.get("success"):
         raise HTTPException(503, "Servizio di ricerca non disponibile al momento")
     return cfg["utente"], tok["token"]
+
+
+# ── OCR endpoints ─────────────────────────────────────────────────
+
+class OcrRequest(BaseModel):
+    image_base64: str
+    mime_type: str = "image/jpeg"
+
+@api_router.post("/ocr")
+async def ocr_authenticated(body: OcrRequest, user: dict = Depends(get_current_user)):
+    result = await extract_document_data(body.image_base64, body.mime_type)
+    return result
+
+@api_router.post("/public/remote-checkin/{token}/ocr")
+async def ocr_public(token: str, body: OcrRequest):
+    doc = await db.remote_checkins.find_one({"token": token}, {"_id": 0, "data_arrivo": 1})
+    if not doc:
+        raise HTTPException(404, "Link non trovato")
+    _check_remote_token_expiry(doc)
+    result = await extract_document_data(body.image_base64, body.mime_type)
+    return result
 
 
 @api_router.get("/public/remote-checkin/{token}")

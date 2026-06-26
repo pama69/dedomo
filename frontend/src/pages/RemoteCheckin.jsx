@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams } from "react-router-dom";
-import { extractDocumentClient } from "@/lib/ocr-client";
+import { extractDocumentPublic } from "@/lib/ocr-client";
 
 const BACKEND = process.env.REACT_APP_BACKEND_URL;
 const pub = (path) => `${BACKEND}/api${path}`;
@@ -234,24 +234,25 @@ function GuestForm({ token, guest, onChange, t, index, onRemove, canRemove }) {
         r.onerror = rej;
         r.readAsDataURL(file);
       });
-      const result = await extractDocumentClient(b64, file.type);
+      const result = await extractDocumentPublic(token, b64, file.type);
       if (result.error) { setOcrErr(result.error); return; }
-      const isForeign = result.stato_nascita_iso3 !== "ITA";
+      const isForeign = result.data ? result.data.stato_nascita_iso3 !== "ITA" : result.stato_nascita_iso3 !== "ITA";
+      const d = result.data || result;
       onChange({
         ...guest,
-        cognome: result.cognome || guest.cognome,
-        nome: result.nome || guest.nome,
-        sesso: result.sesso || guest.sesso,
-        data_nascita: result.data_nascita || guest.data_nascita,
-        luogo_nascita: result.luogo_nascita || guest.luogo_nascita,
-        tipo_documento: result.tipo_documento === "CARTA_IDENTITA" ? "IDENT"
-          : result.tipo_documento === "CARTA_IDENTITA_ELETTRONICA" ? "IDELE"
-          : result.tipo_documento === "PASSAPORTO" ? "PASOR"
-          : result.tipo_documento === "PATENTE" ? "PATEN"
+        cognome: d.cognome || guest.cognome,
+        nome: d.nome || guest.nome,
+        sesso: d.sesso || guest.sesso,
+        data_nascita: d.data_nascita || guest.data_nascita,
+        luogo_nascita: d.luogo_nascita || guest.luogo_nascita,
+        tipo_documento: d.tipo_documento === "CARTA_IDENTITA" ? "IDENT"
+          : d.tipo_documento === "CARTA_IDENTITA_ELETTRONICA" ? "IDELE"
+          : d.tipo_documento === "PASSAPORTO" ? "PASOR"
+          : d.tipo_documento === "PATENTE" ? "PATEN"
           : guest.tipo_documento,
-        numero_documento: result.numero_documento || guest.numero_documento,
+        numero_documento: d.numero_documento || guest.numero_documento,
         is_foreign: isForeign,
-        paese_nome: isForeign ? (result.stato_nascita_nome || "") : "",
+        paese_nome: isForeign ? (d.stato_nascita_nome || "") : "",
       });
     } catch { setOcrErr("Errore lettura documento"); }
     finally {
