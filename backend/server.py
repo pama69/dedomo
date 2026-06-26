@@ -2292,6 +2292,189 @@ async def rename_comune_receipt(
     return {"ok": True, "numero": new_numero}
 
 
+# ── Receipt email via Resend ─────────────────────────────────────────
+
+async def _send_receipt_via_resend(
+    to_email: str, subject: str, html_body: str, pdf_base64: str, pdf_filename: str
+) -> bool:
+    if not RESEND_API_KEY_AUTH:
+        logger.warning("[RESEND] RESEND_API_KEY non impostata — ricevuta non inviata")
+        return False
+    try:
+        async with httpx.AsyncClient(timeout=20) as client:
+            r = await client.post(
+                "https://api.resend.com/emails",
+                headers={"Authorization": f"Bearer {RESEND_API_KEY_AUTH}", "Content-Type": "application/json"},
+                json={
+                    "from": AUTH_EMAIL_FROM,
+                    "to": [to_email],
+                    "subject": subject,
+                    "html": html_body,
+                    "attachments": [{"filename": pdf_filename, "content": pdf_base64}],
+                },
+            )
+            if r.status_code not in (200, 201):
+                logger.error(f"[RESEND] Ricevuta errore {r.status_code}: {r.text}")
+                return False
+            logger.info(f"[RESEND] Ricevuta inviata a {to_email}, id={r.json().get('id', '?')}")
+            return True
+    except Exception as e:
+        logger.error(f"[RESEND] Eccezione invio ricevuta: {e}")
+        return False
+
+
+_DEDOMO_EMAIL_HEADER = (
+    '<div style="background:#0a0a10;padding:14px 24px;margin-bottom:20px;border-bottom:2px solid #5A7A59">'
+    '<span style="color:#5A7A59;font-weight:700;font-size:18px;letter-spacing:0.15em;font-family:sans-serif">DEDOMO</span>'
+    '</div>'
+)
+
+
+def _comune_receipt_email_html(ospite: str, numero: str, importo: float, property_name: str, arr_str: str, part_str: str, lang: str) -> str:
+    p_it = f" dal {arr_str} al {part_str}" if arr_str else ""
+    p_en = f" from {arr_str} to {part_str}" if arr_str else ""
+    p_de = f" vom {arr_str} bis {part_str}" if arr_str else ""
+    p_fr = f" du {arr_str} au {part_str}" if arr_str else ""
+    amt = f"€ {importo:.2f}"
+    wrap = '<div style="font-family:sans-serif;max-width:520px;margin:0 auto;padding:0 24px 24px">'
+    footer = '<hr style="border:none;border-top:1px solid #e5e7eb;margin:20px 0"><p style="color:#9ca3af;font-size:12px">{sig} <strong>Dedomo</strong>.</p></div>'
+    bodies = {
+        "it": f"{_DEDOMO_EMAIL_HEADER}{wrap}<p>Gentile {ospite},</p><p>in allegato la ricevuta dell'imposta di soggiorno <strong>N.&nbsp;{numero}</strong> per il soggiorno presso <strong>{property_name}</strong>{p_it}.</p><p>Importo: <strong>{amt}</strong></p>{footer.format(sig='Inviato tramite')}",
+        "en": f"{_DEDOMO_EMAIL_HEADER}{wrap}<p>Dear {ospite},</p><p>please find attached the tourist tax receipt <strong>No.&nbsp;{numero}</strong> for your stay at <strong>{property_name}</strong>{p_en}.</p><p>Amount: <strong>{amt}</strong></p>{footer.format(sig='Sent via')}",
+        "de": f"{_DEDOMO_EMAIL_HEADER}{wrap}<p>Sehr geehrte/r {ospite},</p><p>anbei die Kurtaxe-Quittung <strong>Nr.&nbsp;{numero}</strong> für Ihren Aufenthalt in <strong>{property_name}</strong>{p_de}.</p><p>Betrag: <strong>{amt}</strong></p>{footer.format(sig='Gesendet über')}",
+        "fr": f"{_DEDOMO_EMAIL_HEADER}{wrap}<p>Chère/Cher {ospite},</p><p>veuillez trouver ci-joint le reçu de taxe de séjour <strong>N°&nbsp;{numero}</strong> pour votre séjour à <strong>{property_name}</strong>{p_fr}.</p><p>Montant : <strong>{amt}</strong></p>{footer.format(sig='Envoyé via')}",
+    }
+    return bodies.get(lang, bodies["it"])
+
+
+def _locazione_receipt_email_html(capogruppo: str, numero: str, totale: float, property_name: str, period_start: str, period_end: str, lang: str) -> str:
+    p_it = f" dal {period_start} al {period_end}" if period_start else ""
+    p_en = f" from {period_start} to {period_end}" if period_start else ""
+    p_de = f" vom {period_start} bis {period_end}" if period_start else ""
+    p_fr = f" du {period_start} au {period_end}" if period_start else ""
+    amt = f"€ {totale:.2f}"
+    wrap = '<div style="font-family:sans-serif;max-width:520px;margin:0 auto;padding:0 24px 24px">'
+    footer = '<hr style="border:none;border-top:1px solid #e5e7eb;margin:20px 0"><p style="color:#9ca3af;font-size:12px">{sig} <strong>Dedomo</strong>.</p></div>'
+    bodies = {
+        "it": f"{_DEDOMO_EMAIL_HEADER}{wrap}<p>Gentile {capogruppo},</p><p>in allegato la ricevuta di locazione <strong>N.&nbsp;{numero}</strong> per il soggiorno presso <strong>{property_name}</strong>{p_it}.</p><p>Totale: <strong>{amt}</strong></p>{footer.format(sig='Inviato tramite')}",
+        "en": f"{_DEDOMO_EMAIL_HEADER}{wrap}<p>Dear {capogruppo},</p><p>please find attached the rental receipt <strong>No.&nbsp;{numero}</strong> for your stay at <strong>{property_name}</strong>{p_en}.</p><p>Total: <strong>{amt}</strong></p>{footer.format(sig='Sent via')}",
+        "de": f"{_DEDOMO_EMAIL_HEADER}{wrap}<p>Sehr geehrte/r {capogruppo},</p><p>anbei die Mietquittung <strong>Nr.&nbsp;{numero}</strong> für Ihren Aufenthalt in <strong>{property_name}</strong>{p_de}.</p><p>Gesamtbetrag: <strong>{amt}</strong></p>{footer.format(sig='Gesendet über')}",
+        "fr": f"{_DEDOMO_EMAIL_HEADER}{wrap}<p>Chère/Cher {capogruppo},</p><p>veuillez trouver ci-joint le reçu de location <strong>N°&nbsp;{numero}</strong> pour votre séjour à <strong>{property_name}</strong>{p_fr}.</p><p>Total : <strong>{amt}</strong></p>{footer.format(sig='Envoyé via')}",
+    }
+    return bodies.get(lang, bodies["it"])
+
+
+def _fmt_date(d) -> str:
+    try:
+        return datetime.fromisoformat(str(d)).strftime("%d/%m/%Y")
+    except Exception:
+        return str(d) if d else ""
+
+
+@api_router.post("/checkins/{checkin_id}/comune-receipts/{index}/send-email")
+async def send_comune_receipt_email(
+    checkin_id: str, index: int, request: Request, user=Depends(get_current_user)
+):
+    body = await request.json()
+    email = str(body.get("email", "")).strip().lower()
+    lang = str(body.get("lang", "it")).strip()[:2]
+    if not email or "@" not in email:
+        raise HTTPException(400, "Email non valida")
+
+    c = await db.checkins.find_one(
+        {"checkin_id": checkin_id, "user_id": user["user_id"]}, {"_id": 0}
+    )
+    if not c:
+        raise HTTPException(404, "Check-in non trovato")
+    receipts = c.get("comune_receipts", [])
+    if index < 0 or index >= len(receipts):
+        raise HTTPException(404, "Ricevuta non trovata")
+
+    receipt = receipts[index]
+    pdf_b64 = receipt.get("pdf_base64")
+    if not pdf_b64:
+        raise HTTPException(400, "PDF non disponibile — rigenera la ricevuta")
+
+    prop = await db.properties.find_one(
+        {"property_id": c.get("property_id"), "user_id": user["user_id"]}, {"_id": 0}
+    ) or {}
+    property_name = prop.get("nome", "")
+    numero = str(receipt.get("numero", ""))
+    ospite = receipt.get("ospite_nome", "Cliente")
+    importo = float(receipt.get("importo", 0))
+    arr_str = _fmt_date(receipt.get("data_arrivo", ""))
+    part_str = _fmt_date(receipt.get("data_partenza", ""))
+
+    subjects = {
+        "it": f"Ricevuta imposta di soggiorno N. {numero} — {property_name}",
+        "en": f"Tourist tax receipt No. {numero} — {property_name}",
+        "de": f"Kurtaxe-Quittung Nr. {numero} — {property_name}",
+        "fr": f"Reçu taxe de séjour N° {numero} — {property_name}",
+    }
+    ok = await _send_receipt_via_resend(
+        to_email=email,
+        subject=subjects.get(lang, subjects["it"]),
+        html_body=_comune_receipt_email_html(ospite, numero, importo, property_name, arr_str, part_str, lang),
+        pdf_base64=pdf_b64,
+        pdf_filename=f"ricevuta_soggiorno_{numero}.pdf",
+    )
+    if not ok:
+        raise HTTPException(502, "Errore invio email — controlla la configurazione Resend")
+    return {"ok": True}
+
+
+@api_router.post("/checkins/{checkin_id}/locazione-receipts/{index}/send-email")
+async def send_locazione_receipt_email(
+    checkin_id: str, index: int, request: Request, user=Depends(get_current_user)
+):
+    body = await request.json()
+    email = str(body.get("email", "")).strip().lower()
+    lang = str(body.get("lang", "it")).strip()[:2]
+    if not email or "@" not in email:
+        raise HTTPException(400, "Email non valida")
+
+    c = await db.checkins.find_one(
+        {"checkin_id": checkin_id, "user_id": user["user_id"]}, {"_id": 0}
+    )
+    if not c:
+        raise HTTPException(404, "Check-in non trovato")
+    receipts = c.get("locazione_receipts", [])
+    if index < 0 or index >= len(receipts):
+        raise HTTPException(404, "Ricevuta non trovata")
+
+    receipt = receipts[index]
+    pdf_b64 = receipt.get("pdf_base64")
+    if not pdf_b64:
+        raise HTTPException(400, "PDF non disponibile — rigenera la ricevuta")
+
+    prop = await db.properties.find_one(
+        {"property_id": c.get("property_id"), "user_id": user["user_id"]}, {"_id": 0}
+    ) or {}
+    property_name = prop.get("nome", "")
+    numero = str(receipt.get("numero", ""))
+    capogruppo = receipt.get("capogruppo_nome", "Cliente")
+    totale = float(receipt.get("totale", 0))
+    period_start = _fmt_date(receipt.get("periodo_inizio", ""))
+    period_end = _fmt_date(receipt.get("periodo_fine", ""))
+
+    subjects = {
+        "it": f"Ricevuta di locazione N. {numero} — {property_name}",
+        "en": f"Rental receipt No. {numero} — {property_name}",
+        "de": f"Mietquittung Nr. {numero} — {property_name}",
+        "fr": f"Reçu de location N° {numero} — {property_name}",
+    }
+    ok = await _send_receipt_via_resend(
+        to_email=email,
+        subject=subjects.get(lang, subjects["it"]),
+        html_body=_locazione_receipt_email_html(capogruppo, numero, totale, property_name, period_start, period_end, lang),
+        pdf_base64=pdf_b64,
+        pdf_filename=f"ricevuta_locazione_{numero}.pdf",
+    )
+    if not ok:
+        raise HTTPException(502, "Errore invio email — controlla la configurazione Resend")
+    return {"ok": True}
+
+
 @api_router.get("/properties/{property_id}/comune-receipts")
 async def property_comune_receipts(
     property_id: str, user=Depends(get_current_user)

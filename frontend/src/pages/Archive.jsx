@@ -592,8 +592,9 @@ function DownloadReceiptBtn({ checkinId, index, receipt, onDeleted }) {
       </div>
       {emailOpen && (
         <SendComuneReceiptByEmailModal
+          checkinId={checkinId}
+          index={index}
           receipt={receipt}
-          shareToken={shareToken}
           onClose={() => setEmailOpen(false)}
         />
       )}
@@ -602,53 +603,30 @@ function DownloadReceiptBtn({ checkinId, index, receipt, onDeleted }) {
   );
 }
 
-function SendComuneReceiptByEmailModal({ receipt, shareToken, onClose }) {
+function SendComuneReceiptByEmailModal({ checkinId, index, receipt, onClose }) {
   const [email, setEmail] = useState("");
-  const [firma, setFirma] = useState("");
+  const [lang, setLang] = useState("it");
+  const [sending, setSending] = useState(false);
+  const [sent, setSent] = useState(false);
+  const [err, setErr] = useState("");
 
   const numero = receipt?.numero || "";
   const ospite = receipt?.ospite_nome || "Cliente";
   const importo = (receipt?.importo || 0).toFixed(2);
-  const dataR = receipt?.data ? new Date(receipt.data).toLocaleDateString("it-IT") : "";
-  const periodoStart = receipt?.data_arrivo
-    ? new Date(receipt.data_arrivo).toLocaleDateString("it-IT")
-    : "";
-  const periodoEnd = receipt?.data_partenza
-    ? new Date(receipt.data_partenza).toLocaleDateString("it-IT")
-    : "";
 
-  const origin = window.location.origin;
-  const publicLink = shareToken
-    ? `${origin}/api/public/comune-receipt/${shareToken}`
-    : "(link non disponibile — rigenera la ricevuta)";
-
-  const subject = `Ricevuta Imposta di Soggiorno N. ${numero}`;
-  const bodyLines = [
-    `Gentile ${ospite},`,
-    "",
-    `in allegato la ricevuta dell'imposta di soggiorno per il soggiorno${periodoStart ? ` dal ${periodoStart} al ${periodoEnd}` : ""}.`,
-    "",
-    `Numero ricevuta: ${numero}`,
-    `Data: ${dataR}`,
-    `Importo: € ${importo}`,
-    "",
-    "Scarica la ricevuta da questo link:",
-    publicLink,
-    "",
-    "Cordiali saluti,",
-    firma || "",
-  ];
-  const body = bodyLines.join("\n");
-  const mailto = `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-
-  const sendMail = () => {
+  const send = async () => {
     if (!email) return;
-    window.location.href = mailto;
-    setTimeout(onClose, 800);
-  };
-  const copyLink = () => {
-    if (!shareToken) return;
-    navigator.clipboard?.writeText(publicLink).catch(() => {});
+    setSending(true);
+    setErr("");
+    try {
+      await api.post(`/checkins/${checkinId}/comune-receipts/${index}/send-email`, { email, lang });
+      setSent(true);
+      setTimeout(onClose, 2500);
+    } catch (e) {
+      setErr(e.response?.data?.detail || "Errore invio — riprova");
+    } finally {
+      setSending(false);
+    }
   };
 
   return (
@@ -658,88 +636,77 @@ function SendComuneReceiptByEmailModal({ receipt, shareToken, onClose }) {
       onClick={onClose}
     >
       <div
-        className="bg-background border border-amber-500/40 max-w-lg w-full p-6 flex flex-col gap-4"
+        className="bg-background border border-amber-500/40 max-w-md w-full p-6 flex flex-col gap-4"
         onClick={(e) => e.stopPropagation()}
       >
         <div>
           <h3 className="text-lg font-bold uppercase text-amber-300" style={{ fontFamily: "'Cabinet Grotesk', sans-serif" }}>
-            ✉ Invia Ricevuta al Cliente
+            ✉ Invia Ricevuta Soggiorno
           </h3>
           <p className="text-[10px] tracking-[0.25em] uppercase text-zinc-500 font-mono mt-1">
             N. {numero} · {ospite} · € {importo}
           </p>
         </div>
-        <p className="text-zinc-400 text-[11px] leading-relaxed">
-          Si aprirà il tuo programma email predefinito con oggetto e testo già compilati.
-          La mail verrà spedita <strong className="text-zinc-200">dal tuo indirizzo</strong>.
-          Il cliente troverà nel corpo della mail un link diretto per scaricare il PDF.
-        </p>
-        <label className="flex flex-col gap-1">
-          <span className="text-[10px] tracking-widest uppercase text-zinc-500">Email del cliente</span>
-          <input
-            type="email"
-            autoFocus
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="cliente@email.it"
-            data-testid="comune-email-input"
-            className="bg-surface-1 border border-border focus:border-amber-500 px-3 py-2 text-zinc-100 outline-none font-mono"
-          />
-        </label>
-        <label className="flex flex-col gap-1">
-          <span className="text-[10px] tracking-widest uppercase text-zinc-500">Firma</span>
-          <input
-            type="text"
-            value={firma}
-            onChange={(e) => setFirma(e.target.value)}
-            placeholder="Nome host"
-            data-testid="comune-email-firma"
-            className="bg-surface-1 border border-border focus:border-amber-500 px-3 py-2 text-zinc-100 outline-none font-mono"
-          />
-        </label>
-        <details className="border border-border p-3 text-[10px]">
-          <summary className="text-zinc-400 cursor-pointer uppercase tracking-widest">
-            Anteprima testo email
-          </summary>
-          <pre className="text-zinc-300 mt-2 whitespace-pre-wrap break-words text-[11px] font-mono">
-{body}
-          </pre>
-        </details>
-        {shareToken && (
-          <div className="flex gap-2 items-center text-[10px] font-mono">
-            <span className="text-zinc-500 shrink-0">Link PDF pubblico:</span>
-            <span className="text-amber-300 break-all flex-1 truncate" title={publicLink}>
-              {publicLink}
-            </span>
-            <button
-              type="button"
-              onClick={copyLink}
-              data-testid="comune-email-copy-link"
-              className="border border-border hover:border-zinc-500 text-zinc-400 px-2 py-1 cursor-pointer shrink-0"
-            >
-              Copia
-            </button>
+
+        {sent ? (
+          <div className="flex flex-col items-center gap-2 py-6">
+            <span className="text-emerald-400 text-3xl">✓</span>
+            <p className="text-emerald-400 text-sm font-medium">Email inviata!</p>
+            <p className="text-zinc-500 text-xs">Il PDF è stato consegnato a {email}</p>
           </div>
+        ) : (
+          <>
+            <label className="flex flex-col gap-1">
+              <span className="text-[10px] tracking-widest uppercase text-zinc-500">Email ospite</span>
+              <input
+                type="email"
+                autoFocus
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && !sending && send()}
+                placeholder="ospite@email.com"
+                data-testid="comune-email-input"
+                className="bg-surface-1 border border-border focus:border-amber-500 px-3 py-2 text-zinc-100 outline-none font-mono"
+              />
+            </label>
+
+            <div className="flex items-center gap-2">
+              {["it", "en", "de", "fr"].map((l) => (
+                <button
+                  key={l}
+                  type="button"
+                  onClick={() => setLang(l)}
+                  className={`px-3 py-1.5 text-[10px] uppercase tracking-widest cursor-pointer border transition-colors ${lang === l ? "border-amber-500 text-amber-300 bg-amber-500/10" : "border-border text-zinc-400 hover:border-zinc-500"}`}
+                >
+                  {l}
+                </button>
+              ))}
+              <span className="text-[10px] text-zinc-600 ml-1">lingua email</span>
+            </div>
+
+            {err && <p className="text-red-400 text-[11px] font-mono">{err}</p>}
+
+            <div className="flex gap-2 pt-1">
+              <button
+                type="button"
+                onClick={send}
+                disabled={!email || sending}
+                data-testid="comune-email-send"
+                className="flex-1 bg-amber-500 hover:bg-amber-400 text-[#05050A] px-4 py-3 uppercase tracking-widest text-[10px] cursor-pointer disabled:opacity-50 font-bold"
+              >
+                {sending ? "Invio in corso…" : "Invia via Dedomo"}
+              </button>
+              <button
+                type="button"
+                onClick={onClose}
+                data-testid="comune-email-cancel"
+                className="border border-border hover:border-zinc-500 text-zinc-400 px-4 py-3 uppercase tracking-widest text-[10px] cursor-pointer"
+              >
+                Chiudi
+              </button>
+            </div>
+          </>
         )}
-        <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={sendMail}
-            disabled={!email}
-            data-testid="comune-email-send"
-            className="flex-1 text-center bg-amber-500 hover:bg-amber-400 text-[#05050A] px-4 py-3 uppercase tracking-widest text-[10px] cursor-pointer disabled:opacity-50 font-bold"
-          >
-            Apri Programma Email
-          </button>
-          <button
-            type="button"
-            onClick={onClose}
-            data-testid="comune-email-cancel"
-            className="text-center border border-border hover:border-zinc-500 text-zinc-400 px-4 py-3 uppercase tracking-widest text-[10px] cursor-pointer"
-          >
-            Annulla
-          </button>
-        </div>
       </div>
     </div>
   );
@@ -1226,8 +1193,9 @@ function LocazioneReceiptRow({ checkinId, index, receipt, onDeleted }) {
       </div>
       {emailOpen && (
         <SendReceiptByEmailModal
+          checkinId={checkinId}
+          index={index}
           receipt={receipt}
-          shareToken={shareToken}
           onClose={() => setEmailOpen(false)}
         />
       )}
@@ -1283,147 +1251,110 @@ function GuestPageLink({ checkinId }) {
   );
 }
 
-function SendReceiptByEmailModal({ receipt, shareToken, onClose }) {
+function SendReceiptByEmailModal({ checkinId, index, receipt, onClose }) {
   const [email, setEmail] = useState("");
-  const [propietario, setPropietario] = useState(receipt.proprietario_nome || "");
+  const [lang, setLang] = useState("it");
+  const [sending, setSending] = useState(false);
+  const [sent, setSent] = useState(false);
+  const [err, setErr] = useState("");
 
-  const numero = receipt.numero || "";
-  const periodoStart = receipt.periodo_inizio
-    ? new Date(receipt.periodo_inizio).toLocaleDateString("it-IT")
-    : "";
-  const periodoEnd = receipt.periodo_fine
-    ? new Date(receipt.periodo_fine).toLocaleDateString("it-IT")
-    : "";
-  const totale = (receipt.totale || 0).toFixed(2);
-  // Public link to the PDF
-  const origin = window.location.origin;
-  const publicLink = shareToken
-    ? `${origin}/api/public/locazione/${shareToken}`
-    : "(link non disponibile — rigenera la ricevuta)";
+  const numero = receipt?.numero || "";
+  const capogruppo = receipt?.capogruppo_nome || "Cliente";
+  const totale = (receipt?.totale || 0).toFixed(2);
 
-  const subject = `Ricevuta di locazione ${numero}`;
-  const body = [
-    `Gentile ${receipt.capogruppo_nome || "Cliente"},`,
-    "",
-    `in allegato la ricevuta di locazione per il soggiorno dal ${periodoStart} al ${periodoEnd}.`,
-    "",
-    `Numero ricevuta: ${numero}`,
-    `Totale: € ${totale}`,
-    "",
-    `Scarica la ricevuta da questo link:`,
-    publicLink,
-    "",
-    "Cordiali saluti,",
-    propietario || "",
-  ].join("\n");
-
-  const mailto = `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-
-  const sendMail = () => {
+  const send = async () => {
     if (!email) return;
-    window.location.href = mailto;
-    setTimeout(onClose, 800);
-  };
-
-  const copyLink = () => {
-    if (!shareToken) return;
-    navigator.clipboard?.writeText(publicLink).catch(() => {});
+    setSending(true);
+    setErr("");
+    try {
+      await api.post(`/checkins/${checkinId}/locazione-receipts/${index}/send-email`, { email, lang });
+      setSent(true);
+      setTimeout(onClose, 2500);
+    } catch (e) {
+      setErr(e.response?.data?.detail || "Errore invio — riprova");
+    } finally {
+      setSending(false);
+    }
   };
 
   return (
     <div
       className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4"
-      data-testid={`email-modal-${receipt.numero}`}
+      data-testid={`email-modal-${numero}`}
       onClick={onClose}
     >
       <div
-        className="bg-background border border-amber-500/40 max-w-lg w-full p-6 flex flex-col gap-4"
+        className="bg-background border border-amber-500/40 max-w-md w-full p-6 flex flex-col gap-4"
         onClick={(e) => e.stopPropagation()}
       >
         <div>
           <h3 className="text-lg font-bold uppercase text-amber-300" style={{ fontFamily: "'Cabinet Grotesk', sans-serif" }}>
-            ✉ Invia Ricevuta al Cliente
+            ✉ Invia Ricevuta Locazione
           </h3>
           <p className="text-[10px] tracking-[0.25em] uppercase text-zinc-500 font-mono mt-1">
-            {numero} · {receipt.capogruppo_nome}
+            N. {numero} · {capogruppo} · € {totale}
           </p>
         </div>
 
-        <p className="text-zinc-400 text-[11px] leading-relaxed">
-          Si aprirà il tuo programma email predefinito (Gmail web, Outlook, Mail) con oggetto e
-          testo già compilati. La mail verrà spedita <strong className="text-zinc-200">dal tuo indirizzo</strong>.
-          Il cliente troverà nel corpo della mail un link diretto per scaricare il PDF.
-        </p>
-
-        <label className="flex flex-col gap-1">
-          <span className="text-[10px] tracking-widest uppercase text-zinc-500">Email del cliente</span>
-          <input
-            type="email"
-            autoFocus
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="cliente@email.it"
-            data-testid="email-input"
-            className="bg-surface-1 border border-border focus:border-amber-500 px-3 py-2 text-zinc-100 outline-none font-mono"
-          />
-        </label>
-
-        <label className="flex flex-col gap-1">
-          <span className="text-[10px] tracking-widest uppercase text-zinc-500">Firma (proprietario)</span>
-          <input
-            type="text"
-            value={propietario}
-            onChange={(e) => setPropietario(e.target.value)}
-            data-testid="email-firma"
-            className="bg-surface-1 border border-border focus:border-amber-500 px-3 py-2 text-zinc-100 outline-none font-mono"
-          />
-        </label>
-
-        <details className="border border-border p-3 text-[10px]">
-          <summary className="text-zinc-400 cursor-pointer uppercase tracking-widest">
-            Anteprima testo email
-          </summary>
-          <pre className="text-zinc-300 mt-2 whitespace-pre-wrap break-words text-[11px] font-mono">
-{body}
-          </pre>
-        </details>
-
-        {shareToken && (
-          <div className="flex gap-2 items-center text-[10px] font-mono">
-            <span className="text-zinc-500 shrink-0">Link PDF pubblico:</span>
-            <span className="text-amber-300 break-all flex-1 truncate" title={publicLink}>
-              {publicLink}
-            </span>
-            <button
-              type="button"
-              onClick={copyLink}
-              data-testid="email-copy-link"
-              className="border border-border hover:border-zinc-500 text-zinc-400 px-2 py-1 cursor-pointer shrink-0"
-            >
-              Copia
-            </button>
+        {sent ? (
+          <div className="flex flex-col items-center gap-2 py-6">
+            <span className="text-emerald-400 text-3xl">✓</span>
+            <p className="text-emerald-400 text-sm font-medium">Email inviata!</p>
+            <p className="text-zinc-500 text-xs">Il PDF è stato consegnato a {email}</p>
           </div>
-        )}
+        ) : (
+          <>
+            <label className="flex flex-col gap-1">
+              <span className="text-[10px] tracking-widest uppercase text-zinc-500">Email cliente</span>
+              <input
+                type="email"
+                autoFocus
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && !sending && send()}
+                placeholder="cliente@email.com"
+                data-testid="email-input"
+                className="bg-surface-1 border border-border focus:border-amber-500 px-3 py-2 text-zinc-100 outline-none font-mono"
+              />
+            </label>
 
-        <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={sendMail}
-            disabled={!email}
-            data-testid="email-send"
-            className="flex-1 text-center bg-amber-500 hover:bg-amber-400 text-[#05050A] px-4 py-3 uppercase tracking-widest text-[10px] cursor-pointer disabled:opacity-50 font-bold"
-          >
-            Apri Programma Email
-          </button>
-          <button
-            type="button"
-            onClick={onClose}
-            data-testid="email-cancel"
-            className="text-center border border-border hover:border-zinc-500 text-zinc-400 px-4 py-3 uppercase tracking-widest text-[10px] cursor-pointer"
-          >
-            Annulla
-          </button>
-        </div>
+            <div className="flex items-center gap-2">
+              {["it", "en", "de", "fr"].map((l) => (
+                <button
+                  key={l}
+                  type="button"
+                  onClick={() => setLang(l)}
+                  className={`px-3 py-1.5 text-[10px] uppercase tracking-widest cursor-pointer border transition-colors ${lang === l ? "border-amber-500 text-amber-300 bg-amber-500/10" : "border-border text-zinc-400 hover:border-zinc-500"}`}
+                >
+                  {l}
+                </button>
+              ))}
+              <span className="text-[10px] text-zinc-600 ml-1">lingua email</span>
+            </div>
+
+            {err && <p className="text-red-400 text-[11px] font-mono">{err}</p>}
+
+            <div className="flex gap-2 pt-1">
+              <button
+                type="button"
+                onClick={send}
+                disabled={!email || sending}
+                data-testid="email-send"
+                className="flex-1 bg-amber-500 hover:bg-amber-400 text-[#05050A] px-4 py-3 uppercase tracking-widest text-[10px] cursor-pointer disabled:opacity-50 font-bold"
+              >
+                {sending ? "Invio in corso…" : "Invia via Dedomo"}
+              </button>
+              <button
+                type="button"
+                onClick={onClose}
+                data-testid="email-cancel"
+                className="border border-border hover:border-zinc-500 text-zinc-400 px-4 py-3 uppercase tracking-widest text-[10px] cursor-pointer"
+              >
+                Chiudi
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
