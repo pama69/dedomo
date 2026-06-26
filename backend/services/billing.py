@@ -56,14 +56,11 @@ CONFIG_KEY = "stripe_resources"  # row id in db.app_config
 
 def _init_stripe():
     """Initialise the stripe SDK. Idempotent. Re-reads env each call."""
-    api_key = os.environ.get("STRIPE_API_KEY", "")
+    api_key = os.environ.get("STRIPE_SECRET_KEY", "")
     if not api_key:
-        raise RuntimeError("STRIPE_API_KEY missing in .env")
+        raise RuntimeError("STRIPE_SECRET_KEY missing in env")
     stripe.api_key = api_key
-    if "sk_test_emergent" in api_key:
-        stripe.api_base = "https://integrations.emergentagent.com/stripe"
-    else:
-        stripe.api_base = "https://api.stripe.com"
+    stripe.api_base = "https://api.stripe.com"
     _refresh_env()
 
 

@@ -113,21 +113,15 @@ def build_billing_router(db, get_current_user, get_admin_user) -> APIRouter:
             payload = await request.body()
             sig = request.headers.get("Stripe-Signature", "")
             webhook_secret = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
-            if webhook_secret:
-                billing_svc._init_stripe()
-                try:
-                    event = stripe_sdk.Webhook.construct_event(
-                        payload, sig, webhook_secret,
-                    )
-                except stripe_sdk.error.SignatureVerificationError as e:
-                    logger.warning(f"[webhook] invalid signature: {e}")
-                    raise HTTPException(400, "Invalid signature")
-            else:
-                import json
-                try:
-                    event = json.loads(payload.decode("utf-8"))
-                except Exception:
-                    return {"received": False}
+            if not webhook_secret:
+                logger.warning("[webhook] STRIPE_WEBHOOK_SECRET non configurato — richiesta ignorata")
+                raise HTTPException(400, "Webhook secret non configurato")
+            billing_svc._init_stripe()
+            try:
+                event = stripe_sdk.Webhook.construct_event(payload, sig, webhook_secret)
+            except stripe_sdk.error.SignatureVerificationError as e:
+                logger.warning(f"[webhook] firma non valida: {e}")
+                raise HTTPException(400, "Invalid signature")
 
             etype = event.get("type") if isinstance(event, dict) else event["type"]
             obj = (event.get("data") if isinstance(event, dict) else event["data"]).get("object") or {}
