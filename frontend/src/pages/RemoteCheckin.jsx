@@ -214,6 +214,43 @@ function Autocomplete({ token, type, value, label, placeholder, onSelect, disabl
   );
 }
 
+// ── Date input GG/MM/AAAA ─────────────────────────────────────────
+function DateDMY({ value, onChange }) {
+  const [dd, setDd] = useState("");
+  const [mm, setMm] = useState("");
+  const [yyyy, setYyyy] = useState("");
+
+  useEffect(() => {
+    if (value && value.match(/^\d{4}-\d{2}-\d{2}$/)) {
+      const [y, m, d] = value.split("-");
+      setYyyy(y); setMm(m); setDd(d);
+    }
+  }, [value]);
+
+  const emit = (d, m, y) => {
+    if (d.length === 2 && m.length === 2 && y.length === 4) {
+      onChange(`${y}-${m}-${d}`);
+    } else {
+      onChange("");
+    }
+  };
+
+  const handleDd = (v) => { const s = v.replace(/\D/g, "").slice(0, 2); setDd(s); emit(s, mm, yyyy); };
+  const handleMm = (v) => { const s = v.replace(/\D/g, "").slice(0, 2); setMm(s); emit(dd, s, yyyy); };
+  const handleYyyy = (v) => { const s = v.replace(/\D/g, "").slice(0, 4); setYyyy(s); emit(dd, mm, s); };
+
+  return (
+    <div className="grid grid-cols-3 gap-2">
+      <input inputMode="numeric" placeholder="GG" value={dd} onChange={(e) => handleDd(e.target.value)}
+        className="input-modern font-mono text-center" maxLength={2} />
+      <input inputMode="numeric" placeholder="MM" value={mm} onChange={(e) => handleMm(e.target.value)}
+        className="input-modern font-mono text-center" maxLength={2} />
+      <input inputMode="numeric" placeholder="AAAA" value={yyyy} onChange={(e) => handleYyyy(e.target.value)}
+        className="input-modern font-mono text-center" maxLength={4} />
+    </div>
+  );
+}
+
 // ── Single guest form ─────────────────────────────────────────────
 function GuestForm({ token, guest, onChange, t, index, onRemove, canRemove }) {
   const [ocrBusy, setOcrBusy] = useState(false);
@@ -346,8 +383,7 @@ function GuestForm({ token, guest, onChange, t, index, onRemove, canRemove }) {
         </label>
         <label className="flex flex-col gap-1">
           <span className="text-[10px] tracking-widest uppercase text-zinc-500">{t.dataNascita}</span>
-          <input type="date" value={guest.data_nascita} onChange={(e) => set("data_nascita", e.target.value)}
-            className="input-modern font-mono" />
+          <DateDMY value={guest.data_nascita} onChange={(v) => set("data_nascita", v)} />
         </label>
       </div>
 

@@ -2799,6 +2799,12 @@ async def submit_remote_checkin(token: str, request: Request):
         }},
     )
     await _notify_host_remote_submitted(doc["user_id"], doc["property_name"], doc["guest_email"], len(guests))
+    await send_push(
+        db, doc["user_id"],
+        f"Check-in remoto — {doc['property_name']}",
+        f"{len(guests)} ospite/i hanno compilato il form. Vai in Archivio per autorizzare l'invio.",
+        url="/archive",
+    )
     return {"ok": True}
 
 
