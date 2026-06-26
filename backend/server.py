@@ -1654,13 +1654,16 @@ async def push_vapid_key():
 @api_router.post("/push/subscribe")
 async def push_subscribe(request: Request, user=Depends(get_current_user)):
     sub = await request.json()
-    logger.info(f"[PUSH] subscribe user={user['user_id']} endpoint={str(sub.get('endpoint',''))[:60]}")
-    await db.push_subscriptions.update_one(
-        {"user_id": user["user_id"]},
+    uid = user["user_id"]
+    logger.info(f"[PUSH] subscribe uid={uid} endpoint={str(sub.get('endpoint',''))[:80]}")
+    result = await db.push_subscriptions.update_one(
+        {"user_id": uid},
         {"$set": {"subscription": sub, "updated_at": datetime.now(timezone.utc).isoformat()}},
         upsert=True,
     )
-    return {"ok": True}
+    verified = await db.push_subscriptions.find_one({"user_id": uid}, {"_id": 0, "user_id": 1})
+    logger.info(f"[PUSH] upserted={result.upserted_id} matched={result.matched_count} verified={verified}")
+    return {"ok": True, "uid": uid, "saved": verified is not None}
 
 
 @api_router.delete("/push/subscribe")

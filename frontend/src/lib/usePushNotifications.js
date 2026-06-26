@@ -68,7 +68,10 @@ export function usePushNotifications() {
       });
 
       step("5/5 Salvataggio nel database...");
-      await api.post("/push/subscribe", JSON.parse(JSON.stringify(sub)));
+      const saveRes = await api.post("/push/subscribe", JSON.parse(JSON.stringify(sub)));
+      if (!saveRes.data.saved) {
+        throw new Error(`Salvataggio fallito (uid=${saveRes.data.uid})`);
+      }
       setIsSubscribed(true);
       return { ok: true };
     } catch (e) {
