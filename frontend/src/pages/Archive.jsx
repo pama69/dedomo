@@ -316,6 +316,7 @@ export default function Archive() {
                           checkinId={c.checkin_id}
                           guests={c.guests}
                           imposta={is_?.calculation?.totale_imposta || 0}
+                          suggestedNumero={nextLocazioneNum(items, c.property_id)}
                           onGenerated={() => reloadCheckin(c.checkin_id)}
                         />
                         {c.locazione_receipts && c.locazione_receipts.length > 0 && (
@@ -342,6 +343,7 @@ export default function Archive() {
                               checkinId={c.checkin_id}
                               guests={c.guests}
                               importo={importoCalc}
+                              suggestedNumero={nextComuneNum(items, c.property_id)}
                               onGenerated={() => reloadCheckin(c.checkin_id)}
                             />
                           );
@@ -700,7 +702,40 @@ function SendComuneReceiptByEmailModal({ receipt, shareToken, onClose }) {
   );
 }
 
-function GenerateReceiptButton({ checkinId, guests, importo, onGenerated }) {
+function nextComuneNum(items, propertyId) {
+  const year = new Date().getFullYear();
+  let max = 0;
+  for (const c of items) {
+    if (c.property_id !== propertyId) continue;
+    for (const rc of c.comune_receipts || []) {
+      if (rc.data_ricevuta && !rc.data_ricevuta.startsWith(String(year))) continue;
+      const n = parseInt(rc.numero, 10);
+      if (!isNaN(n) && n > max) max = n;
+    }
+  }
+  return max + 1;
+}
+
+function nextLocazioneNum(items, propertyId) {
+  const year = new Date().getFullYear();
+  let max = 0;
+  for (const c of items) {
+    if (c.property_id !== propertyId) continue;
+    for (const rc of c.locazione_receipts || []) {
+      const num = rc.numero || "";
+      const yearInNum = num.match(/(\d{4})/)?.[1];
+      if (yearInNum && parseInt(yearInNum) !== year) continue;
+      if (!yearInNum && rc.data_emissione && !rc.data_emissione.startsWith(String(year))) continue;
+      const trailing = num.match(/(\d+)$/)?.[1];
+      if (!trailing) continue;
+      const n = parseInt(trailing, 10);
+      if (!isNaN(n) && n > max) max = n;
+    }
+  }
+  return `RL-${year}/${String(max + 1).padStart(3, "0")}`;
+}
+
+function GenerateReceiptButton({ checkinId, guests, importo, suggestedNumero, onGenerated }) {
   const [open, setOpen] = useState(false);
   const [numero, setNumero] = useState("");
   const [data, setData] = useState(new Date().toISOString().slice(0, 10));
@@ -731,7 +766,7 @@ function GenerateReceiptButton({ checkinId, guests, importo, onGenerated }) {
     return (
       <button
         type="button"
-        onClick={() => setOpen(true)}
+        onClick={() => { setNumero(String(suggestedNumero ?? "")); setOpen(true); }}
         data-testid={`gen-receipt-${checkinId}`}
         className="text-center border border-amber-500/40 hover:bg-amber-500/10 hover:border-amber-400 text-amber-400 px-4 py-3 uppercase tracking-widest text-[10px] cursor-pointer transition-colors"
       >
@@ -756,6 +791,9 @@ function GenerateReceiptButton({ checkinId, guests, importo, onGenerated }) {
           data-testid={`gen-receipt-numero-${checkinId}`}
           className="bg-transparent border border-border px-3 py-2 text-zinc-100 placeholder:text-zinc-600 focus:border-zinc-300 outline-none text-sm font-mono"
         />
+        {suggestedNumero != null && (
+          <span className="text-[10px] text-zinc-600">◎ suggerito in base alle ricevute esistenti · modificabile</span>
+        )}
       </label>
       <label className="flex flex-col gap-1">
         <span className="text-[10px] tracking-[0.25em] uppercase text-zinc-500">Data Ricevuta</span>
@@ -869,7 +907,7 @@ function RefreshReceiptsButton() {
 // LOCAZIONE RECEIPT — Generate button + modal
 // ============================================================
 
-function GenerateLocazioneButton({ checkinId, guests, imposta, onGenerated }) {
+function GenerateLocazioneButton({ checkinId, guests, imposta, suggestedNumero, onGenerated }) {
   const [open, setOpen] = useState(false);
   const [importo, setImporto] = useState("");
   const [numero, setNumero] = useState("");
@@ -953,20 +991,30 @@ function GenerateLocazioneButton({ checkinId, guests, imposta, onGenerated }) {
           <input
             type="checkbox"
             checked={autoNumero}
-            onChange={(e) => setAutoNumero(e.target.checked)}
+            onChange={(e) => {
+              setAutoNumero(e.target.checked);
+              if (!e.target.checked && !numero && suggestedNumero) {
+                setNumero(suggestedNumero);
+              }
+            }}
             data-testid={`loc-auto-${checkinId}`}
           />
           Auto-incrementale per CF (consigliato)
         </label>
         {!autoNumero && (
-          <input
-            type="text"
-            value={numero}
-            onChange={(e) => setNumero(e.target.value)}
-            placeholder="es. RL-2026/047"
-            data-testid={`loc-numero-${checkinId}`}
-            className="bg-surface-1 border border-border focus:border-sky-500 px-3 py-2 text-zinc-100 outline-none font-mono"
-          />
+          <div className="flex flex-col gap-1">
+            <input
+              type="text"
+              value={numero}
+              onChange={(e) => setNumero(e.target.value)}
+              placeholder="es. RL-2026/047"
+              data-testid={`loc-numero-${checkinId}`}
+              className="bg-surface-1 border border-border focus:border-sky-500 px-3 py-2 text-zinc-100 outline-none font-mono"
+            />
+            {suggestedNumero && (
+              <span className="text-[10px] text-zinc-600">◎ suggerito in base alle ricevute esistenti · modificabile</span>
+            )}
+          </div>
         )}
       </div>
 
