@@ -51,7 +51,10 @@ def _refresh_env():
     PRICE_EXTRA_EUR = _env_float("PRICE_EXTRA_EUR", "9.99")
 
 
-CONFIG_KEY = "stripe_resources"  # row id in db.app_config
+def _config_key() -> str:
+    """Separate cache key for test vs live mode."""
+    key = os.environ.get("STRIPE_SECRET_KEY", "")
+    return "stripe_resources_test" if key.startswith("sk_test") else "stripe_resources_live"
 
 
 def _init_stripe():
@@ -70,7 +73,8 @@ async def ensure_stripe_resources(db) -> Dict[str, str]:
     Returns {"product_id", "price_id", "tax_rate_id"}.
     """
     _init_stripe()
-    cfg = await db.app_config.find_one({"_id": CONFIG_KEY}) or {}
+    config_key = _config_key()
+    cfg = await db.app_config.find_one({"_id": config_key}) or {}
     needed = ["product_id", "price_id", "tax_rate_id"]
     if all(cfg.get(k) for k in needed):
         return {k: cfg[k] for k in needed}
@@ -111,7 +115,7 @@ async def ensure_stripe_resources(db) -> Dict[str, str]:
         tax_rate_id = tr.id
 
     await db.app_config.update_one(
-        {"_id": CONFIG_KEY},
+        {"_id": config_key},
         {"$set": {
             "product_id": product_id,
             "price_id": price_id,
