@@ -438,6 +438,24 @@ function DownloadReceiptBtn({ checkinId, index, receipt, onDeleted }) {
   const [err, setErr] = useState("");
   const [confirmDel, setConfirmDel] = useState(false);
   const [emailOpen, setEmailOpen] = useState(false);
+  const [editNumero, setEditNumero] = useState(false);
+  const [newNumero, setNewNumero] = useState("");
+  const [renaming, setRenaming] = useState(false);
+
+  const saveNumero = async () => {
+    if (!newNumero.trim()) return;
+    setRenaming(true);
+    try {
+      await api.patch(`/checkins/${checkinId}/comune-receipts/${index}/numero`, { numero: newNumero });
+      setEditNumero(false);
+      setPdfUrl("");
+      onDeleted && onDeleted();
+    } catch (e) {
+      setErr(e.response?.data?.detail || "Errore modifica numero");
+    } finally {
+      setRenaming(false);
+    }
+  };
 
   const printReceipt = () => {
     // Use HTML preview endpoint (window.print friendly)
@@ -474,8 +492,34 @@ function DownloadReceiptBtn({ checkinId, index, receipt, onDeleted }) {
   return (
     <div className="flex flex-col gap-2 border-t border-amber-500/20 pt-2">
       <div className="flex justify-between items-center text-[10px] font-mono">
-        <div className="flex flex-col">
-          <span className="text-zinc-100">N. {numero}</span>
+        <div className="flex flex-col gap-1">
+          {editNumero ? (
+            <div className="flex items-center gap-1">
+              <input
+                type="text"
+                inputMode="numeric"
+                value={newNumero}
+                onChange={(e) => setNewNumero(e.target.value.replace(/\D/g, ""))}
+                autoFocus
+                className="w-20 bg-transparent border border-amber-500/60 px-2 py-0.5 text-zinc-100 outline-none font-mono text-[10px]"
+              />
+              <button onClick={saveNumero} disabled={renaming} className="text-emerald-400 hover:text-emerald-300 cursor-pointer disabled:opacity-50 text-[10px]">
+                {renaming ? "..." : "✓"}
+              </button>
+              <button onClick={() => setEditNumero(false)} className="text-zinc-500 hover:text-zinc-300 cursor-pointer text-[10px]">✕</button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <span className="text-zinc-100">N. {numero}</span>
+              <button
+                onClick={() => { setNewNumero(numero); setEditNumero(true); }}
+                className="text-zinc-600 hover:text-zinc-400 cursor-pointer text-[10px]"
+                title="Modifica numero ricevuta"
+              >
+                Modifica n.
+              </button>
+            </div>
+          )}
           <span className="text-zinc-500">{data} · {receipt?.ospite_nome || ""}</span>
         </div>
         <span className="text-amber-400 font-bold">€ {importo?.toFixed(2)}</span>

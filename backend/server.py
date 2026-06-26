@@ -2232,6 +2232,66 @@ async def delete_comune_receipt(
     return {"ok": True, "remaining": len(new_receipts)}
 
 
+@api_router.patch("/checkins/{checkin_id}/comune-receipts/{index}/numero")
+async def rename_comune_receipt(
+    checkin_id: str, index: int, request: Request, user=Depends(get_current_user)
+):
+    """Aggiorna il numero di una ricevuta IS esistente e rigenera il PDF."""
+    body = await request.json()
+    new_numero = str(body.get("numero", "")).strip()
+    if not new_numero or not new_numero.isdigit():
+        raise HTTPException(400, "Numero ricevuta non valido (solo cifre)")
+
+    c = await db.checkins.find_one(
+        {"checkin_id": checkin_id, "user_id": user["user_id"]}, {"_id": 0}
+    )
+    if not c:
+        raise HTTPException(404, "Check-in non trovato")
+    receipts = c.get("comune_receipts", [])
+    if index < 0 or index >= len(receipts):
+        raise HTTPException(404, "Ricevuta non trovata")
+
+    entry = dict(receipts[index])
+    prop = await db.properties.find_one(
+        {"property_id": c.get("property_id"), "user_id": user["user_id"]}, {"_id": 0}
+    ) or {}
+
+    # Ricostruisce ospite_residenza dai dati ospite originali
+    guests = c.get("guests", [])
+    ospite_idx = entry.get("ospite_index", 0)
+    g = guests[ospite_idx] if ospite_idx < len(guests) else {}
+    if g.get("is_foreign"):
+        ospite_res = g.get("paese_nome") or g.get("luogo_nascita") or "—"
+    else:
+        ospite_res = g.get("luogo_nascita") or "—"
+
+    new_pdf = generate_comune_receipt(
+        numero_ricevuta=new_numero,
+        data_ricevuta=entry.get("data", ""),
+        comune_nome=prop.get("comune", "—"),
+        property_name=prop.get("nome", ""),
+        property_address=prop.get("indirizzo", ""),
+        property_comune=f"{prop.get('comune','')} ({prop.get('provincia','')})",
+        ospite_nome_cognome=entry.get("ospite_nome", ""),
+        ospite_residenza=ospite_res,
+        importo=entry.get("importo", 0),
+        data_arrivo=entry.get("data_arrivo", ""),
+        data_partenza=entry.get("data_partenza", ""),
+        pernottamenti=entry.get("notti_pagate", 1),
+        proprietario=prop.get("proprietario", ""),
+        codice_fiscale=prop.get("codice_fiscale", ""),
+    )
+
+    entry["numero"] = new_numero
+    entry["pdf_base64"] = base64.b64encode(new_pdf).decode()
+    receipts[index] = entry
+    await db.checkins.update_one(
+        {"checkin_id": checkin_id},
+        {"$set": {"comune_receipts": receipts}},
+    )
+    return {"ok": True, "numero": new_numero}
+
+
 @api_router.get("/properties/{property_id}/comune-receipts")
 async def property_comune_receipts(
     property_id: str, user=Depends(get_current_user)
