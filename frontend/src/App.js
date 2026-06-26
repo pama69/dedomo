@@ -45,6 +45,7 @@ import GuestPage from "@/pages/GuestPage";
 import Landing from "@/pages/Landing";
 import Privacy from "@/pages/Privacy";
 import HouseManual from "@/pages/HouseManual";
+import NotificationBanner from "@/components/NotificationBanner";
 
 function AppRouter() {
   return (
@@ -81,6 +82,7 @@ function App() {
         <BrowserRouter>
           <AuthProvider>
             <ErrorBoundary>
+              <NotificationBanner />
               <AppRouter />
             </ErrorBoundary>
           </AuthProvider>

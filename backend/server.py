@@ -55,6 +55,7 @@ from services.turismo5 import (
     ITALIA_CODE,
 )
 from services.imposta_soggiorno import calcola_imposta
+from services.push_service import send_push, VAPID_PUBLIC_KEY
 from services.pdf_service import generate_tax_receipt, generate_comune_receipt
 from services.retry_service import (
     classify_error,
@@ -1639,6 +1640,31 @@ async def send_guest_welcome(checkin_id: str, body: dict, user=Depends(get_curre
         "url": f"{base}/guest/{token}" if base else f"/guest/{token}",
         "email_sent": ok,
     }
+
+
+# ====================================================================
+# PUSH NOTIFICATIONS
+# ====================================================================
+
+@api_router.get("/push/vapid-public-key")
+async def push_vapid_key():
+    return {"public_key": VAPID_PUBLIC_KEY}
+
+
+@api_router.post("/push/subscribe")
+async def push_subscribe(sub: dict, user=Depends(get_current_user)):
+    await db.push_subscriptions.update_one(
+        {"user_id": user["user_id"]},
+        {"$set": {"subscription": sub, "updated_at": datetime.now(timezone.utc).isoformat()}},
+        upsert=True,
+    )
+    return {"ok": True}
+
+
+@api_router.delete("/push/subscribe")
+async def push_unsubscribe(user=Depends(get_current_user)):
+    await db.push_subscriptions.delete_one({"user_id": user["user_id"]})
+    return {"ok": True}
 
 
 # ====================================================================
@@ -3481,7 +3507,7 @@ async def _add_notification(
     checkin_id: Optional[str] = None,
     portal: Optional[str] = None,
 ) -> None:
-    """Append a user-facing notification."""
+    """Append a user-facing notification and send Web Push if subscribed."""
     await db.notifications.insert_one({
         "notification_id": f"ntf_{uuid.uuid4().hex[:12]}",
         "user_id": user_id,
@@ -3493,6 +3519,9 @@ async def _add_notification(
         "read": False,
         "created_at": datetime.now(timezone.utc).isoformat(),
     })
+    # Push per eventi importanti (non per warning transitori già gestiti da retry)
+    if level in ("success", "error"):
+        await send_push(db, user_id, title, body, url="/archive")
 
 
 async def _process_submit_result(
@@ -3899,6 +3928,14 @@ async def fetch_alloggiati_receipts(force_all: bool = False) -> dict:
                 )
                 downloaded += 1
                 logger.info(f"[receipts-job] saved receipt for {c['checkin_id']} (date={send_date})")
+                # Notifica push all'utente
+                arrival = c.get("data_arrivo", "")
+                await send_push(
+                    db, c["user_id"],
+                    "✓ Ricevuta Alloggiati Web pronta",
+                    f"La ricevuta per il check-in del {arrival} è disponibile in Archivio.",
+                    url="/archive",
+                )
             else:
                 raw = ric.get("raw") or {}
                 outcome = raw.get("RicevutaResult") or {}
