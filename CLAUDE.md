@@ -4,29 +4,29 @@
 
 ---
 
-## 📌 Sessione corrente — 2026-06-25 (pomeriggio)
+## 📌 Sessione corrente — 2026-06-26
 
-**Tema della sessione:** miglioramenti guest page (immagini, attrazioni), Manuale Casa (feature grossa), Ross 1000 campi documento, landing pubblica ripristinata, validazione OCR.
+**Tema della sessione:** scheda ospiti più completa in Archivio, numerazione progressiva ricevute IS e Locazione, debug email Resend, miglioramenti guest page (immagini Wikimedia, link Google Maps, caricamento animato).
 
-**Stato:** tutti i commit della giornata sono su `main` (HEAD `a7eada4` — docs). Railway già deployato.
+**Stato:** commit `dba2012` su `main` locale — **non ancora pushato** (in attesa ok Paolo).
 
 **🆕 Feature nuove di oggi:**
-- **Manuale Casa** per ogni proprietà: `/settings/properties/:id/manual` con Wi-Fi+QR, check-in/out, rifiuti, parcheggio, emergenze + sezioni libere. Mostrato in cima alla guest page, tradotto on-demand via GPT-4o-mini con cache per hash sha1 dei testi
-- **Landing page pubblica** ripristinata da repo separata `dedomo-emergent`, route `/` ora mostra landing autocontenuta (no più redirect a `/dashboard`)
-- **Fallback immagini Unsplash** quando Wikipedia non ha foto (cantine, tour) — env `UNSPLASH_ACCESS_KEY`
-- **Validazione OCR campi sospetti** in Checkin.jsx (bordo ambra, non bloccante)
+- **Archivio — scheda ospite arricchita:** data nascita + nazionalità visibili sotto ogni ospite del check-in
+- **Archivio — GuestPageLink:** link "Pagina personale ospite" sotto ogni capofamiglia con pulsante copia
+- **Numerazione progressiva ricevute** (client-side, senza chiamate extra):
+  - `nextComuneNum(items, propertyId)` — max numero `comune_receipts` per stessa struttura + anno corrente + 1
+  - `nextLocazioneNum(items, propertyId)` — max numero `locazione_receipts` (formato `RL-2026/NNN`) + 1
+  - `GenerateReceiptButton`: campo pre-compilato all'apertura, completamente modificabile
+  - `GenerateLocazioneButton`: auto-incrementale backend rimane default; se si deseleziona, campo pre-riempito con suggerito
 
 **🛠️ Fix di oggi:**
-- Wikipedia 403 su Railway → User-Agent `Dedomo/1.0 (pama69@gmail.com)`
-- TTL attrazioni 168h → 48h (rotazione suggerimenti)
-- Cache attrazioni: rigenerata se URL non sono Wikimedia o Unsplash (era ferma su URL fasulli)
-- Ross 1000: aggiunti `tipodocumento`/`numerodocumento`/`statodocumento` al SOAP (mancavano, segnalati obbligatori)
+- Email benvenuto Resend: aggiunto logging dettagliato `[RESEND]` per diagnosticare 401 (causato da API key con whitespace invisibile al paste in Railway)
+- Guest page: immagini attrazioni da Wikimedia Commons (non più URL GPT fasulli); link Google Maps invece di Wikipedia
+- Guest page: animazione caricamento (spinner SVG + emoji foglia pulsante + pallini rimbalzanti)
+- Mercati rionali: raggio 15km, posizione precisa (piazza/via), link Google Maps clicabile
 
-**🔎 Verifiche residue richieste da Paolo:**
-- Test Ross 1000 al primo check-in PROD (confermare che i 3 campi documento arrivino bene a Turismo 5 Abruzzo)
-
-**🌐 Env vars Railway aggiunte oggi:**
-- `UNSPLASH_ACCESS_KEY` — confermata da Paolo
+**🔎 Verifiche residue:**
+- Test Ross 1000 al primo check-in PROD (tipodocumento/numerodocumento/statodocumento)
 
 **Cronologia dettagliata della sessione:** vedi `## Archivio sessioni` in fondo a questo file.
 
@@ -347,3 +347,31 @@ Dopo ogni modifica: `git commit` immediato, poi chiedere a Paolo "pusha?". Il pu
 **Verifiche residue richieste da Paolo:**
 - Test Ross 1000 alla prima check-in in produzione (verificare che `tipodocumento`/`numerodocumento`/`statodocumento` arrivino bene a Turismo 5 Abruzzo)
 - Anteprima landing già verificata via preview_start (rendering ok, link `/login` e `/privacy` puntano a route esistenti)
+
+---
+
+### Sessione 2026-06-26
+
+**Archivio — scheda ospite:**
+- Commit `7889443`: ogni ospite del check-in mostra data nascita (`n. gg/mm/aaaa`) e nazionalità in una riga sotto nome/cognome/documento. Layout a `div` separati per guest (prima era un unico `<span>` comma-separated)
+
+**Guest page — Wikimedia + Google Maps + UX:**
+- Immagini attrazioni: `fetch_wikimedia_image()` — REST API summary + search fallback, User-Agent `Dedomo/1.0`, cache invalida se URL non sono `wikimedia.org`/`images.unsplash.com`
+- Link attrazioni: `maps_url` (Google Maps) invece di Wikipedia
+- Loading: spinner SVG + emoji pulsante + pallini rimbalzanti
+- Mercati: 15km, posizione precisa, link Google Maps
+- i18n: "Scopri di più" tradotto in 4 lingue, titoli sezioni caldi (eventi/mercati/attrazioni)
+
+**Email Resend (debug):**
+- 401 causato da API key con whitespace invisibile incollata in Railway — risolto rigenerando la key
+- Aggiunto logging `[RESEND]` dettagliato in `send_welcome_email` (status, corpo errore, ID ricevuta)
+
+**Numerazione progressiva ricevute (`Archive.jsx`):**
+- Commit `dba2012`: due helper puri `nextComuneNum` / `nextLocazioneNum` calcolano max+1 da `items` già caricati (zero API call extra)
+- `nextLocazioneNum`: parsa formato `RL-YYYY/NNN`, filtra per anno corrente via year in formato o `data_emissione`
+- `GenerateReceiptButton`: `onClick` setta `numero = String(suggestedNumero)` prima di aprire il form; hint "◎ suggerito" sotto il campo
+- `GenerateLocazioneButton`: toggle `autoNumero` rimane; quando si deseleziona e campo è vuoto, pre-riempie con `suggestedNumero`; hint mostrato
+
+**Commit della sessione:**
+1. `7889443` feat: archivio ospiti - data nascita e nazionalità nella scheda dettaglio
+2. `dba2012` feat(archive): numerazione progressiva ricevute IS e Locazione
