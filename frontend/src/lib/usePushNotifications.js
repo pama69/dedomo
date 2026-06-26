@@ -82,6 +82,19 @@ export function usePushNotifications() {
     }
   }, [isSupported]);
 
+  const testLocal = useCallback(async () => {
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      await reg.showNotification("Dedomo — Test locale", {
+        body: "Se vedi questa notifica, il sistema funziona.",
+        vibrate: [100, 50, 100],
+      });
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.message || String(e) };
+    }
+  }, []);
+
   const unsubscribe = useCallback(async () => {
     setLoading(true);
     try {
@@ -106,5 +119,6 @@ export function usePushNotifications() {
     loading,
     subscribe,
     unsubscribe,
+    testLocal,
   };
 }

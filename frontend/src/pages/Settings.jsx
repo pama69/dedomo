@@ -1290,10 +1290,11 @@ function OwnerBankInfoModal({ cf, intestatario, onClose, onSaved }) {
 // ============================================================
 
 function PushNotificationSection() {
-  const { isSupported, isSubscribed, permission, isIOS, isStandalone, loading, subscribe, unsubscribe } =
+  const { isSupported, isSubscribed, permission, isIOS, isStandalone, loading, subscribe, unsubscribe, testLocal } =
     usePushNotifications();
   const [testStatus, setTestStatus] = useState("");
   const [testLoading, setTestLoading] = useState(false);
+  const [localStatus, setLocalStatus] = useState("");
   const [subError, setSubError] = useState("");
   const [subStep, setSubStep] = useState("");
 
@@ -1308,6 +1309,12 @@ function PushNotificationSection() {
     } finally {
       setTestLoading(false);
     }
+  };
+
+  const runLocalTest = async () => {
+    setLocalStatus("");
+    const r = await testLocal();
+    setLocalStatus(r.ok ? "Notifica locale mostrata — se non la vedi, controlla le notifiche di Windows per Chrome" : "✗ " + r.error);
   };
 
   return (
@@ -1364,17 +1371,30 @@ function PushNotificationSection() {
           </div>
 
           {isSubscribed && (
-            <div className="flex items-center gap-3">
-              <button
-                onClick={sendTest}
-                disabled={testLoading}
-                className="border border-zinc-600 hover:border-zinc-400 text-zinc-400 px-3 py-1 uppercase tracking-widest text-[9px] cursor-pointer disabled:opacity-50"
-              >
-                {testLoading ? "Invio..." : "Prova notifiche"}
-              </button>
-              {testStatus && (
-                <span className="text-[10px] font-mono text-zinc-500">{testStatus}</span>
-              )}
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={sendTest}
+                  disabled={testLoading}
+                  className="border border-zinc-600 hover:border-zinc-400 text-zinc-400 px-3 py-1 uppercase tracking-widest text-[9px] cursor-pointer disabled:opacity-50"
+                >
+                  {testLoading ? "Invio..." : "Prova notifiche"}
+                </button>
+                {testStatus && (
+                  <span className="text-[10px] font-mono text-zinc-500">{testStatus}</span>
+                )}
+              </div>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={runLocalTest}
+                  className="border border-zinc-700 hover:border-zinc-500 text-zinc-500 px-3 py-1 uppercase tracking-widest text-[9px] cursor-pointer"
+                >
+                  Test locale
+                </button>
+                {localStatus && (
+                  <span className="text-[10px] font-mono text-zinc-500">{localStatus}</span>
+                )}
+              </div>
             </div>
           )}
         </div>
