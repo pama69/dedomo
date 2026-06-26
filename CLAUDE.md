@@ -37,7 +37,7 @@
 
 **Owner:** Paolo Manni (non-technical, Windows + VS Code)
 **Repo:** `github.com/pama69/dedomo`
-**Hosting:** Railway (`vigilant-expression-production.up.railway.app`)
+**Hosting:** Railway (`dedomo.up.railway.app`)
 **Deploy:** auto da GitHub push su `main` — **chiedere sempre conferma a Paolo prima di `git push`**
 
 ---
@@ -63,7 +63,7 @@
 - `OPENAI_API_KEY` — guest page AI (backend: meteo, eventi, mercati, attrazioni) + OCR backend
 - `RESEND_API_KEY`, `GUEST_EMAIL_FROM` — email benvenuto ospiti
 - `OPENWEATHERMAP_KEY` — meteo pagina ospite
-- `PUBLIC_BACKEND_URL` — URL pubblico app (es. `https://vigilant-expression-production.up.railway.app`)
+- `PUBLIC_BACKEND_URL` — URL pubblico app (es. `https://dedomo.up.railway.app`)
 - `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`
 
 ---
@@ -220,16 +220,22 @@ frontend/src/
 
 ## Bug noti / pendenti
 
-- [ ] **Rate limiting spoofabile** — `X-Forwarded-For` falsificabile; usare IP reale Railway
-- [ ] **CORS fragile** — irrigidire in produzione
-- [ ] **Zeep SOAP ri-istanziato per ogni chiamata** — spostare a livello modulo
-- [ ] **Webhook Stripe senza verifica firma come fallback** — rimuovere
+- [ ] **Password MongoDB Atlas** — esposta in chat mesi fa; rigenerare manualmente su Atlas
+- [ ] **DNS dedomo.it** — punta ancora a Emergent (IONOS); da spostare su Railway
 - [ ] **Auth Emergent** — ancora attiva; sostituire con OTP email via Resend + `input-otp.jsx` già presente
 - [ ] **Migrazione dati** — da MongoDB Emergent ad Atlas proprio (Atlas è quasi vuoto)
-- [ ] **Password MongoDB Atlas** — `ItHqVhgqwYWcgQkE` esposta in chat; rigenerare
-- [ ] **DNS dedomo.it** — punta ancora a Emergent (IONOS); da spostare su Railway
-- [ ] **Railway service name** — rinominare da "vigilant-expression" a "dedomo"
 - [ ] **Meteo guest page** — non sempre appare se `comune`/`provincia` non compilati sulla struttura in Settings
+- [ ] **GDPR formale** — nessuna policy di retention dati ospiti, nessun audit log — richiede avvocato/DPO
+
+## Sicurezza implementata
+
+- ✅ **Rate limiting** — `_RateLimiter` sliding window in-memory: auth 10/min, OCR 5/min, public 20/min
+- ✅ **Security headers** — HSTS, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy
+- ✅ **CORS** — origini esplicite (`dedomo.up.railway.app`, `dedomo.it`); override via `CORS_ORIGINS` env
+- ✅ **MongoDB indexes** — checkins, properties, remote_checkins, users, guest_tokens, subscriptions
+- ✅ **Zeep singleton** — client SOAP creato una volta sola (risparmia download WSDL)
+- ✅ **Webhook Stripe** — firma obbligatoria (`STRIPE_WEBHOOK_SECRET`), rimosso fallback non verificato
+- ✅ **Stripe Emergent proxy** — rimosso, usa sempre `api.stripe.com`
 
 ---
 
