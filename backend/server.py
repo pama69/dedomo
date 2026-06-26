@@ -2479,38 +2479,117 @@ async def send_locazione_receipt_email(
 # ── Remote Check-in ──────────────────────────────────────────────────
 
 async def _send_remote_checkin_invite(
-    guest_email: str, property_name: str, data_arrivo: str, data_partenza: str, form_url: str, lang: str
+    guest_email: str, property_name: str, data_arrivo: str, data_partenza: str,
+    form_url: str, lang: str, property_comune: str = ""
 ) -> bool:
     if not RESEND_API_KEY_AUTH:
         return False
     arr = _fmt_date(data_arrivo) or data_arrivo
     part = _fmt_date(data_partenza) or data_partenza
+    location_line = f"{property_name}" + (f", {property_comune}" if property_comune else "")
+
     subjects = {
-        "it": f"Completa il tuo check-in — {property_name}",
-        "en": f"Complete your check-in — {property_name}",
-        "de": f"Vervollständigen Sie Ihren Check-in — {property_name}",
-        "fr": f"Complétez votre check-in — {property_name}",
+        "it": f"Benvenuto/a a {property_name} — Completa il check-in in anticipo",
+        "en": f"Welcome to {property_name} — Complete your check-in in advance",
+        "de": f"Willkommen in {property_name} — Check-in im Voraus erledigen",
+        "fr": f"Bienvenue à {property_name} — Complétez votre check-in à l'avance",
     }
-    intros = {
-        "it": f"Il tuo arrivo a <strong>{property_name}</strong> è previsto per il <strong>{arr}</strong>.<br>Per velocizzare il check-in, compila i dati di tutti i viaggiatori del gruppo.",
-        "en": f"Your stay at <strong>{property_name}</strong> starts on <strong>{arr}</strong>.<br>To speed up check-in, fill in the details for all members of your group.",
-        "de": f"Ihr Aufenthalt in <strong>{property_name}</strong> beginnt am <strong>{arr}</strong>.<br>Bitte füllen Sie die Daten aller Reisenden aus.",
-        "fr": f"Votre séjour à <strong>{property_name}</strong> commence le <strong>{arr}</strong>.<br>Merci de remplir les informations de tous les voyageurs.",
-    }
-    cta = {"it": "Compila il form →", "en": "Fill in the form →", "de": "Formular ausfüllen →", "fr": "Remplir le formulaire →"}
     l = lang if lang in subjects else "it"
-    html = (
-        f"{_DEDOMO_EMAIL_HEADER}"
-        f'<div style="font-family:sans-serif;max-width:520px;margin:0 auto;padding:0 24px 24px">'
-        f"<p>{intros[l]}</p>"
-        f'<p style="text-align:center;margin:2rem 0">'
-        f'<a href="{form_url}" style="background:#5A7A59;color:white;padding:14px 32px;text-decoration:none;font-weight:700;display:inline-block;letter-spacing:0.05em;font-family:sans-serif">'
-        f"{cta[l]}</a></p>"
-        f'<p style="color:#9ca3af;font-size:13px">Soggiorno: {arr} → {part}</p>'
-        f'<hr style="border:none;border-top:1px solid #e5e7eb;margin:20px 0">'
-        f'<p style="color:#9ca3af;font-size:12px">Inviato tramite <strong>Dedomo</strong>. Non rispondere a questa email.</p>'
-        f"</div>"
-    )
+
+    texts = {
+        "it": {
+            "greeting": "Gentile Ospite,",
+            "p1": f"la aspettiamo presso <strong>{location_line}</strong> il giorno <strong>{arr}</strong> (partenza prevista: {part}).",
+            "p2": "Per velocizzare le procedure obbligatorie di registrazione, la invitiamo gentilmente a compilare i dati anagrafici di tutti i viaggiatori del gruppo prima dell'arrivo.",
+            "p3": "L'operazione richiede pochi minuti e può essere effettuata direttamente dal suo smartphone.",
+            "opt": "Se preferisce, la procedura potrà essere effettuata manualmente al momento del check-in.",
+            "cta": "Compila il form di check-in",
+            "footer": "Non rispondere a questa email — è inviata automaticamente dal sistema Dedomo.",
+        },
+        "en": {
+            "greeting": "Dear Guest,",
+            "p1": f"we are looking forward to welcoming you at <strong>{location_line}</strong> on <strong>{arr}</strong> (departure: {part}).",
+            "p2": "To speed up the mandatory registration process, we kindly ask you to fill in the details of all travellers in your group before arrival.",
+            "p3": "It only takes a few minutes and can be done directly from your smartphone.",
+            "opt": "If you prefer, the procedure can also be completed manually at check-in.",
+            "cta": "Fill in the check-in form",
+            "footer": "Do not reply to this email — it is sent automatically by the Dedomo system.",
+        },
+        "de": {
+            "greeting": "Sehr geehrter Gast,",
+            "p1": f"wir freuen uns, Sie in <strong>{location_line}</strong> am <strong>{arr}</strong> begrüßen zu dürfen (Abreise: {part}).",
+            "p2": "Um die Pflichtregistrierung zu beschleunigen, bitten wir Sie, die Daten aller Reisenden Ihrer Gruppe vor der Ankunft auszufüllen.",
+            "p3": "Der Vorgang dauert nur wenige Minuten und kann direkt von Ihrem Smartphone erledigt werden.",
+            "opt": "Falls Sie es vorziehen, kann die Prozedur auch manuell beim Check-in durchgeführt werden.",
+            "cta": "Check-in-Formular ausfüllen",
+            "footer": "Bitte antworten Sie nicht auf diese E-Mail — sie wird automatisch vom Dedomo-System gesendet.",
+        },
+        "fr": {
+            "greeting": "Cher(e) Hôte,",
+            "p1": f"nous avons le plaisir de vous accueillir à <strong>{location_line}</strong> le <strong>{arr}</strong> (départ prévu : {part}).",
+            "p2": "Afin de faciliter les formalités obligatoires d'enregistrement, nous vous invitons à remplir les informations de tous les voyageurs de votre groupe avant votre arrivée.",
+            "p3": "L'opération ne prend que quelques minutes et peut être effectuée directement depuis votre smartphone.",
+            "opt": "Si vous préférez, la procédure pourra également être effectuée manuellement à l'arrivée.",
+            "cta": "Remplir le formulaire de check-in",
+            "footer": "Ne répondez pas à cet e-mail — il est envoyé automatiquement par le système Dedomo.",
+        },
+    }
+    t = texts[l]
+
+    html = f"""<!DOCTYPE html>
+<html lang="{l}">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f0f2f0;font-family:'Helvetica Neue',Arial,sans-serif">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f0f2f0;padding:32px 16px">
+  <tr><td align="center">
+    <table width="100%" style="max-width:560px;background:#ffffff;border-radius:2px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.08)">
+
+      <!-- Header verde scuro -->
+      <tr><td style="background:linear-gradient(135deg,#1e3320 0%,#2d4a2d 100%);padding:28px 32px 24px">
+        <p style="margin:0 0 4px 0;color:#8fb88a;font-size:11px;letter-spacing:0.3em;text-transform:uppercase;font-weight:600">DEDOMO</p>
+        <h1 style="margin:0;color:#ffffff;font-size:22px;font-weight:700;letter-spacing:-0.02em">{property_name}</h1>
+        {f'<p style="margin:6px 0 0;color:#a8c5a3;font-size:13px">{property_comune}</p>' if property_comune else ''}
+      </td></tr>
+
+      <!-- Banda arrivo -->
+      <tr><td style="background:#4a7a48;padding:14px 32px">
+        <p style="margin:0;color:#ffffff;font-size:14px;font-weight:600;letter-spacing:0.02em">
+          Arrivo: {arr} &nbsp;·&nbsp; Partenza: {part}
+        </p>
+      </td></tr>
+
+      <!-- Corpo -->
+      <tr><td style="padding:32px 32px 24px">
+        <p style="margin:0 0 20px;color:#1a1a1a;font-size:15px;font-weight:600">{t['greeting']}</p>
+        <p style="margin:0 0 16px;color:#374151;font-size:14px;line-height:1.7">{t['p1']}</p>
+        <p style="margin:0 0 16px;color:#374151;font-size:14px;line-height:1.7">{t['p2']}</p>
+        <p style="margin:0 0 28px;color:#374151;font-size:14px;line-height:1.7">{t['p3']}</p>
+
+        <!-- CTA -->
+        <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding-bottom:28px">
+          <a href="{form_url}"
+             style="display:inline-block;background:#4a7a48;color:#ffffff;text-decoration:none;font-size:14px;font-weight:700;letter-spacing:0.06em;padding:16px 36px;border-radius:2px;text-transform:uppercase">
+            {t['cta']} →
+          </a>
+        </td></tr></table>
+
+        <!-- Nota opzionale -->
+        <table width="100%" cellpadding="0" cellspacing="0"><tr><td style="background:#f9fafb;border-left:3px solid #d1d5db;padding:12px 16px;border-radius:0 2px 2px 0">
+          <p style="margin:0;color:#6b7280;font-size:12px;line-height:1.6">ℹ️ &nbsp;{t['opt']}</p>
+        </td></tr></table>
+      </td></tr>
+
+      <!-- Footer -->
+      <tr><td style="background:#f9fafb;border-top:1px solid #e5e7eb;padding:16px 32px">
+        <p style="margin:0;color:#9ca3af;font-size:11px;line-height:1.6">{t['footer']}</p>
+      </td></tr>
+
+    </table>
+  </td></tr>
+</table>
+</body>
+</html>"""
+
     try:
         async with httpx.AsyncClient(timeout=15) as client:
             r = await client.post(
@@ -2597,6 +2676,7 @@ async def create_remote_checkin(request: Request, user=Depends(get_current_user)
         "user_id": user["user_id"],
         "property_id": property_id,
         "property_name": prop.get("nome", ""),
+        "property_comune": prop.get("comune", ""),
         "data_arrivo": data_arrivo,
         "data_partenza": data_partenza,
         "guest_email": guest_email,
@@ -2614,7 +2694,7 @@ async def create_remote_checkin(request: Request, user=Depends(get_current_user)
 
     frontend_url = os.environ.get("PUBLIC_FRONTEND_URL", PUBLIC_BACKEND_URL).rstrip("/")
     form_url = f"{frontend_url}/remote-checkin/{token}"
-    sent = await _send_remote_checkin_invite(guest_email, prop.get("nome", ""), data_arrivo, data_partenza, form_url, lang)
+    sent = await _send_remote_checkin_invite(guest_email, prop.get("nome", ""), data_arrivo, data_partenza, form_url, lang, prop.get("comune", ""))
     logger.info(f"[REMOTE_CI] Creato {remote_id} per {property_id}, email_sent={sent}")
     return {"ok": True, "remote_id": remote_id, "email_sent": sent}
 
@@ -2656,7 +2736,8 @@ async def resend_remote_checkin(remote_id: str, user=Depends(get_current_user)):
     frontend_url = os.environ.get("PUBLIC_FRONTEND_URL", PUBLIC_BACKEND_URL).rstrip("/")
     form_url = f"{frontend_url}/remote-checkin/{doc['token']}"
     sent = await _send_remote_checkin_invite(
-        doc["guest_email"], doc["property_name"], doc["data_arrivo"], doc["data_partenza"], form_url, doc.get("lang", "it")
+        doc["guest_email"], doc["property_name"], doc["data_arrivo"], doc["data_partenza"],
+        form_url, doc.get("lang", "it"), doc.get("property_comune", "")
     )
     return {"ok": sent}
 
