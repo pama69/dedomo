@@ -28,7 +28,7 @@ const emptyRoss = {
 const emptyImposta = {
   tariffa_per_notte: 0,
   max_notti_tassabili: 7,
-  esenti_under_anni: 12,
+  esenti_under_anni: 16,
   endpoint_comune: "",
   enabled: true,
 };

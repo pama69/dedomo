@@ -1524,7 +1524,7 @@ async def checkin_submit(body: CheckinSubmit, user=Depends(get_current_user)):
             guests=[g.model_dump() for g in body.guests],
             tariffa=float(is_cfg.get("tariffa_per_notte", 0)),
             max_notti=int(is_cfg.get("max_notti_tassabili", 7)),
-            esenti_under=int(is_cfg.get("esenti_under_anni", 12)),
+            esenti_under=int(is_cfg.get("esenti_under_anni", 16)),
             data_arrivo=body.data_arrivo,
             data_partenza=body.data_partenza,
         )
@@ -1995,7 +1995,7 @@ async def create_comune_receipt(
                     guests=c.get("guests", []),
                     tariffa=float(is_cfg.get("tariffa_per_notte", 0)),
                     max_notti=int(is_cfg.get("max_notti_tassabili", 7)),
-                    esenti_under=int(is_cfg.get("esenti_under_anni", 12)),
+                    esenti_under=int(is_cfg.get("esenti_under_anni", 16)),
                     data_arrivo=c["data_arrivo"],
                     data_partenza=c["data_partenza"],
                 )

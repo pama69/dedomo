@@ -35,8 +35,13 @@ def calcola_imposta(
         eta = None
         if g.get("data_nascita"):
             try:
-                bd = datetime.fromisoformat(g["data_nascita"])
-                eta = (arr - bd).days // 365
+                dn = g["data_nascita"].strip()
+                # Accetta sia YYYY-MM-DD che YYYYMMDD (formato Alloggiati Web)
+                if len(dn) == 8 and dn.isdigit():
+                    dn = f"{dn[:4]}-{dn[4:6]}-{dn[6:8]}"
+                bd = datetime.fromisoformat(dn)
+                # Calcolo preciso: tiene conto del compleanno nell'anno di arrivo
+                eta = arr.year - bd.year - ((arr.month, arr.day) < (bd.month, bd.day))
             except Exception:
                 eta = None
 
