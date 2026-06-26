@@ -32,7 +32,7 @@ const I18N = {
     addGuest: "+ Aggiungi ospite",
     removeGuest: "Rimuovi",
     upload: "Scansiona documento",
-    scanning: "Analisi in corso…",
+    scanning: "Analisi del documento in corso…",
     cognome: "Cognome *", nome: "Nome *",
     sesso: "Sesso *", m: "M", f: "F",
     dataNascita: "Data di nascita *",
@@ -156,23 +156,26 @@ function Autocomplete({ token, type, value, label, placeholder, onSelect, disabl
   const [results, setResults] = useState([]);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [searched, setSearched] = useState(false);
   const timer = useRef(null);
 
   useEffect(() => { setQ(value || ""); }, [value]);
 
   const search = useCallback((s) => {
     clearTimeout(timer.current);
-    if (!s || s.length < 2) { setResults([]); return; }
+    setSearched(false);
+    if (!s || s.length < 2) { setResults([]); setLoading(false); return; }
+    setLoading(true);
     timer.current = setTimeout(async () => {
-      setLoading(true);
       try {
         const r = await fetch(pub(`/public/remote-checkin/${token}/${type}?q=${encodeURIComponent(s)}`));
         const data = await r.json();
         setResults(data.luoghi || data.paesi || data.results || []);
         setOpen(true);
+        setSearched(true);
       } catch { setResults([]); }
       setLoading(false);
-    }, 350);
+    }, 200);
   }, [token, type]);
 
   return (
@@ -185,19 +188,29 @@ function Autocomplete({ token, type, value, label, placeholder, onSelect, disabl
           disabled={disabled}
           onChange={(e) => { setQ(e.target.value); search(e.target.value); }}
           onFocus={() => q.length >= 2 && setOpen(true)}
-          onBlur={() => setTimeout(() => setOpen(false), 200)}
+          onBlur={() => setTimeout(() => { setOpen(false); setSearched(false); }, 200)}
           placeholder={placeholder}
-          className="input-modern font-mono"
+          className={`input-modern font-mono ${loading ? "border-amber-500/40" : ""}`}
           autoComplete="off"
         />
       </label>
+      {loading && (
+        <p className="text-amber-400 text-[10px] font-mono mt-1 animate-ocr-blink">
+          Ricerca in corso…
+        </p>
+      )}
+      {!loading && searched && results.length === 0 && q.length >= 2 && (
+        <p className="text-zinc-500 text-[10px] font-mono mt-1">
+          Nessun risultato — prova un'altra grafia
+        </p>
+      )}
       {open && results.length > 0 && (
         <div className="absolute z-30 top-full left-0 right-0 bg-surface-1 border border-border shadow-xl max-h-48 overflow-y-auto">
           {results.map((r, i) => (
             <button
               key={i}
               type="button"
-              onMouseDown={() => { onSelect(r); setQ(r.nome || r.label || ""); setOpen(false); }}
+              onMouseDown={() => { onSelect(r); setQ(r.nome || r.label || ""); setOpen(false); setSearched(false); }}
               className="w-full text-left px-3 py-2 text-xs hover:bg-surface-2 text-zinc-200 border-b border-border/40 last:border-0 font-mono cursor-pointer"
             >
               {r.nome || r.label}
@@ -206,9 +219,6 @@ function Autocomplete({ token, type, value, label, placeholder, onSelect, disabl
             </button>
           ))}
         </div>
-      )}
-      {loading && (
-        <span className="absolute right-3 top-8 text-zinc-500 text-[10px]">…</span>
       )}
     </div>
   );
@@ -339,9 +349,11 @@ function GuestForm({ token, guest, onChange, t, index, onRemove, canRemove }) {
           type="button"
           onClick={() => fileRef.current?.click()}
           disabled={ocrBusy}
-          className="w-full border border-dashed border-zinc-600 hover:border-zinc-400 text-zinc-400 hover:text-zinc-200 py-2.5 text-[10px] uppercase tracking-widest cursor-pointer transition-colors disabled:opacity-50"
+          className={`w-full border border-dashed py-2.5 text-[10px] uppercase tracking-widest transition-colors ${ocrBusy ? "border-red-500/40 bg-red-500/5 cursor-default" : "border-zinc-600 hover:border-zinc-400 text-zinc-400 hover:text-zinc-200 cursor-pointer"}`}
         >
-          {ocrBusy ? t.scanning : `📷 ${t.upload}`}
+          {ocrBusy
+            ? <span className="text-red-400 animate-ocr-blink font-mono">{t.scanning}</span>
+            : `📷 ${t.upload}`}
         </button>
         {ocrErr && <p className="text-zinc-500 text-[11px] mt-1">{ocrErr} — compila manualmente.</p>}
         <p className="text-zinc-600 text-[10px] mt-1">{t.ocrHint}</p>
