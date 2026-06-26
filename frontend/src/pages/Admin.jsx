@@ -172,6 +172,42 @@ function OverviewTab() {
           </div>
         </ChartCard>
       </div>
+
+      <TestPushButton />
+    </div>
+  );
+}
+
+function TestPushButton() {
+  const [status, setStatus] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const send = async () => {
+    setLoading(true);
+    setStatus("");
+    try {
+      const r = await api.post("/admin/test-push");
+      setStatus(r.data.sent ? "✓ Notifica inviata — controlla il tuo dispositivo" : "✗ Nessuna subscription attiva per questo account");
+    } catch (e) {
+      setStatus("Errore: " + (e.response?.data?.detail || e.message));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="border border-border p-4 flex flex-col gap-2">
+      <span className="text-[10px] tracking-[0.25em] uppercase text-zinc-500">Strumenti Push</span>
+      <div className="flex items-center gap-3">
+        <button
+          onClick={send}
+          disabled={loading}
+          className="border border-zinc-600 hover:border-zinc-400 text-zinc-300 px-4 py-2 uppercase tracking-widest text-[10px] cursor-pointer disabled:opacity-50"
+        >
+          {loading ? "Invio..." : "Prova notifiche"}
+        </button>
+        {status && <span className="text-[10px] font-mono text-zinc-400">{status}</span>}
+      </div>
     </div>
   );
 }
