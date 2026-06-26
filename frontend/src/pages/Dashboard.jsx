@@ -70,6 +70,37 @@ export default function Dashboard() {
         </div>
       </button>
 
+      {/* ── REMOTE CHECK-IN ── */}
+      <button
+        onClick={() => navigate("/archive")}
+        className="group relative w-full overflow-hidden cursor-pointer transition-all active:scale-[0.998]"
+        style={{
+          background: "linear-gradient(135deg, hsl(0 20% 10%) 0%, hsl(0 15% 8%) 100%)",
+          border: "1px solid hsl(0 50% 30% / 0.5)",
+          padding: 0,
+          boxShadow: "0 0 24px hsl(0 70% 40% / 0.15), inset 0 1px 0 hsl(0 60% 50% / 0.1)",
+        }}
+      >
+        <div
+          aria-hidden
+          className="absolute inset-x-0 top-0 h-px"
+          style={{ background: "linear-gradient(90deg, transparent, hsl(0 70% 50% / 0.5), transparent)" }}
+        />
+        <div
+          aria-hidden
+          className="absolute -top-12 left-1/2 -translate-x-1/2 w-[80%] h-24 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-500"
+          style={{ background: "radial-gradient(closest-side, hsl(0 80% 50% / 0.12), transparent)" }}
+        />
+        <div className="relative flex items-center justify-center gap-3 py-4 px-6">
+          <span className="text-base font-semibold uppercase tracking-wider" style={{ color: "hsl(0 70% 65%)", fontFamily: "'Cabinet Grotesk', sans-serif", letterSpacing: "-0.02em" }}>
+            Check-in Remoto
+          </span>
+          <span className="text-[10px] font-mono uppercase tracking-widest" style={{ color: "hsl(0 40% 50%)" }}>
+            · invia form all'ospite →
+          </span>
+        </div>
+      </button>
+
       {/* ── STATS QUICK ── */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <StatCard
