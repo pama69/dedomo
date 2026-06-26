@@ -2475,6 +2475,311 @@ async def send_locazione_receipt_email(
     return {"ok": True}
 
 
+# ── Remote Check-in ──────────────────────────────────────────────────
+
+async def _send_remote_checkin_invite(
+    guest_email: str, property_name: str, data_arrivo: str, data_partenza: str, form_url: str, lang: str
+) -> bool:
+    if not RESEND_API_KEY_AUTH:
+        return False
+    arr = _fmt_date(data_arrivo) or data_arrivo
+    part = _fmt_date(data_partenza) or data_partenza
+    subjects = {
+        "it": f"Completa il tuo check-in — {property_name}",
+        "en": f"Complete your check-in — {property_name}",
+        "de": f"Vervollständigen Sie Ihren Check-in — {property_name}",
+        "fr": f"Complétez votre check-in — {property_name}",
+    }
+    intros = {
+        "it": f"Il tuo arrivo a <strong>{property_name}</strong> è previsto per il <strong>{arr}</strong>.<br>Per velocizzare il check-in, compila i dati di tutti i viaggiatori del gruppo.",
+        "en": f"Your stay at <strong>{property_name}</strong> starts on <strong>{arr}</strong>.<br>To speed up check-in, fill in the details for all members of your group.",
+        "de": f"Ihr Aufenthalt in <strong>{property_name}</strong> beginnt am <strong>{arr}</strong>.<br>Bitte füllen Sie die Daten aller Reisenden aus.",
+        "fr": f"Votre séjour à <strong>{property_name}</strong> commence le <strong>{arr}</strong>.<br>Merci de remplir les informations de tous les voyageurs.",
+    }
+    cta = {"it": "Compila il form →", "en": "Fill in the form →", "de": "Formular ausfüllen →", "fr": "Remplir le formulaire →"}
+    l = lang if lang in subjects else "it"
+    html = (
+        f"{_DEDOMO_EMAIL_HEADER}"
+        f'<div style="font-family:sans-serif;max-width:520px;margin:0 auto;padding:0 24px 24px">'
+        f"<p>{intros[l]}</p>"
+        f'<p style="text-align:center;margin:2rem 0">'
+        f'<a href="{form_url}" style="background:#5A7A59;color:white;padding:14px 32px;text-decoration:none;font-weight:700;display:inline-block;letter-spacing:0.05em;font-family:sans-serif">'
+        f"{cta[l]}</a></p>"
+        f'<p style="color:#9ca3af;font-size:13px">Soggiorno: {arr} → {part}</p>'
+        f'<hr style="border:none;border-top:1px solid #e5e7eb;margin:20px 0">'
+        f'<p style="color:#9ca3af;font-size:12px">Inviato tramite <strong>Dedomo</strong>. Non rispondere a questa email.</p>'
+        f"</div>"
+    )
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            r = await client.post(
+                "https://api.resend.com/emails",
+                headers={"Authorization": f"Bearer {RESEND_API_KEY_AUTH}", "Content-Type": "application/json"},
+                json={"from": AUTH_EMAIL_FROM, "to": [guest_email], "subject": subjects[l], "html": html},
+            )
+            ok = r.status_code in (200, 201)
+            if not ok:
+                logger.error(f"[REMOTE_CI] Email errore {r.status_code}: {r.text}")
+            return ok
+    except Exception as e:
+        logger.error(f"[REMOTE_CI] Eccezione email: {e}")
+        return False
+
+
+async def _notify_host_remote_submitted(user_id: str, property_name: str, guest_email: str, n_guests: int):
+    user_doc = await db.users.find_one({"user_id": user_id}, {"_id": 0, "email": 1})
+    if not user_doc or not user_doc.get("email") or not RESEND_API_KEY_AUTH:
+        return
+    html = (
+        f"{_DEDOMO_EMAIL_HEADER}"
+        f'<div style="font-family:sans-serif;max-width:520px;margin:0 auto;padding:0 24px 24px">'
+        f"<p>Gli ospiti di <strong>{property_name}</strong> hanno compilato il form di check-in remoto.</p>"
+        f"<p><strong>{n_guests} ospite/i</strong> inseriti da <em>{guest_email}</em>.</p>"
+        f"<p>Accedi a Dedomo, controlla i dati e clicca <strong>Autorizza invio</strong> per completare il check-in.</p>"
+        f'<hr style="border:none;border-top:1px solid #e5e7eb;margin:20px 0">'
+        f'<p style="color:#9ca3af;font-size:12px">Notifica automatica <strong>Dedomo</strong>.</p>'
+        f"</div>"
+    )
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            await client.post(
+                "https://api.resend.com/emails",
+                headers={"Authorization": f"Bearer {RESEND_API_KEY_AUTH}", "Content-Type": "application/json"},
+                json={"from": AUTH_EMAIL_FROM, "to": [user_doc["email"]], "subject": f"✓ Check-in remoto compilato — {property_name}", "html": html},
+            )
+    except Exception as e:
+        logger.error(f"[REMOTE_CI] Notifica host errore: {e}")
+
+
+def _check_remote_token_expiry(doc) -> None:
+    try:
+        exp = datetime.fromisoformat(doc["expires_at"])
+        if exp.tzinfo is None:
+            exp = exp.replace(tzinfo=timezone.utc)
+        if exp < datetime.now(timezone.utc):
+            raise HTTPException(410, "Link scaduto — chiedi all'host di inviarne uno nuovo")
+    except HTTPException:
+        raise
+    except Exception:
+        pass
+
+
+@api_router.post("/remote-checkins")
+async def create_remote_checkin(request: Request, user=Depends(get_current_user)):
+    body = await request.json()
+    property_id = str(body.get("property_id", "")).strip()
+    data_arrivo = str(body.get("data_arrivo", "")).strip()
+    data_partenza = str(body.get("data_partenza", "")).strip()
+    guest_email = str(body.get("guest_email", "")).strip().lower()
+    lang = str(body.get("lang", "it")).strip()[:2]
+
+    if not all([property_id, data_arrivo, data_partenza, guest_email]) or "@" not in guest_email:
+        raise HTTPException(400, "Dati mancanti o email non valida")
+
+    prop = await db.properties.find_one(
+        {"property_id": property_id, "user_id": user["user_id"]}, {"_id": 0}
+    )
+    if not prop:
+        raise HTTPException(404, "Struttura non trovata")
+
+    import secrets as _sec
+    token = _sec.token_urlsafe(32)
+    remote_id = f"rc_{_sec.token_urlsafe(12)}"
+
+    try:
+        expires_at = (datetime.fromisoformat(data_arrivo) + timedelta(days=2)).isoformat()
+    except Exception:
+        raise HTTPException(400, "Data arrivo non valida")
+
+    await db.remote_checkins.insert_one({
+        "remote_id": remote_id,
+        "user_id": user["user_id"],
+        "property_id": property_id,
+        "property_name": prop.get("nome", ""),
+        "data_arrivo": data_arrivo,
+        "data_partenza": data_partenza,
+        "guest_email": guest_email,
+        "lang": lang,
+        "token": token,
+        "expires_at": expires_at,
+        "status": "sent",
+        "guests": [],
+        "privacy_consent": None,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "submitted_at": None,
+        "authorized_at": None,
+        "checkin_id": None,
+    })
+
+    frontend_url = os.environ.get("PUBLIC_FRONTEND_URL", PUBLIC_BACKEND_URL).rstrip("/")
+    form_url = f"{frontend_url}/remote-checkin/{token}"
+    sent = await _send_remote_checkin_invite(guest_email, prop.get("nome", ""), data_arrivo, data_partenza, form_url, lang)
+    logger.info(f"[REMOTE_CI] Creato {remote_id} per {property_id}, email_sent={sent}")
+    return {"ok": True, "remote_id": remote_id, "email_sent": sent}
+
+
+@api_router.get("/remote-checkins")
+async def list_remote_checkins(user=Depends(get_current_user)):
+    docs = await db.remote_checkins.find(
+        {"user_id": user["user_id"]},
+        {"_id": 0, "guests": 0, "token": 0},
+    ).sort("created_at", -1).to_list(500)
+    return docs
+
+
+@api_router.get("/remote-checkins/{remote_id}")
+async def get_remote_checkin_detail(remote_id: str, user=Depends(get_current_user)):
+    doc = await db.remote_checkins.find_one(
+        {"remote_id": remote_id, "user_id": user["user_id"]}, {"_id": 0, "token": 0}
+    )
+    if not doc:
+        raise HTTPException(404)
+    return doc
+
+
+@api_router.delete("/remote-checkins/{remote_id}")
+async def delete_remote_checkin(remote_id: str, user=Depends(get_current_user)):
+    result = await db.remote_checkins.delete_one({"remote_id": remote_id, "user_id": user["user_id"]})
+    if result.deleted_count == 0:
+        raise HTTPException(404)
+    return {"ok": True}
+
+
+@api_router.post("/remote-checkins/{remote_id}/resend")
+async def resend_remote_checkin(remote_id: str, user=Depends(get_current_user)):
+    doc = await db.remote_checkins.find_one(
+        {"remote_id": remote_id, "user_id": user["user_id"]}, {"_id": 0}
+    )
+    if not doc:
+        raise HTTPException(404)
+    frontend_url = os.environ.get("PUBLIC_FRONTEND_URL", PUBLIC_BACKEND_URL).rstrip("/")
+    form_url = f"{frontend_url}/remote-checkin/{doc['token']}"
+    sent = await _send_remote_checkin_invite(
+        doc["guest_email"], doc["property_name"], doc["data_arrivo"], doc["data_partenza"], form_url, doc.get("lang", "it")
+    )
+    return {"ok": sent}
+
+
+@api_router.post("/remote-checkins/{remote_id}/authorize")
+async def authorize_remote_checkin(remote_id: str, user=Depends(get_current_user)):
+    doc = await db.remote_checkins.find_one(
+        {"remote_id": remote_id, "user_id": user["user_id"]}, {"_id": 0}
+    )
+    if not doc:
+        raise HTTPException(404)
+    if doc["status"] not in ("submitted", "authorized"):
+        raise HTTPException(400, "I dati ospiti non sono ancora stati ricevuti")
+
+    guests_raw = doc.get("guests", [])
+    if not guests_raw:
+        raise HTTPException(400, "Nessun dato ospite disponibile")
+
+    try:
+        guests = [GuestData(**{k: v for k, v in g.items() if k in GuestData.model_fields}) for g in guests_raw]
+    except Exception as e:
+        raise HTTPException(422, f"Dati ospite non validi: {e}")
+
+    privacy_raw = doc.get("privacy_consent") or {}
+    submit_body = CheckinSubmit(
+        property_id=doc["property_id"],
+        data_arrivo=doc["data_arrivo"],
+        data_partenza=doc["data_partenza"],
+        guests=guests,
+        privacy_consent=PrivacyConsent(
+            accepted=True,
+            accepted_at=privacy_raw.get("accepted_at", datetime.now(timezone.utc).isoformat()),
+        ),
+    )
+
+    result = await checkin_submit(submit_body, user)
+    checkin_id = result.get("checkin_id", "")
+    await db.remote_checkins.update_one(
+        {"remote_id": remote_id},
+        {"$set": {"status": "authorized", "authorized_at": datetime.now(timezone.utc).isoformat(), "checkin_id": checkin_id}},
+    )
+    return {"ok": True, "checkin_id": checkin_id, "result": result}
+
+
+# ── Public token-based endpoints (no user auth) ──────────────────────
+
+async def _get_alloggiati_token_for_remote(token: str):
+    doc = await db.remote_checkins.find_one({"token": token}, {"_id": 0, "property_id": 1, "expires_at": 1})
+    if not doc:
+        raise HTTPException(404, "Link non trovato")
+    _check_remote_token_expiry(doc)
+    prop = await db.properties.find_one({"property_id": doc["property_id"]}, {"_id": 0, "alloggiati": 1})
+    if not prop:
+        raise HTTPException(404)
+    cfg = prop.get("alloggiati", {})
+    if not (cfg.get("utente") and cfg.get("password") and cfg.get("ws_key")):
+        raise HTTPException(503, "Servizio di ricerca non disponibile")
+    tok = generate_token(cfg["utente"], cfg["password"], cfg["ws_key"])
+    if not tok.get("success"):
+        raise HTTPException(503, "Servizio di ricerca non disponibile al momento")
+    return cfg["utente"], tok["token"]
+
+
+@api_router.get("/public/remote-checkin/{token}")
+async def get_remote_checkin_public(token: str):
+    doc = await db.remote_checkins.find_one({"token": token}, {"_id": 0})
+    if not doc:
+        raise HTTPException(404, "Link non trovato o già scaduto")
+    _check_remote_token_expiry(doc)
+    return {
+        "property_name": doc["property_name"],
+        "data_arrivo": doc["data_arrivo"],
+        "data_partenza": doc["data_partenza"],
+        "status": doc["status"],
+        "existing_guests": doc.get("guests", []),
+        "lang": doc.get("lang", "it"),
+    }
+
+
+@api_router.get("/public/remote-checkin/{token}/comuni")
+async def public_remote_comuni(token: str, q: str = ""):
+    utente, aw_token = await _get_alloggiati_token_for_remote(token)
+    return cerca_comuni_fast(utente, aw_token, q, limit=15)
+
+
+@api_router.get("/public/remote-checkin/{token}/paesi")
+async def public_remote_paesi(token: str, q: str = ""):
+    utente, aw_token = await _get_alloggiati_token_for_remote(token)
+    return cerca_paesi(utente, aw_token, q, limit=15)
+
+
+@api_router.post("/public/remote-checkin/{token}/submit")
+async def submit_remote_checkin(token: str, request: Request):
+    doc = await db.remote_checkins.find_one({"token": token}, {"_id": 0})
+    if not doc:
+        raise HTTPException(404, "Link non trovato")
+    _check_remote_token_expiry(doc)
+
+    body = await request.json()
+    guests = body.get("guests", [])
+    privacy = body.get("privacy_consent", {})
+
+    if not guests:
+        raise HTTPException(400, "Inserisci almeno un ospite")
+    if not privacy.get("accepted"):
+        raise HTTPException(400, "Il consenso al trattamento dei dati è obbligatorio")
+
+    await db.remote_checkins.update_one(
+        {"token": token},
+        {"$set": {
+            "guests": guests,
+            "privacy_consent": {
+                "accepted": True,
+                "accepted_at": privacy.get("accepted_at", datetime.now(timezone.utc).isoformat()),
+                "accepted_at_server": datetime.now(timezone.utc).isoformat(),
+            },
+            "status": "submitted",
+            "submitted_at": datetime.now(timezone.utc).isoformat(),
+        }},
+    )
+    await _notify_host_remote_submitted(doc["user_id"], doc["property_name"], doc["guest_email"], len(guests))
+    return {"ok": True}
+
+
 @api_router.get("/properties/{property_id}/comune-receipts")
 async def property_comune_receipts(
     property_id: str, user=Depends(get_current_user)

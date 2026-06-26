@@ -132,6 +132,8 @@ export default function Archive() {
 
       <RefreshReceiptsButton />
 
+      <RemoteCheckinSection properties={properties} />
+
       {loading ? (
         <div className="flex flex-col gap-2">
           <div className="skeleton h-12" />
@@ -1351,6 +1353,289 @@ function SendReceiptByEmailModal({ checkinId, index, receipt, onClose }) {
                 className="border border-border hover:border-zinc-500 text-zinc-400 px-4 py-3 uppercase tracking-widest text-[10px] cursor-pointer"
               >
                 Chiudi
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Remote Check-in panel ────────────────────────────────────────────
+
+function RemoteCheckinSection({ properties }) {
+  const [items, setItems] = useState([]);
+  const [loadingRc, setLoadingRc] = useState(true);
+  const [showNew, setShowNew] = useState(false);
+  const [reviewing, setReviewing] = useState(null);
+  const [collapsed, setCollapsed] = useState(false);
+
+  const STATUS = {
+    sent:       { label: "In attesa",     cls: "text-amber-400" },
+    submitted:  { label: "Compilato ✓",   cls: "text-emerald-400" },
+    authorized: { label: "Autorizzato ✓", cls: "text-zinc-500" },
+  };
+
+  const load = useCallback(async () => {
+    try {
+      const r = await api.get("/remote-checkins");
+      setItems(r.data);
+    } catch { /* noop */ }
+    setLoadingRc(false);
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const del = async (id) => {
+    if (!window.confirm("Eliminare questo check-in remoto?")) return;
+    try { await api.delete(`/remote-checkins/${id}`); } catch { return; }
+    setItems((p) => p.filter((x) => x.remote_id !== id));
+  };
+
+  const resend = async (id) => {
+    try { await api.post(`/remote-checkins/${id}/resend`); alert("Email reinviata!"); }
+    catch { alert("Errore invio email"); }
+  };
+
+  const pending = items.filter((x) => x.status === "submitted").length;
+
+  return (
+    <div className="flex flex-col gap-2">
+      <button
+        type="button"
+        onClick={() => setCollapsed((c) => !c)}
+        className="flex justify-between items-center w-full bg-surface-1 border border-border hover:border-zinc-500 px-4 py-2 cursor-pointer transition-colors text-left"
+      >
+        <span className="text-[11px] tracking-[0.25em] uppercase text-zinc-300 font-mono">
+          Check-in Remoto
+          {pending > 0 && (
+            <span className="ml-2 text-emerald-400">· {pending} da autorizzare</span>
+          )}
+        </span>
+        <span className="text-zinc-500 text-xs font-mono">{collapsed ? "▶" : "▼"}</span>
+      </button>
+
+      {!collapsed && (
+        <div className="ml-3 flex flex-col gap-2">
+          {loadingRc ? (
+            <div className="skeleton h-10" />
+          ) : items.length === 0 ? (
+            <p className="text-zinc-600 text-[11px] font-mono px-1">Nessun check-in remoto attivo.</p>
+          ) : (
+            items.map((it) => {
+              const sl = STATUS[it.status] || { label: it.status, cls: "text-zinc-400" };
+              return (
+                <div key={it.remote_id} className="border border-border bg-surface-1 p-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex flex-col gap-0.5">
+                    <p className="text-zinc-100 text-xs font-medium">{it.property_name}</p>
+                    <p className="text-zinc-500 text-[10px] font-mono">
+                      {new Date(it.data_arrivo).toLocaleDateString("it-IT")} → {new Date(it.data_partenza).toLocaleDateString("it-IT")}
+                      {" · "}{it.guest_email}
+                    </p>
+                    <span className={`text-[10px] font-mono ${sl.cls}`}>{sl.label}</span>
+                  </div>
+                  <div className="flex gap-1.5 flex-wrap">
+                    {it.status === "submitted" && (
+                      <button onClick={() => setReviewing(it.remote_id)}
+                        className="border border-emerald-500/50 text-emerald-400 px-3 py-1.5 text-[10px] uppercase tracking-widest cursor-pointer hover:border-emerald-400">
+                        Rivedi e autorizza
+                      </button>
+                    )}
+                    {it.status === "sent" && (
+                      <button onClick={() => resend(it.remote_id)}
+                        className="border border-border text-zinc-400 px-3 py-1.5 text-[10px] uppercase tracking-widest cursor-pointer hover:border-zinc-500">
+                        Reinvia email
+                      </button>
+                    )}
+                    <button onClick={() => del(it.remote_id)}
+                      className="border border-border text-zinc-600 px-2 py-1.5 text-[10px] cursor-pointer hover:text-red-400 hover:border-red-500/40">
+                      ✕
+                    </button>
+                  </div>
+                </div>
+              );
+            })
+          )}
+          <button type="button" onClick={() => setShowNew(true)}
+            className="border border-dashed border-border hover:border-zinc-500 text-zinc-400 hover:text-zinc-200 py-2.5 text-[10px] uppercase tracking-widest cursor-pointer transition-colors">
+            + Nuovo check-in remoto
+          </button>
+        </div>
+      )}
+
+      {showNew && (
+        <NewRemoteCheckinModal
+          properties={properties}
+          onClose={() => setShowNew(false)}
+          onCreated={() => { setShowNew(false); load(); }}
+        />
+      )}
+      {reviewing && (
+        <ReviewRemoteCheckinModal
+          remoteId={reviewing}
+          onClose={() => setReviewing(null)}
+          onAuthorized={() => { setReviewing(null); load(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+function NewRemoteCheckinModal({ properties, onClose, onCreated }) {
+  const [propertyId, setPropertyId] = useState(properties[0]?.property_id || "");
+  const [dataArrivo, setDataArrivo] = useState("");
+  const [dataPartenza, setDataPartenza] = useState("");
+  const [email, setEmail] = useState("");
+  const [lang, setLang] = useState("it");
+  const [sending, setSending] = useState(false);
+  const [err, setErr] = useState("");
+
+  const send = async () => {
+    if (!propertyId || !dataArrivo || !dataPartenza || !email) return;
+    setSending(true);
+    setErr("");
+    try {
+      await api.post("/remote-checkins", {
+        property_id: propertyId, data_arrivo: dataArrivo,
+        data_partenza: dataPartenza, guest_email: email, lang,
+      });
+      onCreated();
+    } catch (e) {
+      setErr(e.response?.data?.detail || "Errore — riprova");
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div className="bg-background border border-border max-w-md w-full p-6 flex flex-col gap-4" onClick={(e) => e.stopPropagation()}>
+        <h3 className="text-base font-bold uppercase tracking-widest text-zinc-100" style={{ fontFamily: "'Cabinet Grotesk', sans-serif" }}>
+          Nuovo Check-in Remoto
+        </h3>
+        <p className="text-zinc-400 text-[11px] leading-relaxed">
+          Invia un link all'ospite per raccogliere i dati di tutti i viaggiatori. Potrai rivedere e autorizzare prima dell'invio ad Alloggiati Web.
+        </p>
+        <label className="flex flex-col gap-1">
+          <span className="text-[10px] tracking-widest uppercase text-zinc-500">Struttura</span>
+          <select value={propertyId} onChange={(e) => setPropertyId(e.target.value)} className="input-modern">
+            {properties.map((p) => <option key={p.property_id} value={p.property_id}>{p.nome}</option>)}
+          </select>
+        </label>
+        <div className="grid grid-cols-2 gap-3">
+          <label className="flex flex-col gap-1">
+            <span className="text-[10px] tracking-widest uppercase text-zinc-500">Arrivo *</span>
+            <input type="date" value={dataArrivo} onChange={(e) => setDataArrivo(e.target.value)} className="input-modern font-mono" />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-[10px] tracking-widest uppercase text-zinc-500">Partenza *</span>
+            <input type="date" value={dataPartenza} onChange={(e) => setDataPartenza(e.target.value)} className="input-modern font-mono" />
+          </label>
+        </div>
+        <label className="flex flex-col gap-1">
+          <span className="text-[10px] tracking-widest uppercase text-zinc-500">Email capogruppo *</span>
+          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && send()}
+            placeholder="ospite@email.com" autoFocus className="input-modern font-mono" />
+        </label>
+        <div className="flex items-center gap-2">
+          {["it", "en", "de", "fr"].map((l) => (
+            <button key={l} type="button" onClick={() => setLang(l)}
+              className={`px-3 py-1.5 text-[10px] uppercase tracking-widest cursor-pointer border transition-colors ${lang === l ? "border-amber-500 text-amber-300 bg-amber-500/10" : "border-border text-zinc-400 hover:border-zinc-500"}`}>
+              {l}
+            </button>
+          ))}
+          <span className="text-[10px] text-zinc-600 ml-1">lingua form</span>
+        </div>
+        {err && <p className="text-red-400 text-[11px] font-mono">{err}</p>}
+        <div className="flex gap-2 pt-1">
+          <button type="button" onClick={send}
+            disabled={!propertyId || !dataArrivo || !dataPartenza || !email || sending}
+            className="flex-1 bg-zinc-100 hover:bg-white text-[#05050A] px-4 py-3 uppercase tracking-widest text-[10px] cursor-pointer disabled:opacity-50 font-bold">
+            {sending ? "Invio…" : "Invia form all'ospite"}
+          </button>
+          <button type="button" onClick={onClose}
+            className="border border-border text-zinc-400 px-4 py-3 text-[10px] cursor-pointer hover:border-zinc-500">
+            Annulla
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ReviewRemoteCheckinModal({ remoteId, onClose, onAuthorized }) {
+  const [detail, setDetail] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [authorizing, setAuthorizing] = useState(false);
+  const [done, setDone] = useState(false);
+  const [err, setErr] = useState("");
+
+  useEffect(() => {
+    api.get(`/remote-checkins/${remoteId}`)
+      .then((r) => setDetail(r.data))
+      .catch(() => setErr("Errore caricamento dati"))
+      .finally(() => setLoading(false));
+  }, [remoteId]);
+
+  const authorize = async () => {
+    setAuthorizing(true);
+    setErr("");
+    try {
+      await api.post(`/remote-checkins/${remoteId}/authorize`);
+      setDone(true);
+    } catch (e) {
+      setErr(e.response?.data?.detail || "Errore autorizzazione");
+    } finally {
+      setAuthorizing(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div className="bg-background border border-border max-w-lg w-full p-6 flex flex-col gap-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <h3 className="text-base font-bold uppercase tracking-widest text-zinc-100" style={{ fontFamily: "'Cabinet Grotesk', sans-serif" }}>
+          Rivedi e Autorizza
+        </h3>
+        {loading ? (
+          <div className="skeleton h-20" />
+        ) : done ? (
+          <div className="flex flex-col items-center gap-3 py-6">
+            <span className="text-emerald-400 text-3xl">✓</span>
+            <p className="text-emerald-400 font-medium">Check-in autorizzato e inviato!</p>
+            <p className="text-zinc-500 text-xs text-center">Trasmesso ad Alloggiati Web e Turismo 5. Apparirà nell'archivio.</p>
+            <button onClick={onAuthorized} className="mt-2 bg-zinc-100 text-[#05050A] px-6 py-2 text-[10px] uppercase tracking-widest font-bold cursor-pointer">Chiudi</button>
+          </div>
+        ) : (
+          <>
+            <div className="text-[10px] font-mono text-zinc-400 flex flex-col gap-0.5">
+              <p>{detail?.property_name} · {new Date(detail?.data_arrivo).toLocaleDateString("it-IT")} → {new Date(detail?.data_partenza).toLocaleDateString("it-IT")}</p>
+              <p>Email ospite: {detail?.guest_email}</p>
+              {detail?.submitted_at && <p>Compilato il: {new Date(detail.submitted_at).toLocaleString("it-IT")}</p>}
+            </div>
+            <div className="flex flex-col gap-2">
+              <span className="text-[10px] uppercase tracking-widest text-zinc-500">Ospiti ({detail?.guests?.length || 0})</span>
+              {detail?.guests?.map((g, i) => (
+                <div key={i} className="border border-border bg-surface-1 p-3 text-xs font-mono flex flex-col gap-0.5">
+                  <p className="text-zinc-100 font-medium">#{i + 1} {g.cognome} {g.nome} · {g.sesso} · {g.data_nascita}</p>
+                  <p className="text-zinc-500">{g.tipo_documento} {g.numero_documento}</p>
+                  <p className="text-zinc-500">{g.is_foreign ? `${g.paese_nome} (straniero)` : g.luogo_nascita}</p>
+                </div>
+              ))}
+            </div>
+            <p className="text-zinc-500 text-[11px] leading-relaxed border border-border px-3 py-2">
+              Verifica i dati. Cliccando <strong className="text-zinc-300">Autorizza invio</strong> li trasmettiamo ad Alloggiati Web e Turismo 5 e il check-in apparirà nell'archivio.
+            </p>
+            {err && <p className="text-red-400 text-[11px] font-mono">{err}</p>}
+            <div className="flex gap-2">
+              <button onClick={authorize} disabled={authorizing || !detail?.guests?.length}
+                className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-3 uppercase tracking-widest text-[10px] cursor-pointer disabled:opacity-50 font-bold">
+                {authorizing ? "Invio in corso…" : "Autorizza invio"}
+              </button>
+              <button onClick={onClose}
+                className="border border-border text-zinc-400 px-4 py-3 text-[10px] cursor-pointer hover:border-zinc-500">
+                Annulla
               </button>
             </div>
           </>

@@ -42,6 +42,7 @@ import Help from "@/pages/Help";
 import Pricing from "@/pages/Pricing";
 import BillingSuccess from "@/pages/BillingSuccess";
 import GuestPage from "@/pages/GuestPage";
+import RemoteCheckin from "@/pages/RemoteCheckin";
 import Landing from "@/pages/Landing";
 import Privacy from "@/pages/Privacy";
 import HouseManual from "@/pages/HouseManual";
@@ -70,6 +71,7 @@ function AppRouter() {
       <Route path="/billing/pricing" element={<Pricing />} />
       <Route path="/billing/success" element={<BillingSuccess />} />
       <Route path="/guest/:token" element={<GuestPage />} />
+      <Route path="/remote-checkin/:token" element={<RemoteCheckin />} />
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>
   );
