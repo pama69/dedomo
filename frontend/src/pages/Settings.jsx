@@ -1302,7 +1302,7 @@ function PushNotificationSection() {
     setTestStatus("");
     try {
       const r = await api.post("/push/test");
-      setTestStatus(r.data.sent ? "✓ Notifica inviata — controlla il dispositivo" : "✗ Nessuna subscription attiva");
+      setTestStatus(r.data.sent ? "✓ Notifica inviata — controlla il dispositivo" : "✗ " + (r.data.error || "errore sconosciuto"));
     } catch (e) {
       setTestStatus("Errore: " + (e.response?.data?.detail || e.message));
     } finally {

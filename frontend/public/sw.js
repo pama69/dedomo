@@ -2,7 +2,22 @@
 // Versione: 1.0
 
 self.addEventListener("install", () => self.skipWaiting());
-self.addEventListener("activate", (e) => e.waitUntil(clients.claim()));
+
+self.addEventListener("activate", (event) => {
+  event.waitUntil(
+    (async () => {
+      // Cancella ogni cache lasciata da Service Worker precedenti
+      // (es. workbox/CRA o build Emergent) che servivano pagine vecchie
+      // e costringevano a fare Ctrl+Shift+R a ogni deploy.
+      const keys = await caches.keys();
+      await Promise.all(keys.map((k) => caches.delete(k)));
+      await clients.claim();
+    })()
+  );
+});
+
+// Questo SW non fa caching: lasciamo che le richieste passino sempre alla rete,
+// così il browser riceve sempre l'ultima build senza hard refresh.
 
 self.addEventListener("push", (event) => {
   let data = {};

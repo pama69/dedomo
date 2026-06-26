@@ -12,13 +12,22 @@ _raw_priv = os.getenv("VAPID_PRIVATE_KEY", "")
 
 
 def _decode_private_key() -> str:
+    """Ritorna la chiave privata in formato PEM.
+
+    Su Railway la chiave è stata salvata come base64-urlsafe del PEM.
+    Se invece è già un PEM (contiene BEGIN), la usa direttamente.
+    """
     if not _raw_priv:
         return ""
+    # Caso 1: è già un PEM (multilinea o con \n letterali)
+    if "BEGIN" in _raw_priv and "PRIVATE KEY" in _raw_priv:
+        return _raw_priv.replace("\\n", "\n")
+    # Caso 2: è base64 del PEM
     try:
         padding = "=" * ((4 - len(_raw_priv) % 4) % 4)
         decoded = base64.urlsafe_b64decode(_raw_priv + padding)
         text = decoded.decode("utf-8", errors="replace")
-        if "BEGIN EC PRIVATE KEY" in text or "BEGIN PRIVATE KEY" in text:
+        if "BEGIN" in text and "PRIVATE KEY" in text:
             return text
     except Exception:
         pass
@@ -28,19 +37,28 @@ def _decode_private_key() -> str:
 VAPID_PRIVATE_KEY_PEM = _decode_private_key()
 
 
-async def send_push(db, user_id: str, title: str, body: str, url: str = "/archive") -> bool:
-    """Send a Web Push notification to a subscribed user. Returns True on success."""
+def _build_vapid():
+    """Costruisce un oggetto Vapid da PEM. Ritorna (vapid, error)."""
+    try:
+        from py_vapid import Vapid02
+        v = Vapid02.from_pem(VAPID_PRIVATE_KEY_PEM.encode("utf-8"))
+        return v, None
+    except Exception as e:
+        return None, f"Vapid.from_pem fallito: {e}"
+
+
+async def send_push(db, user_id: str, title: str, body: str, url: str = "/archive"):
+    """Invia una notifica Web Push. Ritorna (ok: bool, error: str|None)."""
     if not VAPID_PRIVATE_KEY_PEM or not VAPID_PUBLIC_KEY:
-        logger.debug("[PUSH] VAPID keys non configurate — notifica non inviata")
-        return False
+        return False, "VAPID keys non configurate sul server"
 
     sub_doc = await db.push_subscriptions.find_one({"user_id": user_id})
     if not sub_doc:
-        return False
+        return False, "Nessuna subscription salvata per questo utente"
 
     subscription = sub_doc["subscription"]
     try:
-        from pywebpush import webpush, WebPushException
+        from pywebpush import webpush
         webpush(
             subscription_info=subscription,
             data=json.dumps({"title": title, "body": body, "url": url}),
@@ -48,13 +66,18 @@ async def send_push(db, user_id: str, title: str, body: str, url: str = "/archiv
             vapid_claims={"sub": f"mailto:{VAPID_CLAIMS_EMAIL}"},
         )
         logger.info(f"[PUSH] Notifica inviata a user {user_id}: {title}")
-        return True
+        return True, None
     except Exception as e:
-        # 410 Gone = subscription scaduta o revocata → rimuovi
         status = getattr(getattr(e, "response", None), "status_code", None)
-        if status == 410:
+        if status in (404, 410):
             await db.push_subscriptions.delete_one({"user_id": user_id})
             logger.info(f"[PUSH] Subscription scaduta rimossa per user {user_id}")
-        else:
-            logger.error(f"[PUSH] Errore invio a user {user_id}: {e}")
-        return False
+            return False, f"Subscription scaduta ({status}) — riattiva le notifiche"
+        body_txt = ""
+        try:
+            body_txt = getattr(getattr(e, "response", None), "text", "") or ""
+        except Exception:
+            pass
+        msg = f"{type(e).__name__}: {e}" + (f" | {body_txt[:200]}" if body_txt else "")
+        logger.error(f"[PUSH] Errore invio a user {user_id}: {msg}")
+        return False, msg

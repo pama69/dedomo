@@ -1879,13 +1879,13 @@ async def download_alloggiati_ricevuta(
 @api_router.post("/push/test")
 async def test_push_notification(user=Depends(get_current_user)):
     """Invia una notifica push di test all'utente corrente."""
-    sent = await send_push(
+    sent, error = await send_push(
         db, user["user_id"],
         "Dedomo — Test notifiche",
         "Le notifiche push funzionano correttamente.",
         url="/dashboard",
     )
-    return {"sent": sent}
+    return {"sent": sent, "error": error}
 
 
 @api_router.post("/admin/refresh-receipts")
