@@ -388,28 +388,31 @@ function TextArea({ label, value, onChange, placeholder, testid, maxLength = 500
 function EmojiPicker({ value, onChange }) {
   const [open, setOpen] = useState(false);
   return (
-    <div className="relative">
+    <div>
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="text-2xl w-12 h-12 border border-border bg-surface-2 hover:border-zinc-500 cursor-pointer"
+        className="text-2xl w-12 h-12 border border-border bg-surface-2 hover:border-zinc-500 cursor-pointer shrink-0"
         title="Cambia icona"
       >
         {value || "📝"}
       </button>
       {open && (
-        <div className="absolute top-full left-0 mt-1 grid grid-cols-6 gap-2 bg-surface-1 border border-border p-3 z-10 shadow-xl">
-          {EMOJI_OPTIONS.map((em) => (
-            <button
-              key={em}
-              type="button"
-              onClick={() => { onChange(em); setOpen(false); }}
-              className={`text-2xl w-10 h-10 flex items-center justify-center hover:bg-surface-2 cursor-pointer rounded ${value === em ? "bg-surface-2 ring-1 ring-accent" : ""}`}
-            >
-              {em}
-            </button>
-          ))}
-        </div>
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="fixed inset-x-4 top-1/2 -translate-y-1/2 z-50 grid grid-cols-6 gap-3 bg-surface-1 border border-border p-4 shadow-2xl">
+            {EMOJI_OPTIONS.map((em) => (
+              <button
+                key={em}
+                type="button"
+                onClick={() => { onChange(em); setOpen(false); }}
+                className={`text-2xl w-full aspect-square flex items-center justify-center hover:bg-surface-2 cursor-pointer rounded ${value === em ? "bg-surface-2 ring-1 ring-accent" : ""}`}
+              >
+                {em}
+              </button>
+            ))}
+          </div>
+        </>
       )}
     </div>
   );
