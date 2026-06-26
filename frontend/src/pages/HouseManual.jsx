@@ -14,8 +14,10 @@ const EMPTY_MANUAL = {
 };
 
 const EMOJI_OPTIONS = [
-  "📝", "🔥", "🐕", "🐈", "🚴", "🏊", "🍳", "🧺", "🔑", "🚿",
-  "🛏️", "❄️", "📺", "🎮", "🌳", "🍷", "☕", "🚗", "🚲", "♿",
+  "⚠️", "📝", "🔥", "💡", "📌", "🔔",
+  "🔑", "🚿", "🛏️", "❄️", "📺", "🎮",
+  "🍳", "🧺", "☕", "🍷", "🌳", "🚗",
+  "🚲", "♿", "🐕", "🐈", "🏊", "🚴",
 ];
 
 const SECTION_META = {
@@ -396,13 +398,13 @@ function EmojiPicker({ value, onChange }) {
         {value || "📝"}
       </button>
       {open && (
-        <div className="absolute top-full left-0 mt-1 grid grid-cols-5 gap-1 bg-surface-1 border border-border p-2 z-10 shadow-xl">
+        <div className="absolute top-full left-0 mt-1 grid grid-cols-6 gap-2 bg-surface-1 border border-border p-3 z-10 shadow-xl">
           {EMOJI_OPTIONS.map((em) => (
             <button
               key={em}
               type="button"
               onClick={() => { onChange(em); setOpen(false); }}
-              className={`text-xl w-9 h-9 hover:bg-surface-2 cursor-pointer ${value === em ? "bg-surface-2" : ""}`}
+              className={`text-2xl w-10 h-10 flex items-center justify-center hover:bg-surface-2 cursor-pointer rounded ${value === em ? "bg-surface-2 ring-1 ring-accent" : ""}`}
             >
               {em}
             </button>
