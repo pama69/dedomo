@@ -283,9 +283,23 @@ export default function Archive() {
                             <div className="flex flex-col gap-1">
                               <span className="text-zinc-500">OSPITI</span>
                               {c.guests?.map((g, i) => (
-                                <span key={i} className="text-zinc-200">
-                                  #{i + 1} {g.cognome} {g.nome} — {g.tipo_documento} {g.numero_documento}
-                                </span>
+                                <div key={i} className="flex flex-col gap-0.5 border-b border-border/40 pb-2 last:border-0 last:pb-0 mt-1">
+                                  <span className="text-zinc-100">
+                                    #{i + 1} {g.cognome} {g.nome}
+                                    {i === 0 && <span className="text-zinc-600 ml-2">capofamiglia</span>}
+                                  </span>
+                                  <span className="text-zinc-500">
+                                    {[
+                                      g.tipo_documento && g.numero_documento
+                                        ? `${g.tipo_documento} ${g.numero_documento}`
+                                        : null,
+                                      g.data_nascita
+                                        ? `n. ${new Date(g.data_nascita).toLocaleDateString("it-IT")}`
+                                        : null,
+                                      g.cittadinanza_nome || g.paese_nome || null,
+                                    ].filter(Boolean).join(" · ")}
+                                  </span>
+                                </div>
                               ))}
                               {c.guests?.length > 0 && (
                                 <GuestPageLink checkinId={c.checkin_id} />
