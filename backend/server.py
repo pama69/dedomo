@@ -1655,29 +1655,19 @@ async def push_vapid_key():
 async def push_subscribe(request: Request, user=Depends(get_current_user)):
     sub = await request.json()
     uid = user["user_id"]
-    logger.info(f"[PUSH] subscribe uid={uid} endpoint={str(sub.get('endpoint',''))[:80]}")
-    result = await db.push_subscriptions.update_one(
+    await db.push_subscriptions.update_one(
         {"user_id": uid},
         {"$set": {"subscription": sub, "updated_at": datetime.now(timezone.utc).isoformat()}},
         upsert=True,
     )
     verified = await db.push_subscriptions.find_one({"user_id": uid}, {"_id": 0, "user_id": 1})
-    logger.info(f"[PUSH] upserted={result.upserted_id} matched={result.matched_count} verified={verified}")
-    return {"ok": True, "uid": uid, "saved": verified is not None}
+    return {"ok": True, "saved": verified is not None}
 
 
 @api_router.delete("/push/subscribe")
 async def push_unsubscribe(user=Depends(get_current_user)):
-    logger.info(f"[PUSH] unsubscribe user={user['user_id']}")
     await db.push_subscriptions.delete_one({"user_id": user["user_id"]})
     return {"ok": True}
-
-
-@api_router.get("/push/status")
-async def push_status(user=Depends(get_current_user)):
-    """Debug: verifica se la subscription è salvata nel DB."""
-    doc = await db.push_subscriptions.find_one({"user_id": user["user_id"]}, {"_id": 0})
-    return {"saved": doc is not None, "endpoint": str(doc["subscription"].get("endpoint", ""))[:60] if doc else None}
 
 
 # ====================================================================

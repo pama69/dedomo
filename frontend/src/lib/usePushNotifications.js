@@ -40,62 +40,39 @@ export function usePushNotifications() {
     }
   }, []);
 
-  const subscribe = useCallback(async (onStep) => {
-    const step = (msg) => { console.log("[Push]", msg); onStep && onStep(msg); };
+  const subscribe = useCallback(async () => {
     if (!isSupported) return { ok: false, error: "Push non supportato dal browser" };
     setLoading(true);
     try {
-      step("1/5 Recupero chiave VAPID...");
       const { data } = await api.get("/push/vapid-public-key");
       const vapidPublicKey = data.public_key;
       if (!vapidPublicKey) throw new Error("VAPID_PUBLIC_KEY non configurata su Railway");
 
-      step("2/5 Service Worker pronto...");
       const reg = await Promise.race([
         navigator.serviceWorker.ready,
-        new Promise((_, reject) => setTimeout(() => reject(new Error("SW timeout (10s)")), 10000)),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("SW non disponibile")), 10000)),
       ]);
 
-      step("3/5 Richiesta permesso notifiche...");
       const perm = await Notification.requestPermission();
       setPermission(perm);
       if (perm !== "granted") return { ok: false, error: `Permesso ${perm} — abilita le notifiche nelle impostazioni del browser` };
 
-      step("4/5 Creazione subscription browser...");
       const sub = await reg.pushManager.subscribe({
         userVisibleOnly: true,
         applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
       });
 
-      step("5/5 Salvataggio nel database...");
       const saveRes = await api.post("/push/subscribe", JSON.parse(JSON.stringify(sub)));
-      if (!saveRes.data.saved) {
-        throw new Error(`Salvataggio fallito (uid=${saveRes.data.uid})`);
-      }
+      if (!saveRes.data.saved) throw new Error("Salvataggio subscription fallito");
       setIsSubscribed(true);
       return { ok: true };
     } catch (e) {
-      console.error("[Push] Errore:", e);
+      console.error("[Push]", e);
       return { ok: false, error: e.message || String(e) };
     } finally {
       setLoading(false);
     }
   }, [isSupported]);
-
-  const testLocal = useCallback(async () => {
-    try {
-      const reg = await navigator.serviceWorker.ready;
-      await reg.showNotification("Dedomo — Test locale", {
-        body: "Se vedi questa notifica, il sistema funziona.",
-        icon: "/icon-192.png",
-        badge: "/icon-192.png",
-        vibrate: [100, 50, 100],
-      });
-      return { ok: true };
-    } catch (e) {
-      return { ok: false, error: e.message || String(e) };
-    }
-  }, []);
 
   const unsubscribe = useCallback(async () => {
     setLoading(true);
@@ -121,6 +98,5 @@ export function usePushNotifications() {
     loading,
     subscribe,
     unsubscribe,
-    testLocal,
   };
 }

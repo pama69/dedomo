@@ -1290,31 +1290,23 @@ function OwnerBankInfoModal({ cf, intestatario, onClose, onSaved }) {
 // ============================================================
 
 function PushNotificationSection() {
-  const { isSupported, isSubscribed, permission, isIOS, isStandalone, loading, subscribe, unsubscribe, testLocal } =
+  const { isSupported, isSubscribed, permission, isIOS, isStandalone, loading, subscribe, unsubscribe } =
     usePushNotifications();
   const [testStatus, setTestStatus] = useState("");
   const [testLoading, setTestLoading] = useState(false);
-  const [localStatus, setLocalStatus] = useState("");
   const [subError, setSubError] = useState("");
-  const [subStep, setSubStep] = useState("");
 
   const sendTest = async () => {
     setTestLoading(true);
     setTestStatus("");
     try {
       const r = await api.post("/push/test");
-      setTestStatus(r.data.sent ? "✓ Notifica inviata — controlla il dispositivo" : "✗ " + (r.data.error || "errore sconosciuto"));
+      setTestStatus(r.data.sent ? "✓ Inviata — controlla il dispositivo" : "✗ " + (r.data.error || "errore sconosciuto"));
     } catch (e) {
-      setTestStatus("Errore: " + (e.response?.data?.detail || e.message));
+      setTestStatus("✗ " + (e.response?.data?.detail || e.message));
     } finally {
       setTestLoading(false);
     }
-  };
-
-  const runLocalTest = async () => {
-    setLocalStatus("");
-    const r = await testLocal();
-    setLocalStatus(r.ok ? "Notifica locale mostrata — se non la vedi, controlla le notifiche di Windows per Chrome" : "✗ " + r.error);
   };
 
   return (
@@ -1359,42 +1351,28 @@ function PushNotificationSection() {
               </button>
             ) : (
               <button
-                onClick={async () => { setSubError(""); setSubStep(""); const r = await subscribe((s) => setSubStep(s)); if (!r.ok) setSubError(r.error || "Errore sconosciuto"); else setSubStep(""); }}
+                onClick={async () => { setSubError(""); const r = await subscribe(); if (!r.ok) setSubError(r.error || "Errore sconosciuto"); }}
                 disabled={loading || (isIOS && !isStandalone)}
                 className="border border-emerald-500/60 hover:bg-emerald-500/10 text-emerald-400 px-3 py-1 uppercase tracking-widest text-[9px] cursor-pointer disabled:opacity-50"
               >
                 {loading ? "..." : "Attiva"}
               </button>
             )}
-            {subStep && <span className="text-[10px] font-mono text-zinc-400">{subStep}</span>}
             {subError && <span className="text-[10px] font-mono text-red-400">✗ {subError}</span>}
           </div>
 
           {isSubscribed && (
-            <div className="flex flex-col gap-2">
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={sendTest}
-                  disabled={testLoading}
-                  className="border border-zinc-600 hover:border-zinc-400 text-zinc-400 px-3 py-1 uppercase tracking-widest text-[9px] cursor-pointer disabled:opacity-50"
-                >
-                  {testLoading ? "Invio..." : "Prova notifiche"}
-                </button>
-                {testStatus && (
-                  <span className="text-[10px] font-mono text-zinc-500">{testStatus}</span>
-                )}
-              </div>
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={runLocalTest}
-                  className="border border-zinc-700 hover:border-zinc-500 text-zinc-500 px-3 py-1 uppercase tracking-widest text-[9px] cursor-pointer"
-                >
-                  Test locale
-                </button>
-                {localStatus && (
-                  <span className="text-[10px] font-mono text-zinc-500">{localStatus}</span>
-                )}
-              </div>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={sendTest}
+                disabled={testLoading}
+                className="border border-zinc-600 hover:border-zinc-400 text-zinc-400 px-3 py-1 uppercase tracking-widest text-[9px] cursor-pointer disabled:opacity-50"
+              >
+                {testLoading ? "Invio..." : "Prova notifiche"}
+              </button>
+              {testStatus && (
+                <span className="text-[10px] font-mono text-zinc-500">{testStatus}</span>
+              )}
             </div>
           )}
         </div>
