@@ -494,29 +494,28 @@ function DownloadReceiptBtn({ checkinId, index, receipt, onDeleted }) {
       <div className="flex justify-between items-center text-[10px] font-mono">
         <div className="flex flex-col gap-1">
           {editNumero ? (
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-3">
               <input
                 type="text"
                 inputMode="numeric"
                 value={newNumero}
                 onChange={(e) => setNewNumero(e.target.value.replace(/\D/g, ""))}
                 autoFocus
-                className="w-20 bg-transparent border border-amber-500/60 px-2 py-0.5 text-zinc-100 outline-none font-mono text-[10px]"
+                className="w-24 bg-transparent border border-amber-500/60 px-2 py-1 text-zinc-100 outline-none font-mono text-[11px]"
               />
-              <button onClick={saveNumero} disabled={renaming} className="text-emerald-400 hover:text-emerald-300 cursor-pointer disabled:opacity-50 text-[10px]">
-                {renaming ? "..." : "✓"}
+              <button onClick={saveNumero} disabled={renaming} className="text-emerald-400 hover:text-emerald-300 cursor-pointer disabled:opacity-50 text-[10px] tracking-widest uppercase">
+                {renaming ? "..." : "Salva"}
               </button>
-              <button onClick={() => setEditNumero(false)} className="text-zinc-500 hover:text-zinc-300 cursor-pointer text-[10px]">✕</button>
+              <button onClick={() => setEditNumero(false)} className="text-zinc-500 hover:text-zinc-300 cursor-pointer text-[10px] tracking-widest uppercase">Annulla</button>
             </div>
           ) : (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3">
               <span className="text-zinc-100">N. {numero}</span>
               <button
                 onClick={() => { setNewNumero(numero); setEditNumero(true); }}
-                className="text-zinc-600 hover:text-zinc-400 cursor-pointer text-[10px]"
-                title="Modifica numero ricevuta"
+                className="border border-zinc-700 hover:border-zinc-500 text-zinc-500 hover:text-zinc-300 px-2 py-0.5 uppercase tracking-widest text-[9px] cursor-pointer"
               >
-                Modifica n.
+                Modifica
               </button>
             </div>
           )}
