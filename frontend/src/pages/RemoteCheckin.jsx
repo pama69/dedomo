@@ -435,7 +435,7 @@ export default function RemoteCheckin() {
     return guests.every((g) =>
       g.cognome.trim() && g.nome.trim() && g.data_nascita &&
       g.numero_documento.trim() &&
-      (g.is_foreign ? g.stato_nascita !== "100000100" : g.codice_comune_nascita)
+      (g.is_foreign ? (g.stato_nascita !== "100000100" || g.paese_nome.trim()) : g.codice_comune_nascita)
     );
   };
 
