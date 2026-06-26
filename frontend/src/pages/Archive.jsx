@@ -324,7 +324,7 @@ export default function Archive() {
                             <span className="text-[10px] tracking-[0.25em] uppercase text-sky-400 mb-1">Ricevute Locazione</span>
                             {c.locazione_receipts.map((rc, idx) => (
                               <LocazioneReceiptRow
-                                key={idx}
+                                key={rc.numero || rc.share_token || idx}
                                 checkinId={c.checkin_id}
                                 index={idx}
                                 receipt={rc}
@@ -353,7 +353,7 @@ export default function Archive() {
                             <span className="text-[10px] tracking-[0.25em] uppercase text-amber-400 mb-1">Ricevute Imposta di Soggiorno</span>
                             {c.comune_receipts.map((rc, idx) => (
                               <DownloadReceiptBtn
-                                key={idx}
+                                key={rc.share_token || rc.numero || idx}
                                 checkinId={c.checkin_id}
                                 index={idx}
                                 receipt={rc}
