@@ -176,7 +176,7 @@ export default function Settings() {
             <div
               key={p.property_id}
               data-testid={`property-row-${p.property_id}`}
-              className="surface-card p-4 flex items-center justify-between"
+              className="surface-card p-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
             >
               <div className="flex items-center gap-3 min-w-0">
                 <div
