@@ -1373,9 +1373,12 @@ function RemoteCheckinSection({ properties }) {
   const [collapsed, setCollapsed] = useState(false);
 
   const STATUS = {
-    sent:       { label: "In attesa",     cls: "text-amber-400" },
-    submitted:  { label: "Compilato ✓",   cls: "text-emerald-400" },
-    authorized: { label: "Autorizzato ✓", cls: "text-zinc-500" },
+    sent:       { label: "In attesa",        cls: "text-amber-400" },
+    submitted:  { label: "Compilato ✓",      cls: "text-emerald-400" },
+    authorized: { label: "Programmato",      cls: "text-red-400" },
+    sending:    { label: "Invio in corso…",  cls: "text-amber-400" },
+    done:       { label: "Invio avvenuto ✓", cls: "text-emerald-400" },
+    failed:     { label: "Invio fallito ✗",  cls: "text-red-500" },
   };
 
   const load = useCallback(async () => {
@@ -1427,7 +1430,7 @@ function RemoteCheckinSection({ properties }) {
             items.map((it) => {
               const sl = STATUS[it.status] || { label: it.status, cls: "text-zinc-400" };
               return (
-                <div key={it.remote_id} className="border border-border bg-surface-1 p-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div key={it.remote_id} className="border border-border bg-surface-1 p-3 flex flex-col gap-2">
                   <div className="flex flex-col gap-0.5">
                     <p className="text-zinc-100 text-xs font-medium">{it.property_name}</p>
                     <p className="text-zinc-500 text-[10px] font-mono">
@@ -1436,6 +1439,21 @@ function RemoteCheckinSection({ properties }) {
                     </p>
                     <span className={`text-[10px] font-mono ${sl.cls}`}>{sl.label}</span>
                   </div>
+                  {it.status === "authorized" && (
+                    <div className="border border-red-500/30 bg-red-500/5 px-3 py-2 text-[10px] font-mono text-red-400">
+                      Inoltro programmato il {new Date(it.data_arrivo).toLocaleDateString("it-IT")} alle 23:59
+                    </div>
+                  )}
+                  {it.status === "done" && (
+                    <div className="border border-emerald-500/30 bg-emerald-500/5 px-3 py-2 text-[10px] font-mono text-emerald-400">
+                      Invio avvenuto ✓
+                    </div>
+                  )}
+                  {it.status === "failed" && (
+                    <div className="border border-red-500/40 bg-red-500/10 px-3 py-2 text-[10px] font-mono text-red-400">
+                      Invio fallito — controlla le credenziali Alloggiati Web
+                    </div>
+                  )}
                   <div className="flex gap-1.5 flex-wrap">
                     {it.status === "submitted" && (
                       <button onClick={() => setReviewing(it.remote_id)}
@@ -1489,7 +1507,7 @@ function ReviewRemoteCheckinModal({ remoteId, onClose, onAuthorized }) {
   const [detail, setDetail] = useState(null);
   const [loading, setLoading] = useState(true);
   const [authorizing, setAuthorizing] = useState(false);
-  const [done, setDone] = useState(false);
+  const [scheduled, setScheduled] = useState(null); // data_arrivo string dopo autorizzazione
   const [err, setErr] = useState("");
 
   useEffect(() => {
@@ -1503,8 +1521,8 @@ function ReviewRemoteCheckinModal({ remoteId, onClose, onAuthorized }) {
     setAuthorizing(true);
     setErr("");
     try {
-      await api.post(`/remote-checkins/${remoteId}/authorize`);
-      setDone(true);
+      const r = await api.post(`/remote-checkins/${remoteId}/authorize`);
+      setScheduled(r.data.data_arrivo);
     } catch (e) {
       setErr(e.response?.data?.detail || "Errore autorizzazione");
     } finally {
@@ -1520,11 +1538,14 @@ function ReviewRemoteCheckinModal({ remoteId, onClose, onAuthorized }) {
         </h3>
         {loading ? (
           <div className="skeleton h-20" />
-        ) : done ? (
+        ) : scheduled ? (
           <div className="flex flex-col items-center gap-3 py-6">
-            <span className="text-emerald-400 text-3xl">✓</span>
-            <p className="text-emerald-400 font-medium">Check-in autorizzato e inviato!</p>
-            <p className="text-zinc-500 text-xs text-center">Trasmesso ad Alloggiati Web e Turismo 5. Apparirà nell'archivio.</p>
+            <span className="text-red-400 text-3xl">⏱</span>
+            <p className="text-zinc-100 font-medium text-center">Inoltro programmato</p>
+            <div className="border border-red-500/30 bg-red-500/5 px-4 py-3 text-[11px] font-mono text-red-400 text-center">
+              Inoltro programmato il {new Date(scheduled).toLocaleDateString("it-IT")} alle 23:59
+            </div>
+            <p className="text-zinc-500 text-xs text-center">Dedomo invierà automaticamente i dati ad Alloggiati Web e Turismo 5 alle 23:59 del giorno di arrivo.</p>
             <button onClick={onAuthorized} className="mt-2 bg-zinc-100 text-[#05050A] px-6 py-2 text-[10px] uppercase tracking-widest font-bold cursor-pointer">Chiudi</button>
           </div>
         ) : (
@@ -1545,13 +1566,13 @@ function ReviewRemoteCheckinModal({ remoteId, onClose, onAuthorized }) {
               ))}
             </div>
             <p className="text-zinc-500 text-[11px] leading-relaxed border border-border px-3 py-2">
-              Verifica i dati. Cliccando <strong className="text-zinc-300">Autorizza invio</strong> li trasmettiamo ad Alloggiati Web e Turismo 5 e il check-in apparirà nell'archivio.
+              Verifica i dati. Cliccando <strong className="text-zinc-300">Autorizza invio</strong> programmiamo la trasmissione ad Alloggiati Web e Turismo 5 alle <strong className="text-zinc-300">23:59 del giorno di arrivo</strong>.
             </p>
             {err && <p className="text-red-400 text-[11px] font-mono">{err}</p>}
             <div className="flex gap-2">
               <button onClick={authorize} disabled={authorizing || !detail?.guests?.length}
                 className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-3 uppercase tracking-widest text-[10px] cursor-pointer disabled:opacity-50 font-bold">
-                {authorizing ? "Invio in corso…" : "Autorizza invio"}
+                {authorizing ? "Programmazione…" : "Autorizza invio"}
               </button>
               <button onClick={onClose}
                 className="border border-border text-zinc-400 px-4 py-3 text-[10px] cursor-pointer hover:border-zinc-500">

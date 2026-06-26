@@ -2663,6 +2663,7 @@ async def resend_remote_checkin(remote_id: str, user=Depends(get_current_user)):
 
 @api_router.post("/remote-checkins/{remote_id}/authorize")
 async def authorize_remote_checkin(remote_id: str, user=Depends(get_current_user)):
+    from zoneinfo import ZoneInfo
     doc = await db.remote_checkins.find_one(
         {"remote_id": remote_id, "user_id": user["user_id"]}, {"_id": 0}
     )
@@ -2675,30 +2676,88 @@ async def authorize_remote_checkin(remote_id: str, user=Depends(get_current_user
     if not guests_raw:
         raise HTTPException(400, "Nessun dato ospite disponibile")
 
-    try:
-        guests = [GuestData(**{k: v for k, v in g.items() if k in GuestData.model_fields}) for g in guests_raw]
-    except Exception as e:
-        raise HTTPException(422, f"Dati ospite non validi: {e}")
+    # Pianifica invio alle 23:59 Europe/Rome del giorno di arrivo
+    ROME_TZ = ZoneInfo("Europe/Rome")
+    arr = date.fromisoformat(doc["data_arrivo"])
+    scheduled_local = datetime(arr.year, arr.month, arr.day, 23, 59, 0, tzinfo=ROME_TZ)
+    scheduled_utc = scheduled_local.astimezone(timezone.utc)
 
-    privacy_raw = doc.get("privacy_consent") or {}
-    submit_body = CheckinSubmit(
-        property_id=doc["property_id"],
-        data_arrivo=doc["data_arrivo"],
-        data_partenza=doc["data_partenza"],
-        guests=guests,
-        privacy_consent=PrivacyConsent(
-            accepted=True,
-            accepted_at=privacy_raw.get("accepted_at", datetime.now(timezone.utc).isoformat()),
-        ),
-    )
-
-    result = await checkin_submit(submit_body, user)
-    checkin_id = result.get("checkin_id", "")
     await db.remote_checkins.update_one(
         {"remote_id": remote_id},
-        {"$set": {"status": "authorized", "authorized_at": datetime.now(timezone.utc).isoformat(), "checkin_id": checkin_id}},
+        {"$set": {
+            "status": "authorized",
+            "authorized_at": datetime.now(timezone.utc).isoformat(),
+            "scheduled_for": scheduled_utc.isoformat(),
+        }},
     )
-    return {"ok": True, "checkin_id": checkin_id, "result": result}
+    return {"ok": True, "scheduled_for": scheduled_utc.isoformat(), "data_arrivo": doc["data_arrivo"]}
+
+
+async def _send_scheduled_remote_checkin(doc: dict):
+    """Esegue l'invio effettivo di un check-in remoto autorizzato."""
+    remote_id = doc["remote_id"]
+    user_id = doc["user_id"]
+
+    # Marca come 'sending' per evitare doppio invio
+    res = await db.remote_checkins.update_one(
+        {"remote_id": remote_id, "status": "authorized"},
+        {"$set": {"status": "sending"}}
+    )
+    if res.modified_count == 0:
+        return  # già in elaborazione
+
+    try:
+        user_doc = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+        if not user_doc:
+            raise Exception("Utente non trovato")
+
+        guests_raw = doc.get("guests", [])
+        if not guests_raw:
+            raise Exception("Nessun dato ospite")
+
+        guests = [GuestData(**{k: v for k, v in g.items() if k in GuestData.model_fields}) for g in guests_raw]
+        privacy_raw = doc.get("privacy_consent") or {}
+        submit_body = CheckinSubmit(
+            property_id=doc["property_id"],
+            data_arrivo=doc["data_arrivo"],
+            data_partenza=doc["data_partenza"],
+            guests=guests,
+            privacy_consent=PrivacyConsent(
+                accepted=True,
+                accepted_at=privacy_raw.get("accepted_at", datetime.now(timezone.utc).isoformat()),
+            ),
+        )
+        result = await checkin_submit(submit_body, user_doc)
+        checkin_id = result.get("checkin_id", "")
+        await db.remote_checkins.update_one(
+            {"remote_id": remote_id},
+            {"$set": {"status": "done", "done_at": datetime.now(timezone.utc).isoformat(), "checkin_id": checkin_id}},
+        )
+        logger.info(f"[REMOTE_CI_SCHED] {remote_id} inviato OK")
+    except Exception as e:
+        logger.error(f"[REMOTE_CI_SCHED] {remote_id} fallito: {e}")
+        await db.remote_checkins.update_one(
+            {"remote_id": remote_id},
+            {"$set": {"status": "failed", "fail_reason": str(e)}}
+        )
+
+
+async def _process_scheduled_remote_checkins():
+    """Job schedulato: invia i check-in remoti autorizzati con scheduled_for <= adesso."""
+    now = datetime.now(timezone.utc)
+    try:
+        due = await db.remote_checkins.find(
+            {"status": "authorized", "scheduled_for": {"$lte": now.isoformat()}},
+            {"_id": 0}
+        ).to_list(None)
+    except Exception as e:
+        logger.error(f"[REMOTE_CI_SCHED] query errore: {e}")
+        return
+    for doc in due:
+        try:
+            await _send_scheduled_remote_checkin(doc)
+        except Exception as e:
+            logger.error(f"[REMOTE_CI_SCHED] errore doc {doc.get('remote_id')}: {e}")
 
 
 # ── Public token-based endpoints (no user auth) ──────────────────────
@@ -4675,6 +4734,8 @@ async def startup_scheduler():
         "cron", hour=23, minute=59,
         id="ross1000_zero_daily",
     )
+    # Every 2 minutes — send remote check-ins authorized and due
+    scheduler.add_job(_process_scheduled_remote_checkins, "interval", minutes=2, id="remote_checkin_send")
     scheduler.start()
     logger.info("[scheduler] started")
 
