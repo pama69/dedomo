@@ -21,8 +21,8 @@ export default function NotificationBanner() {
   };
 
   const handleSubscribe = async () => {
-    const ok = await subscribe();
-    if (ok) setJustEnabled(true);
+    const r = await subscribe();
+    if (r.ok) setJustEnabled(true);
   };
 
   // Nessun banner se:

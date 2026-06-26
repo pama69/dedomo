@@ -40,29 +40,39 @@ export function usePushNotifications() {
     }
   }, []);
 
-  const subscribe = useCallback(async () => {
-    if (!isSupported) return { ok: false, error: "Push non supportato" };
+  const subscribe = useCallback(async (onStep) => {
+    const step = (msg) => { console.log("[Push]", msg); onStep && onStep(msg); };
+    if (!isSupported) return { ok: false, error: "Push non supportato dal browser" };
     setLoading(true);
     try {
+      step("1/5 Recupero chiave VAPID...");
       const { data } = await api.get("/push/vapid-public-key");
       const vapidPublicKey = data.public_key;
-      if (!vapidPublicKey) throw new Error("VAPID key non configurata sul server");
+      if (!vapidPublicKey) throw new Error("VAPID_PUBLIC_KEY non configurata su Railway");
 
-      const reg = await navigator.serviceWorker.ready;
+      step("2/5 Service Worker pronto...");
+      const reg = await Promise.race([
+        navigator.serviceWorker.ready,
+        new Promise((_, reject) => setTimeout(() => reject(new Error("SW timeout (10s)")), 10000)),
+      ]);
+
+      step("3/5 Richiesta permesso notifiche...");
       const perm = await Notification.requestPermission();
       setPermission(perm);
-      if (perm !== "granted") return { ok: false, error: "Permesso negato dal browser" };
+      if (perm !== "granted") return { ok: false, error: `Permesso ${perm} — abilita le notifiche nelle impostazioni del browser` };
 
+      step("4/5 Creazione subscription browser...");
       const sub = await reg.pushManager.subscribe({
         userVisibleOnly: true,
         applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
       });
 
-      await api.post("/push/subscribe", sub.toJSON());
+      step("5/5 Salvataggio nel database...");
+      await api.post("/push/subscribe", JSON.parse(JSON.stringify(sub)));
       setIsSubscribed(true);
       return { ok: true };
     } catch (e) {
-      console.error("[Push] Errore subscribe:", e);
+      console.error("[Push] Errore:", e);
       return { ok: false, error: e.message || String(e) };
     } finally {
       setLoading(false);

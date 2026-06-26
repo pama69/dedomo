@@ -1295,6 +1295,7 @@ function PushNotificationSection() {
   const [testStatus, setTestStatus] = useState("");
   const [testLoading, setTestLoading] = useState(false);
   const [subError, setSubError] = useState("");
+  const [subStep, setSubStep] = useState("");
 
   const sendTest = async () => {
     setTestLoading(true);
@@ -1351,14 +1352,15 @@ function PushNotificationSection() {
               </button>
             ) : (
               <button
-                onClick={async () => { setSubError(""); const r = await subscribe(); if (!r.ok) setSubError(r.error || "Errore sconosciuto"); }}
+                onClick={async () => { setSubError(""); setSubStep(""); const r = await subscribe((s) => setSubStep(s)); if (!r.ok) setSubError(r.error || "Errore sconosciuto"); else setSubStep(""); }}
                 disabled={loading || (isIOS && !isStandalone)}
                 className="border border-emerald-500/60 hover:bg-emerald-500/10 text-emerald-400 px-3 py-1 uppercase tracking-widest text-[9px] cursor-pointer disabled:opacity-50"
               >
                 {loading ? "..." : "Attiva"}
               </button>
             )}
-            {subError && <span className="text-[10px] font-mono text-red-400">{subError}</span>}
+            {subStep && <span className="text-[10px] font-mono text-zinc-400">{subStep}</span>}
+            {subError && <span className="text-[10px] font-mono text-red-400">✗ {subError}</span>}
           </div>
 
           {isSubscribed && (
