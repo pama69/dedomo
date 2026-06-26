@@ -1139,6 +1139,7 @@ function ComuneNascitaField({ luogoNascita, comuneCode, provSigla, notFound, pro
   const [focused, setFocused] = useState(false);
   const [highlighted, setHighlighted] = useState(-1);
   const lastReqId = useRef(0);
+  const listRef = useRef(null);
 
   useEffect(() => {
     const c = cleanQuery(luogoNascita);
@@ -1183,6 +1184,12 @@ function ComuneNascitaField({ luogoNascita, comuneCode, provSigla, notFound, pro
     else if (e.key === "Escape") { setFocused(false); }
   };
 
+  useEffect(() => {
+    if (highlighted >= 0 && listRef.current) {
+      listRef.current.children[highlighted]?.scrollIntoView({ block: "nearest" });
+    }
+  }, [highlighted]);
+
   const hasMatch = !!comuneCode && !!provSigla;
   const queryLong = query.trim().length >= 2;
   const showDropdown = focused && queryLong;
@@ -1203,7 +1210,7 @@ function ComuneNascitaField({ luogoNascita, comuneCode, provSigla, notFound, pro
         className="bg-transparent border border-border px-4 py-3 text-zinc-100 placeholder:text-zinc-600 focus:border-zinc-300 outline-none w-full font-mono text-sm"
       />
       {showDropdown && (
-        <div className="absolute top-full left-0 right-0 mt-1 border border-border bg-surface-1 z-20 max-h-60 overflow-y-auto shadow-lg">
+        <div ref={listRef} className="absolute top-full left-0 right-0 mt-1 border border-border bg-surface-1 z-20 max-h-60 overflow-y-auto shadow-lg">
           {searching && results.length === 0 && (
             <div className="px-3 py-2 text-zinc-500 text-[10px] font-mono">Ricerca...</div>
           )}
@@ -1250,6 +1257,7 @@ function PaeseField({ paeseNome, statoCode, propertyId, onChange }) {
   const [focused, setFocused] = useState(false);
   const [highlighted, setHighlighted] = useState(-1);
   const lastReqId = useRef(0);
+  const listRef = useRef(null);
 
   // Sync external value (e.g. from OCR) into local query when paeseNome changes
   useEffect(() => {
@@ -1303,6 +1311,12 @@ function PaeseField({ paeseNome, statoCode, propertyId, onChange }) {
     }
   };
 
+  useEffect(() => {
+    if (highlighted >= 0 && listRef.current) {
+      listRef.current.children[highlighted]?.scrollIntoView({ block: "nearest" });
+    }
+  }, [highlighted]);
+
   const hasMatch = !!statoCode && statoCode !== "100000100" && !!paeseNome;
   const queryLong = query.trim().length >= 2;
   const showDropdown = focused && queryLong;
@@ -1323,7 +1337,7 @@ function PaeseField({ paeseNome, statoCode, propertyId, onChange }) {
         className="bg-transparent border border-border px-4 py-3 text-zinc-100 placeholder:text-zinc-600 focus:border-zinc-300 outline-none w-full font-mono text-sm"
       />
       {showDropdown && (
-        <div className="absolute top-full left-0 right-0 mt-1 border border-border bg-surface-1 z-20 max-h-60 overflow-y-auto shadow-lg">
+        <div ref={listRef} className="absolute top-full left-0 right-0 mt-1 border border-border bg-surface-1 z-20 max-h-60 overflow-y-auto shadow-lg">
           {searching && results.length === 0 && (
             <div className="px-3 py-2 text-zinc-500 text-[10px] font-mono">Ricerca...</div>
           )}

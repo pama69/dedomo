@@ -157,13 +157,24 @@ function Autocomplete({ token, type, value, label, placeholder, onSelect, disabl
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
+  const [highlighted, setHighlighted] = useState(-1);
   const timer = useRef(null);
+  const listRef = useRef(null);
 
   useEffect(() => { setQ(value || ""); }, [value]);
+
+  // Scroll highlighted item into view
+  useEffect(() => {
+    if (highlighted >= 0 && listRef.current) {
+      const el = listRef.current.children[highlighted];
+      el?.scrollIntoView({ block: "nearest" });
+    }
+  }, [highlighted]);
 
   const search = useCallback((s) => {
     clearTimeout(timer.current);
     setSearched(false);
+    setHighlighted(-1);
     if (!s || s.length < 2) { setResults([]); setLoading(false); return; }
     setLoading(true);
     timer.current = setTimeout(async () => {
@@ -178,6 +189,22 @@ function Autocomplete({ token, type, value, label, placeholder, onSelect, disabl
     }, 200);
   }, [token, type]);
 
+  const pick = (r) => {
+    onSelect(r);
+    setQ(r.nome || r.label || "");
+    setOpen(false);
+    setSearched(false);
+    setHighlighted(-1);
+  };
+
+  const onKeyDown = (e) => {
+    if (!open || !results.length) return;
+    if (e.key === "ArrowDown") { e.preventDefault(); setHighlighted((h) => Math.min(h + 1, results.length - 1)); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); setHighlighted((h) => Math.max(h - 1, 0)); }
+    else if (e.key === "Enter" && highlighted >= 0) { e.preventDefault(); pick(results[highlighted]); }
+    else if (e.key === "Escape") { setOpen(false); setHighlighted(-1); }
+  };
+
   return (
     <div className="relative">
       <label className="flex flex-col gap-1">
@@ -188,7 +215,8 @@ function Autocomplete({ token, type, value, label, placeholder, onSelect, disabl
           disabled={disabled}
           onChange={(e) => { setQ(e.target.value); search(e.target.value); }}
           onFocus={() => q.length >= 2 && setOpen(true)}
-          onBlur={() => setTimeout(() => { setOpen(false); setSearched(false); }, 200)}
+          onBlur={() => setTimeout(() => { setOpen(false); setSearched(false); setHighlighted(-1); }, 200)}
+          onKeyDown={onKeyDown}
           placeholder={placeholder}
           className={`input-modern font-mono ${loading ? "border-amber-500/40" : ""}`}
           autoComplete="off"
@@ -205,13 +233,16 @@ function Autocomplete({ token, type, value, label, placeholder, onSelect, disabl
         </p>
       )}
       {open && results.length > 0 && (
-        <div className="absolute z-30 top-full left-0 right-0 bg-surface-1 border border-border shadow-xl max-h-48 overflow-y-auto">
+        <div ref={listRef} className="absolute z-30 top-full left-0 right-0 bg-surface-1 border border-border shadow-xl max-h-48 overflow-y-auto">
           {results.map((r, i) => (
             <button
               key={i}
               type="button"
-              onMouseDown={() => { onSelect(r); setQ(r.nome || r.label || ""); setOpen(false); setSearched(false); }}
-              className="w-full text-left px-3 py-2 text-xs hover:bg-surface-2 text-zinc-200 border-b border-border/40 last:border-0 font-mono cursor-pointer"
+              onMouseDown={() => pick(r)}
+              onMouseEnter={() => setHighlighted(i)}
+              className={`w-full text-left px-3 py-2 text-xs border-b border-border/40 last:border-0 font-mono cursor-pointer ${
+                highlighted === i ? "bg-surface-2 text-zinc-100" : "text-zinc-200 hover:bg-surface-2"
+              }`}
             >
               {r.nome || r.label}
               {r.provincia && <span className="text-zinc-500 ml-2">({r.provincia})</span>}
