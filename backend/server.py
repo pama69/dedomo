@@ -103,6 +103,43 @@ SUPERUSER_EMAILS = set(
 LOCAL_IP_WHITELIST = {"127.0.0.1", "::1", "localhost"}
 
 
+# ── Rate limiter in-memory (sliding window) ──────────────────────────
+from collections import defaultdict
+import asyncio as _asyncio
+
+class _RateLimiter:
+    def __init__(self):
+        self._store: dict = defaultdict(list)
+        self._lock = _asyncio.Lock()
+
+    async def check(self, key: str, limit: int, window: int) -> bool:
+        now = datetime.now(timezone.utc).timestamp()
+        async with self._lock:
+            ts = [t for t in self._store[key] if now - t < window]
+            if len(ts) >= limit:
+                self._store[key] = ts
+                return False
+            ts.append(now)
+            self._store[key] = ts
+            return True
+
+_rl = _RateLimiter()
+
+def _make_rl(prefix: str, limit: int, window: int = 60):
+    async def _dep(request: Request):
+        ip = _client_ip(request)
+        if ip in LOCAL_IP_WHITELIST:
+            return
+        ok = await _rl.check(f"{prefix}:{ip}", limit, window)
+        if not ok:
+            raise HTTPException(429, detail="Troppe richieste — riprova tra poco")
+    return _dep
+
+_rl_auth   = _make_rl("auth",   10, 60)   # login/register/reset: 10/min
+_rl_ocr    = _make_rl("ocr",     5, 60)   # OCR pubblica: 5/min (costosa)
+_rl_public = _make_rl("public", 20, 60)   # altri endpoint pubblici: 20/min
+
+
 def _client_ip(request: Request) -> str:
     xff = request.headers.get("x-forwarded-for", "")
     if xff:
@@ -337,7 +374,7 @@ _DISPOSABLE_DOMAINS = {
 
 
 @api_router.post("/auth/register", status_code=201)
-async def auth_register(req: RegisterRequest, request: Request):
+async def auth_register(req: RegisterRequest, request: Request, _rl=Depends(_rl_auth)):
     """Registra un nuovo utente e invia email di verifica."""
     email = req.email.lower().strip()
 
@@ -421,7 +458,7 @@ async def auth_verify_email(token: str):
 
 
 @api_router.post("/auth/login")
-async def auth_login(req: LoginRequest, response: Response):
+async def auth_login(req: LoginRequest, response: Response, request: Request, _rl=Depends(_rl_auth)):
     """Login con email e password."""
     email = req.email.lower().strip()
     user = await db.users.find_one({"email": email}, {"_id": 0})
@@ -462,7 +499,7 @@ async def auth_login(req: LoginRequest, response: Response):
 
 
 @api_router.post("/auth/forgot-password")
-async def auth_forgot_password(req: ForgotPasswordRequest):
+async def auth_forgot_password(req: ForgotPasswordRequest, request: Request, _rl=Depends(_rl_auth)):
     """Invia email con link per reimpostare la password."""
     email = req.email.lower().strip()
     user = await db.users.find_one({"email": email}, {"_id": 0})
@@ -1860,13 +1897,30 @@ async def root():
     return {"app": "Dedomo", "status": "ok"}
 
 
+_cors_default = ",".join([
+    "https://dedomo.up.railway.app",
+    "https://dedomo.it",
+    "https://www.dedomo.it",
+    "http://localhost:3000",
+])
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=os.environ.get("CORS_ORIGINS", "*").split(","),
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=os.environ.get("CORS_ORIGINS", _cors_default).split(","),
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization", "X-Requested-With"],
 )
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    return response
 
 logging.basicConfig(
     level=logging.INFO,
@@ -2843,7 +2897,7 @@ async def ocr_authenticated(body: OcrRequest, user: dict = Depends(get_current_u
     return result
 
 @api_router.post("/public/remote-checkin/{token}/ocr")
-async def ocr_public(token: str, body: OcrRequest):
+async def ocr_public(token: str, body: OcrRequest, request: Request, _rl=Depends(_rl_ocr)):
     doc = await db.remote_checkins.find_one({"token": token}, {"_id": 0, "data_arrivo": 1})
     if not doc:
         raise HTTPException(404, "Link non trovato")
@@ -2881,7 +2935,7 @@ async def public_remote_paesi(token: str, q: str = ""):
 
 
 @api_router.post("/public/remote-checkin/{token}/submit")
-async def submit_remote_checkin(token: str, request: Request):
+async def submit_remote_checkin(token: str, request: Request, _rl=Depends(_rl_public)):
     doc = await db.remote_checkins.find_one({"token": token}, {"_id": 0})
     if not doc:
         raise HTTPException(404, "Link non trovato")
@@ -4757,6 +4811,24 @@ async def startup_scheduler():
             logger.info(f"[startup] superuser flag set for {super_emails}")
     except Exception as e:
         logger.warning(f"[startup] superuser bootstrap failed: {e}")
+
+    # ---------- MONGODB INDEXES ----------
+    try:
+        await db.checkins.create_index([("user_id", 1), ("created_at", -1)])
+        await db.checkins.create_index([("user_id", 1), ("mode", 1)])
+        await db.properties.create_index([("user_id", 1)])
+        await db.remote_checkins.create_index([("token", 1)], unique=True, sparse=True)
+        await db.remote_checkins.create_index([("user_id", 1), ("status", 1)])
+        await db.remote_checkins.create_index([("status", 1), ("scheduled_for", 1)])
+        await db.users.create_index([("email", 1)], unique=True)
+        await db.users.create_index([("reset_token", 1)], sparse=True)
+        await db.guest_tokens.create_index([("token", 1)], unique=True, sparse=True)
+        await db.guest_tokens.create_index([("checkin_id", 1)])
+        await db.push_subscriptions.create_index([("user_id", 1)])
+        await db.subscriptions.create_index([("user_id", 1)])
+        logger.info("[startup] MongoDB indexes ok")
+    except Exception as e:
+        logger.warning(f"[startup] MongoDB indexes failed: {e}")
 
     scheduler = AsyncIOScheduler(timezone="Europe/Rome")
     # Run every hour, plus once at startup after 60s

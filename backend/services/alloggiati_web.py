@@ -22,6 +22,16 @@ import requests
 
 WSDL_URL = "https://alloggiatiweb.poliziadistato.it/service/service.asmx?wsdl"
 
+# Singleton: il client Zeep è thread-safe e costoso da creare (scarica il WSDL)
+_zeep_client: Client | None = None
+
+def _get_client() -> Client:
+    global _zeep_client
+    if _zeep_client is None:
+        transport = Transport(timeout=30, operation_timeout=30)
+        _zeep_client = Client(WSDL_URL, transport=transport)
+    return _zeep_client
+
 # Tipo Alloggiato codes
 TIPO_OSPITE_SINGOLO = "16"
 TIPO_CAPO_FAMIGLIA = "17"
@@ -138,10 +148,6 @@ def build_schedina(
 
     return line
 
-
-def _get_client() -> Client:
-    transport = Transport(timeout=30, operation_timeout=30)
-    return Client(WSDL_URL, transport=transport)
 
 
 def generate_token(utente: str, password: str, ws_key: str) -> Dict[str, Any]:
