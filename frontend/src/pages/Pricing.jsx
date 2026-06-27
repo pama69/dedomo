@@ -69,7 +69,18 @@ export default function Pricing() {
       setQuota(r.data);
       setNum(1);
     } catch (e) {
-      setError(e.response?.data?.detail || e.message);
+      const detail = e.response?.data?.detail || e.message || "Errore sconosciuto";
+      const isCardError = typeof detail === "string" && (
+        detail.toLowerCase().includes("card") ||
+        detail.toLowerCase().includes("carta") ||
+        detail.toLowerCase().includes("declined") ||
+        detail.toLowerCase().includes("payment")
+      );
+      setError(
+        isCardError
+          ? `Pagamento non riuscito: ${detail}. Verifica la carta tramite "Gestisci abbonamento".`
+          : `Errore: ${detail}`
+      );
     } finally {
       setLoading(false);
     }
@@ -96,6 +107,37 @@ export default function Pricing() {
       setLoading(false);
     }
   };
+
+  if (upgraded) {
+    const newQty = quota?.subscription?.quantity ?? (currentPaid + num);
+    return (
+      <Layout>
+        <div className="flex flex-col items-center justify-center gap-8 py-16 px-4 text-center">
+          <div className="border border-emerald-500/50 bg-emerald-500/8 w-full max-w-md flex flex-col items-center gap-6 px-8 py-12"
+            style={{ background: "hsl(140 20% 8%)", borderColor: "hsl(140 50% 35% / 0.5)" }}>
+            <span className="text-5xl select-none">✓</span>
+            <div className="flex flex-col gap-2">
+              <h2 className="text-2xl font-bold text-emerald-300 leading-tight">
+                Grazie per aver<br />esteso l'abbonamento
+              </h2>
+              <p className="text-zinc-300 text-base mt-2">
+                Ora puoi gestire <b className="text-emerald-300">{newQty} {newQty === 1 ? "proprietà" : "proprietà"}</b>
+              </p>
+            </div>
+            <p className="text-2xl font-bold tracking-[0.2em] uppercase text-zinc-100">
+              Buon lavoro!
+            </p>
+          </div>
+          <button
+            onClick={() => navigate("/dashboard")}
+            className="text-[10px] tracking-[0.25em] uppercase text-zinc-500 hover:text-zinc-100 cursor-pointer"
+          >
+            ← Torna alla dashboard
+          </button>
+        </div>
+      </Layout>
+    );
+  }
 
   if (!quota) {
     return (

@@ -316,6 +316,7 @@ async def upgrade_subscription(db, user: Dict[str, Any], add_properties: int) ->
         sub["stripe_subscription_id"],
         items=[{"id": item["id"], "quantity": new_qty}],
         proration_behavior="create_prorations",
+        payment_behavior="error_if_incomplete",
     )
 
     await db.subscriptions.update_one(
