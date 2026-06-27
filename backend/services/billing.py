@@ -363,14 +363,19 @@ async def sync_subscription_from_stripe(db, user_id: str) -> Optional[Dict[str, 
         qty = items_data[0].get("quantity") if items_data else None
     except Exception:
         pass
+    new_status = s.get("status") or sub.get("status")
+    new_period_end = s.get("current_period_end")
+    update: Dict[str, Any] = {
+        "quantity": qty or sub.get("quantity"),
+        "updated_at": _now_iso(),
+    }
+    if new_status:
+        update["status"] = new_status
+    if new_period_end is not None:
+        update["current_period_end"] = new_period_end
     await db.subscriptions.update_one(
         {"user_id": user_id},
-        {"$set": {
-            "status": s.status,
-            "current_period_end": s.current_period_end,
-            "quantity": qty or sub.get("quantity"),
-            "updated_at": _now_iso(),
-        }},
+        {"$set": update},
     )
     return await db.subscriptions.find_one({"user_id": user_id})
 
