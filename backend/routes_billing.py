@@ -86,6 +86,9 @@ def build_billing_router(db, get_current_user, get_admin_user) -> APIRouter:
         except ValueError as e:
             raise HTTPException(400, str(e))
         except Exception as e:
+            import stripe as stripe_sdk
+            if isinstance(e, stripe_sdk.error.CardError) and e.code == "authentication_required":
+                raise HTTPException(402, "authentication_required")
             logger.exception("[billing] upgrade failed")
             raise HTTPException(500, f"Errore upgrade abbonamento: {str(e)}")
 

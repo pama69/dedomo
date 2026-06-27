@@ -15,6 +15,7 @@ export default function Pricing() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [upgraded, setUpgraded] = useState(false);
+  const [upgradedQty, setUpgradedQty] = useState(null);
   const cancelled = params.get("cancelled") === "1";
 
   useEffect(() => {
@@ -62,14 +63,34 @@ export default function Pricing() {
     setLoading(true);
     setError("");
     try {
+      const expectedQty = currentPaid + num;
       await api.post("/billing/upgrade-subscription", { add_properties: num });
+      setUpgradedQty(expectedQty);
       setUpgraded(true);
       // Refresh quota so the UI reflects the new quantity
       const r = await api.get("/billing/quota");
+      const actualQty = r.data?.subscription?.quantity;
+      if (actualQty) setUpgradedQty(actualQty);
       setQuota(r.data);
       setNum(1);
     } catch (e) {
+      const status = e.response?.status;
       const detail = e.response?.data?.detail || e.message || "Errore sconosciuto";
+
+      // 3D Secure: la banca richiede autenticazione supplementare
+      if (status === 402 || (typeof detail === "string" && detail.includes("authentication_required"))) {
+        setError("La tua banca richiede autenticazione. Verrai reindirizzato al portale Stripe per completare il pagamento in sicurezza…");
+        try {
+          const r = await api.post("/billing/customer-portal", { return_url: window.location.href });
+          if (r.data?.url) {
+            setTimeout(() => { window.location.href = r.data.url; }, 1500);
+          }
+        } catch {
+          setError("La tua banca richiede autenticazione 3D Secure. Accedi al portale tramite il pulsante 'Gestisci abbonamento' per completare il pagamento.");
+        }
+        return;
+      }
+
       const isCardError = typeof detail === "string" && (
         detail.toLowerCase().includes("card") ||
         detail.toLowerCase().includes("carta") ||
@@ -109,7 +130,7 @@ export default function Pricing() {
   };
 
   if (upgraded) {
-    const newQty = quota?.subscription?.quantity ?? (currentPaid + num);
+    const newQty = upgradedQty || quota?.subscription?.quantity || (currentPaid + 1);
     return (
       <Layout>
         <div className="flex flex-col items-center justify-center gap-8 py-16 px-4 text-center">
