@@ -84,69 +84,6 @@ async def health():
     return {"status": "ok"}
 
 
-@api_router.get("/dashboard/events")
-async def dashboard_events(user: Dict[str, Any] = Depends(get_current_user)):
-    """Ultimi 10 eventi di sistema aggregati da checkins e remote_checkins."""
-    uid = user["user_id"]
-    events = []
-
-    # ── Invii normali ──────────────────────────────────────────────
-    async for c in db.checkins.find({"user_id": uid}).sort("created_at", -1).limit(30):
-        aw  = (c.get("results") or {}).get("alloggiati_web") or {}
-        r1k = (c.get("results") or {}).get("ross1000") or {}
-        if aw.get("skipped") and r1k.get("skipped"):
-            status, label = "skip", "Invio TEST (saltato)"
-        elif aw.get("success") or r1k.get("success"):
-            status, label = "ok", "Schedine inviate"
-        elif aw.get("success") is False or r1k.get("success") is False:
-            status, label = "error", "Invio schedine fallito"
-        else:
-            status, label = "info", "Schedine inviate"
-        guests = c.get("guests") or []
-        detail = f"{guests[0].get('cognome','')} {guests[0].get('nome','')}".strip() if guests else ""
-        events.append({
-            "ts": c.get("created_at", ""),
-            "type": "checkin",
-            "status": status,
-            "label": label,
-            "property_name": c.get("property_name", ""),
-            "detail": detail,
-            "mode": c.get("mode", ""),
-        })
-
-    # ── Remote check-ins ──────────────────────────────────────────
-    STATUS_MAP = {
-        "sent":       ("info",  "Check-in remoto inviato all'ospite"),
-        "submitted":  ("ok",    "Ospite ha compilato il form"),
-        "authorized": ("info",  "Invio programmato alle 23:59"),
-        "sending":    ("info",  "Invio remoto in corso…"),
-        "done":       ("ok",    "Check-in remoto inviato"),
-        "failed":     ("error", "Check-in remoto fallito"),
-    }
-    async for r in db.remote_checkins.find({"user_id": uid}).sort("created_at", -1).limit(30):
-        st = r.get("status", "")
-        # Use the most accurate timestamp for the current status
-        if st in ("done", "failed", "sending", "authorized") and r.get("authorized_at"):
-            ts = r["authorized_at"]
-        elif st == "submitted" and r.get("submitted_at"):
-            ts = r["submitted_at"]
-        else:
-            ts = r.get("created_at", "")
-        ev_status, ev_label = STATUS_MAP.get(st, ("info", f"Remoto: {st}"))
-        events.append({
-            "ts": ts,
-            "type": "remote",
-            "status": ev_status,
-            "label": ev_label,
-            "property_name": r.get("property_name", ""),
-            "detail": r.get("guest_email", ""),
-            "mode": "REMOTO",
-        })
-
-    events.sort(key=lambda e: e.get("ts") or "", reverse=True)
-    return events[:10]
-
-
 # ====================================================================
 # AUTH — email + password
 # ====================================================================
@@ -275,6 +212,68 @@ async def get_current_user(request: Request) -> Dict[str, Any]:
     if user.get("disabled"):
         raise HTTPException(status_code=403, detail="Account disabilitato")
     return user
+
+
+@api_router.get("/dashboard/events")
+async def dashboard_events(user: Dict[str, Any] = Depends(get_current_user)):
+    """Ultimi 10 eventi di sistema aggregati da checkins e remote_checkins."""
+    uid = user["user_id"]
+    events = []
+
+    # ── Invii normali ──────────────────────────────────────────────
+    async for c in db.checkins.find({"user_id": uid}).sort("created_at", -1).limit(30):
+        aw  = (c.get("results") or {}).get("alloggiati_web") or {}
+        r1k = (c.get("results") or {}).get("ross1000") or {}
+        if aw.get("skipped") and r1k.get("skipped"):
+            status, label = "skip", "Invio TEST (saltato)"
+        elif aw.get("success") or r1k.get("success"):
+            status, label = "ok", "Schedine inviate"
+        elif aw.get("success") is False or r1k.get("success") is False:
+            status, label = "error", "Invio schedine fallito"
+        else:
+            status, label = "info", "Schedine inviate"
+        guests = c.get("guests") or []
+        detail = f"{guests[0].get('cognome','')} {guests[0].get('nome','')}".strip() if guests else ""
+        events.append({
+            "ts": c.get("created_at", ""),
+            "type": "checkin",
+            "status": status,
+            "label": label,
+            "property_name": c.get("property_name", ""),
+            "detail": detail,
+            "mode": c.get("mode", ""),
+        })
+
+    # ── Remote check-ins ──────────────────────────────────────────
+    STATUS_MAP = {
+        "sent":       ("info",  "Check-in remoto inviato all'ospite"),
+        "submitted":  ("ok",    "Ospite ha compilato il form"),
+        "authorized": ("info",  "Invio programmato alle 23:59"),
+        "sending":    ("info",  "Invio remoto in corso…"),
+        "done":       ("ok",    "Check-in remoto inviato"),
+        "failed":     ("error", "Check-in remoto fallito"),
+    }
+    async for r in db.remote_checkins.find({"user_id": uid}).sort("created_at", -1).limit(30):
+        st = r.get("status", "")
+        if st in ("done", "failed", "sending", "authorized") and r.get("authorized_at"):
+            ts = r["authorized_at"]
+        elif st == "submitted" and r.get("submitted_at"):
+            ts = r["submitted_at"]
+        else:
+            ts = r.get("created_at", "")
+        ev_status, ev_label = STATUS_MAP.get(st, ("info", f"Remoto: {st}"))
+        events.append({
+            "ts": ts,
+            "type": "remote",
+            "status": ev_status,
+            "label": ev_label,
+            "property_name": r.get("property_name", ""),
+            "detail": r.get("guest_email", ""),
+            "mode": "REMOTO",
+        })
+
+    events.sort(key=lambda e: e.get("ts") or "", reverse=True)
+    return events[:10]
 
 
 async def get_admin_user(user=Depends(get_current_user)) -> Dict[str, Any]:
