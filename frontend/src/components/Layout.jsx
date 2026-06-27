@@ -10,6 +10,14 @@ export default function Layout({ children }) {
   const navigate = useNavigate();
   const { user, loading, logout } = useAuth();
   const [verified, setVerified] = useState(!!location.state?.user || !!user);
+  const [subStatus, setSubStatus] = useState(null);
+
+  useEffect(() => {
+    if (!user) return;
+    api.get("/billing/quota").then((r) => {
+      setSubStatus(r.data?.subscription?.status ?? null);
+    }).catch(() => {});
+  }, [user]);
 
   useEffect(() => {
     if (location.state?.user || user) {
@@ -88,6 +96,28 @@ export default function Layout({ children }) {
           </div>
         </div>
       </header>
+
+      {subStatus === "past_due" && (
+        <div
+          className="w-full px-4 py-3 flex items-center justify-between gap-4"
+          style={{ background: "hsl(38 80% 12%)", borderBottom: "1px solid hsl(38 80% 30% / 0.5)" }}
+        >
+          <span className="text-amber-300 text-[11px] font-mono">
+            ⚠ Il rinnovo del tuo abbonamento non è andato a buon fine. Aggiorna il metodo di pagamento per continuare ad usare Dedomo.
+          </span>
+          <button
+            onClick={async () => {
+              try {
+                const r = await api.post("/billing/customer-portal", { return_url: window.location.href });
+                if (r.data?.url) window.location.href = r.data.url;
+              } catch {}
+            }}
+            className="flex-shrink-0 border border-amber-500/60 hover:bg-amber-500/10 text-amber-300 text-[10px] tracking-[0.2em] uppercase px-3 py-1.5 cursor-pointer transition-colors"
+          >
+            Aggiorna carta →
+          </button>
+        </div>
+      )}
 
       <main className="w-full max-w-5xl mx-auto pb-16 pt-8 px-4 sm:px-6 flex flex-col gap-8 animate-fade-in-up">
         {children}
