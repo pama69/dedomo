@@ -25,6 +25,9 @@ const EMPTY_GUEST = {
 
 const I18N = {
   it: {
+    privacyTitle: "Informativa sul trattamento dei dati personali",
+    privacyInfo: "I tuoi dati vengono trattati dal gestore della struttura ai sensi dell'art. 6(1)(c) GDPR per adempiere all'obbligo di comunicazione alle autorità di pubblica sicurezza (art. 109 TULPS, D.Lgs. 286/1998). I dati saranno conservati per un massimo di 3 anni, poi anonimizzati. Hai diritto di accesso, rettifica e cancellazione: contatta il gestore della struttura.",
+    privacyLinkText: "Leggi la privacy policy",
     title: "Check-in online",
     subtitle: (p) => `Struttura: ${p}`,
     period: (a, b) => `Arrivo ${fmtDate(a)} — Partenza ${fmtDate(b)}`,
@@ -55,6 +58,9 @@ const I18N = {
     ocrHint: "Carica una foto del documento per compilare automaticamente",
   },
   en: {
+    privacyTitle: "Personal data processing notice",
+    privacyInfo: "Your data is processed by the property manager under Art. 6(1)(c) GDPR to fulfil the mandatory reporting obligation to public security authorities (Italian Law 286/1998, Art. 109 TULPS). Data will be stored for a maximum of 3 years, then anonymised. You have the right to access, rectification and erasure: contact the property manager.",
+    privacyLinkText: "Read privacy policy",
     title: "Online check-in",
     subtitle: (p) => `Property: ${p}`,
     period: (a, b) => `Arrival ${fmtDate(a)} — Departure ${fmtDate(b)}`,
@@ -85,6 +91,9 @@ const I18N = {
     ocrHint: "Upload a document photo to auto-fill",
   },
   de: {
+    privacyTitle: "Informationen zur Datenverarbeitung",
+    privacyInfo: "Ihre Daten werden vom Unterkunftsbetreiber gemäß Art. 6(1)(c) DSGVO zur Erfüllung der Meldepflicht bei den Sicherheitsbehörden verarbeitet (ital. Ges. 286/1998, Art. 109 TULPS). Daten werden maximal 3 Jahre aufbewahrt, danach anonymisiert. Sie haben das Recht auf Auskunft, Berichtigung und Löschung: Wenden Sie sich an den Unterkunftsbetreiber.",
+    privacyLinkText: "Datenschutzerklärung lesen",
     title: "Online-Check-in",
     subtitle: (p) => `Unterkunft: ${p}`,
     period: (a, b) => `Anreise ${fmtDate(a)} — Abreise ${fmtDate(b)}`,
@@ -115,6 +124,9 @@ const I18N = {
     ocrHint: "Dokument-Foto hochladen zum automatischen Ausfüllen",
   },
   fr: {
+    privacyTitle: "Notice d'information sur le traitement des données",
+    privacyInfo: "Vos données sont traitées par le gestionnaire de l'hébergement en vertu de l'art. 6(1)(c) du RGPD pour satisfaire à l'obligation légale de signalement aux autorités de sécurité publique (loi ital. 286/1998, art. 109 TULPS). Les données seront conservées au maximum 3 ans, puis anonymisées. Vous avez le droit d'accès, de rectification et d'effacement : contactez le gestionnaire de l'hébergement.",
+    privacyLinkText: "Lire la politique de confidentialité",
     title: "Check-in en ligne",
     subtitle: (p) => `Hébergement : ${p}`,
     period: (a, b) => `Arrivée ${fmtDate(a)} — Départ ${fmtDate(b)}`,
@@ -486,6 +498,7 @@ export default function RemoteCheckin() {
   const [status, setStatus] = useState("loading"); // loading | ready | expired | notfound | sent | error
   const [guests, setGuests] = useState([{ ...EMPTY_GUEST }]);
   const [privacyOk, setPrivacyOk] = useState(false);
+  const [infoOpen, setInfoOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitErr, setSubmitErr] = useState("");
   const lang = info?.lang || "it";
@@ -609,7 +622,26 @@ export default function RemoteCheckin() {
           </button>
         </div>
 
-        {/* Privacy */}
+        {/* Privacy informativa GDPR */}
+        <div className="border border-border bg-surface-1">
+          <button
+            type="button"
+            onClick={() => setInfoOpen((v) => !v)}
+            className="w-full flex items-center justify-between px-4 py-3 text-left cursor-pointer"
+          >
+            <span className="text-zinc-300 text-[11px] font-semibold uppercase tracking-widest">{t.privacyTitle}</span>
+            <span className="text-zinc-500 text-xs ml-2">{infoOpen ? "▲" : "▼"}</span>
+          </button>
+          {infoOpen && (
+            <div className="px-4 pb-4 text-zinc-400 text-[11px] leading-relaxed border-t border-border pt-3 space-y-2">
+              <p>{t.privacyInfo}</p>
+              <a href="/privacy" target="_blank" rel="noopener noreferrer" className="text-amber-500 hover:underline">
+                {t.privacyLinkText}
+              </a>
+            </div>
+          )}
+        </div>
+
         <label className="flex gap-3 items-start cursor-pointer border border-border p-4 bg-surface-1">
           <input
             type="checkbox"

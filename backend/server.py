@@ -587,10 +587,25 @@ async def auth_logout(request: Request, response: Response):
 
 @api_router.delete("/auth/account")
 async def auth_delete_account(request: Request, response: Response, user: Dict[str, Any] = Depends(get_current_user)):
-    """Cancella l'account e tutti i dati associati."""
+    """Cancella l'account e tutti i dati associati (GDPR art. 17)."""
     user_id = user["user_id"]
+    # Auth
     await db.user_sessions.delete_many({"user_id": user_id})
     await db.email_tokens.delete_many({"user_id": user_id})
+    # Strutture e invii
+    await db.properties.delete_many({"user_id": user_id})
+    await db.checkins.delete_many({"user_id": user_id})
+    await db.remote_checkins.delete_many({"user_id": user_id})
+    # Push, token ospite, abbonamento
+    await db.push_subscriptions.delete_many({"user_id": user_id})
+    await db.guest_tokens.delete_many({"user_id": user_id})
+    await db.subscriptions.delete_many({"user_id": user_id})
+    # Transazioni: anonimizzare per obbligo fiscale (non cancellare)
+    await db.payment_transactions.update_many(
+        {"user_id": user_id},
+        {"$set": {"email": "[deleted]", "stripe_customer_id": "[deleted]"}, "$unset": {"user_id": ""}},
+    )
+    # Utente
     await db.users.delete_one({"user_id": user_id})
     response.delete_cookie("session_token", path="/", samesite="none", secure=True)
     return {"detail": "Account eliminato."}
@@ -4791,6 +4806,35 @@ async def daily_ross1000_zero_movement():
             logger.error(f"[ross1000-zero] error on property {p.get('property_id')}: {e}")
 
 
+async def _gdpr_anonymize_old_data():
+    """GDPR art. 5(1)(e) — anonimizza i dati personali degli ospiti dopo 3 anni."""
+    cutoff = datetime.now(timezone.utc) - timedelta(days=3 * 365)
+    cutoff_iso = cutoff.isoformat()
+    try:
+        anon_fields = {
+            "guests.$[].cognome": "[anonimizzato]",
+            "guests.$[].nome": "[anonimizzato]",
+            "guests.$[].data_nascita": "",
+            "guests.$[].luogo_nascita": "",
+            "guests.$[].numero_documento": "",
+        }
+        result = await db.checkins.update_many(
+            {"created_at": {"$lt": cutoff_iso}, "gdpr_anonymized": {"$ne": True}},
+            {"$set": {**anon_fields, "gdpr_anonymized": True}},
+        )
+        logger.info(f"[gdpr] checkins anonimizzati: {result.modified_count}")
+    except Exception as e:
+        logger.warning(f"[gdpr] anonymize checkins failed: {e}")
+
+    try:
+        result = await db.remote_checkins.delete_many(
+            {"created_at": {"$lt": cutoff_iso}, "status": {"$in": ["done", "failed", "expired"]}}
+        )
+        logger.info(f"[gdpr] remote_checkins eliminati: {result.deleted_count}")
+    except Exception as e:
+        logger.warning(f"[gdpr] delete remote_checkins failed: {e}")
+
+
 @app.on_event("startup")
 async def startup_scheduler():
     global scheduler
@@ -4860,6 +4904,8 @@ async def startup_scheduler():
     )
     # Every 2 minutes — send remote check-ins authorized and due
     scheduler.add_job(_process_scheduled_remote_checkins, "interval", minutes=2, id="remote_checkin_send")
+    # GDPR: monthly anonymization of guest data older than 3 years (1st of each month at 03:00)
+    scheduler.add_job(_gdpr_anonymize_old_data, "cron", day=1, hour=3, minute=0, id="gdpr_anonymize")
     scheduler.start()
     logger.info("[scheduler] started")
 

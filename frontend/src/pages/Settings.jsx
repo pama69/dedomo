@@ -221,6 +221,7 @@ export default function Settings() {
 
       <OwnerBankInfoSection properties={list} />
       <PushNotificationSection />
+      <DangerZoneSection />
     </Layout>
   );
 }
@@ -1364,6 +1365,64 @@ function PushNotificationSection() {
               )}
             </div>
           )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DangerZoneSection() {
+  const navigate = useNavigate();
+  const [confirm, setConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [err, setErr] = useState("");
+
+  const handleDelete = async () => {
+    setDeleting(true);
+    setErr("");
+    try {
+      await api.delete("/auth/account");
+      navigate("/login");
+    } catch (e) {
+      setErr(e?.response?.data?.detail || "Errore durante la cancellazione.");
+      setDeleting(false);
+    }
+  };
+
+  return (
+    <div className="surface-card p-5 flex flex-col gap-4 border border-red-900/40">
+      <h3 className="typo-h3" style={{ color: "hsl(var(--destructive))" }}>Zona pericolosa</h3>
+      <p className="text-zinc-400 text-[12px] leading-relaxed">
+        La cancellazione dell'account è permanente: verranno eliminati tutte le strutture, i checkin e i dati associati.
+        Le transazioni di pagamento vengono anonimizzate per obbligo fiscale.
+      </p>
+      {!confirm ? (
+        <button
+          onClick={() => setConfirm(true)}
+          className="self-start border border-red-700 hover:border-red-500 text-red-500 hover:text-red-300 px-4 py-2 uppercase tracking-widest text-[10px] cursor-pointer transition-colors"
+        >
+          Cancella account
+        </button>
+      ) : (
+        <div className="flex flex-col gap-3 border border-red-800 p-4 bg-red-950/20">
+          <p className="text-red-300 text-[12px] font-semibold">Sei sicuro? Questa operazione non può essere annullata.</p>
+          {err && <p className="text-red-400 text-[11px] font-mono">{err}</p>}
+          <div className="flex gap-2">
+            <button
+              onClick={handleDelete}
+              disabled={deleting}
+              className="border border-red-600 bg-red-900/40 hover:bg-red-800/60 text-red-200 px-4 py-2 uppercase tracking-widest text-[10px] cursor-pointer disabled:opacity-50 transition-colors"
+            >
+              {deleting ? "Cancellazione…" : "Sì, cancella tutto"}
+            </button>
+            <button
+              onClick={() => { setConfirm(false); setErr(""); }}
+              disabled={deleting}
+              className="border border-zinc-700 hover:border-zinc-500 text-zinc-400 hover:text-zinc-200 px-4 py-2 uppercase tracking-widest text-[10px] cursor-pointer disabled:opacity-50 transition-colors"
+            >
+              Annulla
+            </button>
+          </div>
         </div>
       )}
     </div>

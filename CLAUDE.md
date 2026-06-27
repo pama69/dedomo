@@ -4,30 +4,38 @@
 
 ---
 
-## 📌 Sessione corrente — 2026-06-26
+## 📌 Sessione corrente — 2026-06-27
 
-**Tema della sessione:** Remote Check-in completo (invio form ospite → OCR → autorizzazione → invio programmato 23:59); OCR spostato a backend; UX miglioramenti form ospite.
+**Tema:** Sicurezza, GDPR tecnico, Stripe decoupled da Emergent.
 
-**Stato:** commit `dbeb6b5` pushato su `main` → Railway in produzione.
+**Stato:** da pushare (chiedere a Paolo).
 
-**🆕 Feature nuove di questa parte di sessione:**
-- **Check-in Remoto end-to-end:** bottone rosso in Dashboard → `NewRemoteCheckinModal` → email ospite → form ospite compilato → host rivede/autorizza → invio automatico Alloggiati alle 23:59 del giorno di arrivo
-- **OCR spostato a backend** (vedi sezione OCR aggiornata sotto) — `POST /api/ocr` autenticato + `POST /api/public/remote-checkin/{token}/ocr` pubblico
-- **Invio programmato 23:59** via APScheduler (job ogni 2 min), ZoneInfo Europe/Rome, optimistic locking anti-double-send
-- **Annulla programmazione** — bottone "ANNULLA" nel box rosso in Archive → reverte a `submitted`
-- **Push notification** all'host quando l'ospite compila il form
-- **Date di nascita GG/MM/AAAA** nel form ospite — tre input numerici separati (non più `type="date"` con picker Android orribile)
-- **Email invito remoto** ridisegnata: header verde scuro gradient, saluto caldo in italiano, nota procedura manuale, multilingue it/en/de/fr
-- **OCR blink** — "Analisi del documento in corso…" rosso lampeggiante durante scansione (`animate-ocr-blink`)
-- **Autocomplete UX** — debounce 200ms, "Ricerca in corso…" ambra lampeggiante, "Nessun risultato" se vuoto, bordo ambra durante loading
+**🆕 Fatto in questa sessione:**
 
-**Status flow remote check-in:** `sent` → `submitted` → `authorized` → `sending` → `done` / `failed`
+### Stripe / Sicurezza
+- `STRIPE_API_KEY` → `STRIPE_SECRET_KEY` (fix env mismatch)
+- Rimossa proxy Emergent Stripe, usa `api.stripe.com` diretto
+- Webhook Stripe: firma obbligatoria, rimosso fallback non verificato
+- Fix cache test/live: `stripe_resources_test` vs `stripe_resources_live`
+- `static/.gitkeep` — fix build Railway (cartella vuota dopo delete PDF)
+- Rate limiting in-memory (`_RateLimiter` sliding window): auth 10/min, OCR 5/min, public 20/min
+- Security headers: HSTS, X-Frame-Options, X-Content-Type, Referrer-Policy, Permissions-Policy
+- CORS origini esplicite, no wildcard
+- MongoDB indexes idempotenti a startup (12 indici)
+- Zeep SOAP singleton (client creato una sola volta)
 
-**🔎 Verifiche residue:**
-- Test Ross 1000 al primo check-in PROD (tipodocumento/numerodocumento/statodocumento)
-- Rinomina Railway "vigilant-expression" → aggiornare `PUBLIC_BACKEND_URL` dopo la rinomina
+### GDPR tecnico
+- **Informativa GDPR** in `RemoteCheckin.jsx`: box espandibile con base giuridica art. 6(1)(c), 3 anni retention, link /privacy — 4 lingue (it/en/de/fr)
+- **DELETE /auth/account** completo: ora elimina anche `properties`, `checkins`, `remote_checkins`, `push_subscriptions`, `guest_tokens`, `subscriptions`; anonimizza `payment_transactions` (obbligo fiscale)
+- **Job APScheduler mensile** `_gdpr_anonymize_old_data`: anonimizza campi ospite in `checkins` >3 anni; elimina `remote_checkins` completati/falliti >3 anni (1° del mese ore 03:00)
+- **Settings — Zona pericolosa**: `DangerZoneSection` con doppia conferma prima della cancellazione account
 
-**Cronologia dettagliata della sessione:** vedi `## Archivio sessioni` in fondo a questo file.
+**🔎 Azioni manuali pendenti (Paolo):**
+- Rigenerare password MongoDB Atlas (esposta in chat mesi fa)
+- Spostare DNS `dedomo.it` → Railway (ora su IONOS→Emergent)
+- Dopo test: sostituire chiavi Stripe test con live in Railway
+
+**Cronologia dettagliata:** vedi `## Archivio sessioni` in fondo.
 
 ---
 
@@ -225,7 +233,7 @@ frontend/src/
 - [ ] **Auth Emergent** — ancora attiva; sostituire con OTP email via Resend + `input-otp.jsx` già presente
 - [ ] **Migrazione dati** — da MongoDB Emergent ad Atlas proprio (Atlas è quasi vuoto)
 - [ ] **Meteo guest page** — non sempre appare se `comune`/`provincia` non compilati sulla struttura in Settings
-- [ ] **GDPR formale** — nessuna policy di retention dati ospiti, nessun audit log — richiede avvocato/DPO
+- [ ] **GDPR formale** — policy di retention implementata tecnicam.; manca DPO/avvocato per redazione registro trattamenti e riscontro formale art. 30
 
 ## Sicurezza implementata
 
@@ -236,6 +244,10 @@ frontend/src/
 - ✅ **Zeep singleton** — client SOAP creato una volta sola (risparmia download WSDL)
 - ✅ **Webhook Stripe** — firma obbligatoria (`STRIPE_WEBHOOK_SECRET`), rimosso fallback non verificato
 - ✅ **Stripe Emergent proxy** — rimosso, usa sempre `api.stripe.com`
+- ✅ **GDPR — informativa remoto** — box espandibile it/en/de/fr con base art. 6(1)(c) nel form ospite
+- ✅ **GDPR — cancellazione account** — `DELETE /auth/account` elimina tutte le collections; anonimizza payment_transactions
+- ✅ **GDPR — retention 3 anni** — job APScheduler mensile (1° del mese 03:00) anonimizza checkins e pulisce remote_checkins >3 anni
+- ✅ **Settings — Zona pericolosa** — cancellazione account con doppia conferma
 
 ---
 
