@@ -118,7 +118,7 @@ export default function Archive() {
 
   return (
     <Layout>
-      <h2 className="typo-h1">Archivio Invii</h2>
+      <h2 className="typo-h1">Archivio invii generale</h2>
 
       {/* Sub-nav */}
       <div className="flex gap-2 flex-wrap">
@@ -912,9 +912,6 @@ function RefreshReceiptsButton() {
       {msg && (
         <p className="text-zinc-400 text-[10px] font-mono">{msg}</p>
       )}
-      <p className="text-zinc-600 text-[10px] font-mono">
-        Recupero automatico ogni ora. Le ricevute sono disponibili 24h dopo l&apos;invio.
-      </p>
     </div>
   );
 }
