@@ -319,17 +319,19 @@ async def upgrade_subscription(db, user: Dict[str, Any], add_properties: int) ->
         payment_behavior="error_if_incomplete",
     )
 
+    new_status = updated_sub.get("status") or "active"
+    new_period_end = updated_sub.get("current_period_end")
     await db.subscriptions.update_one(
         {"user_id": user["user_id"]},
         {"$set": {
             "quantity": new_qty,
-            "status": updated_sub.status,
-            "current_period_end": updated_sub.current_period_end,
+            "status": new_status,
+            **({"current_period_end": new_period_end} if new_period_end else {}),
             "updated_at": _now_iso(),
         }},
     )
     logger.info(f"[billing] upgrade user={user['user_id']} qty {current_qty}→{new_qty}")
-    return {"ok": True, "new_quantity": new_qty, "status": updated_sub.status}
+    return {"ok": True, "new_quantity": new_qty, "status": new_status}
 
 
 async def create_portal_session(db, user: Dict[str, Any], return_url: str) -> str:
