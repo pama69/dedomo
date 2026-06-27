@@ -902,12 +902,15 @@ function RefreshReceiptsButton() {
         onClick={refresh}
         disabled={loading}
         data-testid="refresh-receipts-btn"
-        className="self-start border border-border hover:border-zinc-500 text-zinc-400 px-4 py-2 uppercase tracking-widest text-[10px] cursor-pointer disabled:opacity-50"
+        className="self-start px-5 py-2.5 uppercase tracking-widest text-[10px] font-bold cursor-pointer disabled:opacity-50 transition-colors text-white"
+        style={{ backgroundColor: loading ? "#3a6438" : "#3c6439", border: "1px solid #5a9a58" }}
+        onMouseEnter={(e) => { if (!loading) e.currentTarget.style.backgroundColor = "#4a7a48"; }}
+        onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = loading ? "#3a6438" : "#3c6439"; }}
       >
-        {loading ? "Recupero in corso..." : "↻ Recupera ricevute Alloggiati Web"}
+        {loading ? "↻ Recupero in corso..." : "↻ Recupero manuale ricevute Alloggiati"}
       </button>
       {msg && (
-        <p className="text-zinc-500 text-[10px] font-mono">{msg}</p>
+        <p className="text-zinc-400 text-[10px] font-mono">{msg}</p>
       )}
       <p className="text-zinc-600 text-[10px] font-mono">
         Recupero automatico ogni ora. Le ricevute sono disponibili 24h dopo l&apos;invio.
@@ -1370,7 +1373,7 @@ function RemoteCheckinSection({ properties }) {
   const [loadingRc, setLoadingRc] = useState(true);
   const [showNew, setShowNew] = useState(false);
   const [reviewing, setReviewing] = useState(null);
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(true);
 
   const STATUS = {
     sent:       { label: "In attesa",        cls: "text-amber-400" },
