@@ -288,6 +288,48 @@ async def get_checkout_status(db, session_id: str) -> Dict[str, Any]:
     }
 
 
+async def upgrade_subscription(db, user: Dict[str, Any], add_properties: int) -> Dict[str, Any]:
+    """Increase the quantity of an existing active subscription by add_properties.
+    Stripe calculates the prorated charge for the remaining period and bills immediately.
+    """
+    _init_stripe()
+    sub = await db.subscriptions.find_one({"user_id": user["user_id"]})
+    if not sub or not sub.get("stripe_subscription_id"):
+        raise ValueError("Nessun abbonamento attivo trovato")
+
+    stripe_sub = stripe.Subscription.retrieve(sub["stripe_subscription_id"])
+    if stripe_sub.status not in ("active", "trialing"):
+        raise ValueError(f"Abbonamento non modificabile: stato {stripe_sub.status}")
+
+    if not stripe_sub.items or not stripe_sub.items.data:
+        raise ValueError("Nessun item trovato nell'abbonamento Stripe")
+
+    item = stripe_sub.items.data[0]
+    current_qty = item.quantity or 1
+    new_qty = current_qty + add_properties
+
+    if new_qty > MAX_PAID_PROPERTIES:
+        raise ValueError(f"Limite massimo {MAX_PAID_PROPERTIES} proprietà raggiunto")
+
+    updated_sub = stripe.Subscription.modify(
+        sub["stripe_subscription_id"],
+        items=[{"id": item.id, "quantity": new_qty}],
+        proration_behavior="create_prorations",
+    )
+
+    await db.subscriptions.update_one(
+        {"user_id": user["user_id"]},
+        {"$set": {
+            "quantity": new_qty,
+            "status": updated_sub.status,
+            "current_period_end": updated_sub.current_period_end,
+            "updated_at": _now_iso(),
+        }},
+    )
+    logger.info(f"[billing] upgrade user={user['user_id']} qty {current_qty}→{new_qty}")
+    return {"ok": True, "new_quantity": new_qty, "status": updated_sub.status}
+
+
 async def create_portal_session(db, user: Dict[str, Any], return_url: str) -> str:
     """Open the Stripe customer portal so the user can manage their sub."""
     _init_stripe()

@@ -14,6 +14,7 @@ export default function Pricing() {
   const [num, setNum] = useState(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [upgraded, setUpgraded] = useState(false);
   const cancelled = params.get("cancelled") === "1";
 
   useEffect(() => {
@@ -50,6 +51,23 @@ export default function Pricing() {
     try {
       const r = await api.post("/billing/customer-portal", { return_url: window.location.href });
       if (r.data?.url) window.location.href = r.data.url;
+    } catch (e) {
+      setError(e.response?.data?.detail || e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const upgradeSubscription = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      await api.post("/billing/upgrade-subscription", { add_properties: num });
+      setUpgraded(true);
+      // Refresh quota so the UI reflects the new quantity
+      const r = await api.get("/billing/quota");
+      setQuota(r.data);
+      setNum(1);
     } catch (e) {
       setError(e.response?.data?.detail || e.message);
     } finally {
@@ -219,24 +237,42 @@ export default function Pricing() {
                   </div>
                 </div>
 
+                {upgraded && (
+                  <div className="border border-emerald-500/40 bg-emerald-500/5 px-4 py-3 text-emerald-300 text-[12px] font-mono">
+                    ✓ Abbonamento aggiornato a {currentPaid + num} proprietà. La prorota è stata addebitata sulla carta registrata.
+                  </div>
+                )}
+
                 {error && (
                   <div className="border border-red-500/40 bg-red-500/5 px-3 py-2 text-red-300 text-[11px] font-mono">
                     {error}
                   </div>
                 )}
 
-                <button
-                  data-testid="upgrade-btn"
-                  onClick={openPortal}
-                  disabled={loading}
-                  className="w-full bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-black font-bold py-4 uppercase tracking-[0.3em] text-sm cursor-pointer transition-colors"
-                >
-                  {loading ? "Reindirizzamento…" : `Integra abbonamento · +€ ${total.toFixed(2)}/anno`}
-                </button>
+                {!upgraded && (
+                  <>
+                    <div className="border border-amber-500/30 bg-amber-500/5 px-4 py-3 flex flex-col gap-1">
+                      <span className="text-amber-300 text-[11px] font-bold uppercase tracking-widest">Addebito immediato pro-rata</span>
+                      <p className="text-zinc-400 text-[11px] leading-relaxed">
+                        Cliccando il pulsante, <b className="text-zinc-200">€ {total.toFixed(2)}</b> (IVA inclusa) verranno addebitati immediatamente sulla carta registrata. L'importo è proporzionale ai giorni rimanenti del periodo di abbonamento corrente. Al prossimo rinnovo pagherai il piano completo ({currentPaid + num} proprietà).
+                      </p>
+                    </div>
 
-                <p className="text-[10px] text-zinc-500 text-center">
-                  Verrai reindirizzato al portale Stripe per modificare il piano · piano totale: {currentPaid + num} proprietà
-                </p>
+                    <button
+                      data-testid="upgrade-btn"
+                      onClick={upgradeSubscription}
+                      disabled={loading}
+                      className="w-full bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-black font-bold py-4 uppercase tracking-[0.3em] text-sm cursor-pointer transition-colors"
+                    >
+                      {loading ? "Elaborazione…" : `Conferma e paga · € ${total.toFixed(2)}`}
+                    </button>
+
+                    <p className="text-[10px] text-zinc-500 text-center">
+                      Pagamento sicuro su Stripe · piano totale dopo upgrade: {currentPaid + num} proprietà
+                    </p>
+                  </>
+                )}
+
               </>
             )}
 

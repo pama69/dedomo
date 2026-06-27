@@ -30,6 +30,10 @@ class PortalBody(BaseModel):
     return_url: str
 
 
+class UpgradeBody(BaseModel):
+    add_properties: int
+
+
 def build_billing_router(db, get_current_user, get_admin_user) -> APIRouter:
     router = APIRouter()
 
@@ -65,6 +69,25 @@ def build_billing_router(db, get_current_user, get_admin_user) -> APIRouter:
         except Exception as e:
             logger.exception("[billing] checkout status failed")
             raise HTTPException(500, f"Errore verifica pagamento: {str(e)}")
+
+    # --------------- UPGRADE (increase quantity in-place) ---------------
+    @router.post("/billing/upgrade-subscription")
+    async def upgrade_subscription(
+        body: UpgradeBody = Body(...),
+        user=Depends(get_current_user),
+    ):
+        if body.add_properties < 1 or body.add_properties > billing_svc.MAX_PAID_PROPERTIES:
+            raise HTTPException(400, "add_properties non valido")
+        if user.get("unlimited"):
+            raise HTTPException(400, "Account illimitato: nessun upgrade necessario")
+        try:
+            result = await billing_svc.upgrade_subscription(db, user, body.add_properties)
+            return result
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        except Exception as e:
+            logger.exception("[billing] upgrade failed")
+            raise HTTPException(500, f"Errore upgrade abbonamento: {str(e)}")
 
     # --------------- CUSTOMER PORTAL ---------------
     @router.post("/billing/customer-portal")
