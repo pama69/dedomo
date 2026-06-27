@@ -165,6 +165,18 @@ export default function Pricing() {
             {/* Sezione integrazione solo se ci sono slot disponibili */}
             {currentPaid < maxProps && (
               <>
+                {upgraded && (
+                  <div className="border border-emerald-500/40 bg-emerald-500/5 px-4 py-3 text-emerald-300 text-[12px] font-mono">
+                    ✓ Abbonamento aggiornato a {quota?.subscription?.quantity} proprietà. L'importo proporzionale è stato addebitato sulla carta registrata.
+                  </div>
+                )}
+
+                {error && (
+                  <div className="border border-red-500/40 bg-red-500/5 px-3 py-2 text-red-300 text-[11px] font-mono">
+                    {error}
+                  </div>
+                )}
+
                 <div className="flex flex-col gap-1">
                   <h3 className="text-lg font-bold text-zinc-100">Integra abbonamento</h3>
                   <p className="text-zinc-400 text-sm">
@@ -236,18 +248,6 @@ export default function Pricing() {
                     <span className="text-amber-400 font-bold" data-testid="total-eur">€ {total.toFixed(2)}</span>
                   </div>
                 </div>
-
-                {upgraded && (
-                  <div className="border border-emerald-500/40 bg-emerald-500/5 px-4 py-3 text-emerald-300 text-[12px] font-mono">
-                    ✓ Abbonamento aggiornato a {currentPaid + num} proprietà. La prorota è stata addebitata sulla carta registrata.
-                  </div>
-                )}
-
-                {error && (
-                  <div className="border border-red-500/40 bg-red-500/5 px-3 py-2 text-red-300 text-[11px] font-mono">
-                    {error}
-                  </div>
-                )}
 
                 {!upgraded && (
                   <>

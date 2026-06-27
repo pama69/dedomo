@@ -301,11 +301,12 @@ async def upgrade_subscription(db, user: Dict[str, Any], add_properties: int) ->
     if stripe_sub.status not in ("active", "trialing"):
         raise ValueError(f"Abbonamento non modificabile: stato {stripe_sub.status}")
 
-    if not stripe_sub.items or not stripe_sub.items.data:
+    items_list = stripe_sub["items"]
+    if not items_list or not items_list.get("data"):
         raise ValueError("Nessun item trovato nell'abbonamento Stripe")
 
-    item = stripe_sub.items.data[0]
-    current_qty = item.quantity or 1
+    item = items_list["data"][0]
+    current_qty = item.get("quantity") or 1
     new_qty = current_qty + add_properties
 
     if new_qty > MAX_PAID_PROPERTIES:
@@ -313,7 +314,7 @@ async def upgrade_subscription(db, user: Dict[str, Any], add_properties: int) ->
 
     updated_sub = stripe.Subscription.modify(
         sub["stripe_subscription_id"],
-        items=[{"id": item.id, "quantity": new_qty}],
+        items=[{"id": item["id"], "quantity": new_qty}],
         proration_behavior="create_prorations",
     )
 
@@ -355,7 +356,8 @@ async def sync_subscription_from_stripe(db, user_id: str) -> Optional[Dict[str, 
         return sub
     qty = None
     try:
-        qty = s.items.data[0].quantity if s.items.data else None
+        items_data = s["items"].get("data") if s.get("items") else None
+        qty = items_data[0].get("quantity") if items_data else None
     except Exception:
         pass
     await db.subscriptions.update_one(
