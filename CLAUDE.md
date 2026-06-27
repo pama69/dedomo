@@ -6,9 +6,9 @@
 
 ## 📌 Sessione corrente — 2026-06-27
 
-**Tema:** Sicurezza, GDPR tecnico, Stripe decoupled da Emergent.
+**Tema:** Sicurezza, GDPR tecnico, Stripe decoupled da Emergent, UX Archive e Dashboard.
 
-**Stato:** da pushare (chiedere a Paolo).
+**Stato:** pushato su `main` — Railway in deploy.
 
 **🆕 Fatto in questa sessione:**
 
@@ -29,6 +29,21 @@
 - **DELETE /auth/account** completo: ora elimina anche `properties`, `checkins`, `remote_checkins`, `push_subscriptions`, `guest_tokens`, `subscriptions`; anonimizza `payment_transactions` (obbligo fiscale)
 - **Job APScheduler mensile** `_gdpr_anonymize_old_data`: anonimizza campi ospite in `checkins` >3 anni; elimina `remote_checkins` completati/falliti >3 anni (1° del mese ore 03:00)
 - **Settings — Zona pericolosa**: `DangerZoneSection` con doppia conferma prima della cancellazione account
+- **PDF GDPR_Dedomo.pdf**: schema procedurale 12 sezioni (soggetti, basi giuridiche, flusso dati, misure tecniche, checklist, retention policy…)
+
+### Archivio (`Archive.jsx`)
+- Titolo → "Archivio invii generale"
+- Pulsante recupera ricevute → verde pieno "↻ Recupero manuale ricevute Alloggiati"
+- Rimosso disclaimer sotto il pulsante
+- Sezione Check-in Remoto: parte collassata di default
+
+### Dashboard (`Dashboard.jsx`)
+- Rimossi StatCard "Strutture" e "Ultimi Invii"
+- Rimossa sezione "Riepilogo Strutture"
+- Rimossa sezione "Ultimi Invii"
+- **SystemStatus**: health check reale su `GET /api/health` — verde/rosso/grigio
+- **SystemEventLog**: log cronologico ultimi 10 eventi (invii normali + remote check-in) con timestamp relativo, indicatore colorato per stato, badge modalità PROD/TEST/REMOTO
+- Backend: `GET /api/dashboard/events` aggrega `checkins` + `remote_checkins` per user, ordina per ts desc
 
 **🔎 Azioni manuali pendenti (Paolo):**
 - Rigenerare password MongoDB Atlas (esposta in chat mesi fa)
@@ -201,8 +216,8 @@ frontend/src/
     Settings.jsx       — strutture/credenziali; pulsante "Manuale" per ogni proprietà
     HouseManual.jsx    — pagina manuale casa per ospite (Wi-Fi, check-in/out, custom)
     GuestPage.jsx      — pagina pubblica ospite (design vacanze, i18n 4 lingue, sezione casa)
-    Archive.jsx        — storico check-in + GuestPageLink + gestione remote check-in (status, annulla, autorizza)
-    Dashboard.jsx      — bottone rosso "Check-in Remoto" → NewRemoteCheckinModal
+    Archive.jsx        — "Archivio invii generale"; mesi collassati di default; pulsante verde recupera ricevute; sezione remote collassata
+    Dashboard.jsx      — hero check-in, remote check-in, SystemStatus (health check reale), SystemEventLog (ultimi 10 eventi)
     RemoteCheckin.jsx  — form pubblico ospite: OCR, autocomplete comuni/paesi, date GG/MM/AAAA
   components/
     NewRemoteCheckinModal.jsx — modal condiviso Dashboard+Archive per creare remote check-in
