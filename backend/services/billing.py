@@ -193,6 +193,7 @@ async def create_checkout_session(
         success_url=success_url,
         cancel_url=cancel_url,
         allow_promotion_codes=True,
+        tax_id_collection={"enabled": True},
         metadata={
             "user_id": user["user_id"],
             "num_properties": str(quantity),
