@@ -3911,6 +3911,7 @@ async def admin_list_users(
             {"_id": 0, "expires_at": 1, "created_at": 1},
             sort=[("expires_at", -1)],
         )
+        sub = await db.subscriptions.find_one({"user_id": u["user_id"]}, {"_id": 0})
         enriched.append({
             "user_id": u["user_id"],
             "email": u.get("email"),
@@ -3918,11 +3919,16 @@ async def admin_list_users(
             "picture": u.get("picture"),
             "created_at": u.get("created_at"),
             "disabled": bool(u.get("disabled", False)),
+            "unlimited": bool(u.get("unlimited", False)),
             "properties_count": props_n,
             "checkins_count": checkins_n,
             "last_checkin_at": last_ck.get("created_at") if last_ck else None,
             "last_login_at": (last_session.get("created_at") or last_session.get("expires_at"))
                 if last_session else None,
+            "subscription": {
+                "status": sub.get("status"),
+                "quantity": sub.get("quantity"),
+            } if sub else None,
         })
     return {"users": enriched, "total": len(enriched)}
 
@@ -3987,6 +3993,7 @@ async def admin_user_detail(user_id: str, admin=Depends(get_admin_user)):
     foreign = sum(r["n"] for r in res if r.get("_id"))
     italian = sum(r["n"] for r in res if not r.get("_id"))
 
+    sub = await db.subscriptions.find_one({"user_id": user_id}, {"_id": 0})
     return {
         "user": {
             "user_id": u["user_id"],
@@ -3999,6 +4006,13 @@ async def admin_user_detail(user_id: str, admin=Depends(get_admin_user)):
             "unlimited": bool(u.get("unlimited", False)),
             "registration_ip": u.get("registration_ip"),
         },
+        "subscription": {
+            "status": sub.get("status"),
+            "quantity": sub.get("quantity"),
+            "stripe_subscription_id": sub.get("stripe_subscription_id"),
+            "current_period_end": sub.get("current_period_end"),
+            "activated_at": sub.get("activated_at"),
+        } if sub else None,
         "stats": {
             "checkins_total": ck_total,
             "checkins_month": ck_month,
@@ -4017,6 +4031,20 @@ async def admin_user_detail(user_id: str, admin=Depends(get_admin_user)):
         "properties": props,
         "recent_checkins": recent_ck,
     }
+
+
+@api_router.post("/admin/user/{user_id}/sync-subscription")
+async def admin_sync_subscription(user_id: str, admin=Depends(get_admin_user)):
+    """Force-sync a user's subscription from Stripe."""
+    from services import billing as billing_svc
+    u = await db.users.find_one({"user_id": user_id})
+    if not u:
+        raise HTTPException(404, "Utente non trovato")
+    try:
+        sub = await billing_svc.sync_subscription_from_stripe(db, user_id)
+        return {"ok": True, "subscription": sub}
+    except Exception as e:
+        raise HTTPException(500, f"Errore sync: {str(e)}")
 
 
 @api_router.post("/admin/user/{user_id}/toggle-disabled")

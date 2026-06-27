@@ -182,6 +182,7 @@ function UserDetailModal({ userId, onClose, onChanged }) {
   const [toggling, setToggling] = useState(false);
   const [confirmToggle, setConfirmToggle] = useState(false);
   const [unlimitedToggling, setUnlimitedToggling] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState("");
 
   const load = async () => {
@@ -226,6 +227,21 @@ function UserDetailModal({ userId, onClose, onChanged }) {
   const fmtDate = (iso) => {
     if (!iso) return "—";
     try { return new Date(iso).toLocaleDateString("it-IT"); } catch { return iso; }
+  };
+
+  const syncSubscription = async () => {
+    setSyncing(true);
+    setError("");
+    try {
+      await api.post(`/admin/user/${userId}/sync-subscription`);
+      await load();
+      setError("✓ Abbonamento sincronizzato da Stripe");
+      setTimeout(() => setError(""), 4000);
+    } catch (e) {
+      setError(`Errore sync: ${e.response?.data?.detail || e.message}`);
+    } finally {
+      setSyncing(false);
+    }
   };
 
   const toggleUnlimited = async () => {
@@ -402,6 +418,56 @@ function UserDetailModal({ userId, onClose, onChanged }) {
               </div>
             </div>
 
+            {/* Subscription */}
+            <div className="border border-border p-3 flex flex-col gap-2">
+              <div className="flex items-center justify-between">
+                <div className="text-[10px] tracking-[0.25em] uppercase text-zinc-500">Abbonamento</div>
+                <button
+                  onClick={syncSubscription}
+                  disabled={syncing}
+                  className="text-[9px] uppercase tracking-widest border border-zinc-700 hover:border-zinc-400 text-zinc-400 hover:text-zinc-100 px-2 py-1 cursor-pointer disabled:opacity-50 transition-colors"
+                >
+                  {syncing ? "Sync..." : "↻ Sync da Stripe"}
+                </button>
+              </div>
+              {data.user.unlimited ? (
+                <span className="text-amber-400 text-[11px] font-mono">∞ Account illimitato</span>
+              ) : data.subscription ? (
+                <div className="flex flex-col gap-1 font-mono text-[11px]">
+                  <div className="flex justify-between">
+                    <span className="text-zinc-500">Stato</span>
+                    <span className={data.subscription.status === "active" ? "text-emerald-400" : "text-amber-400"}>
+                      {data.subscription.status}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-zinc-500">Proprietà pagate</span>
+                    <span className="text-zinc-200">{data.subscription.quantity}</span>
+                  </div>
+                  {data.subscription.current_period_end && (
+                    <div className="flex justify-between">
+                      <span className="text-zinc-500">Rinnovo</span>
+                      <span className="text-zinc-400">{fmtDate(new Date(data.subscription.current_period_end * 1000).toISOString())}</span>
+                    </div>
+                  )}
+                  {data.subscription.activated_at && (
+                    <div className="flex justify-between">
+                      <span className="text-zinc-500">Attivato il</span>
+                      <span className="text-zinc-400">{fmtDate(data.subscription.activated_at)}</span>
+                    </div>
+                  )}
+                  {data.subscription.stripe_subscription_id && (
+                    <div className="flex justify-between">
+                      <span className="text-zinc-500">Stripe ID</span>
+                      <span className="text-zinc-600 text-[9px]">{data.subscription.stripe_subscription_id}</span>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <span className="text-zinc-500 text-[11px] font-mono">Nessun abbonamento — piano trial</span>
+              )}
+            </div>
+
             {/* Properties */}
             <div className="border border-border p-3 flex flex-col gap-2">
               <div className="text-[10px] tracking-[0.25em] uppercase text-zinc-500">Strutture ({data.properties.length})</div>
@@ -497,6 +563,7 @@ function UsersTab() {
                 <th className="text-left px-3 py-2 text-zinc-500 uppercase tracking-widest">Utente</th>
                 <th className="text-center px-2 py-2 text-zinc-500 uppercase tracking-widest">Strutture</th>
                 <th className="text-center px-2 py-2 text-zinc-500 uppercase tracking-widest">Check-in</th>
+                <th className="text-left px-2 py-2 text-zinc-500 uppercase tracking-widest">Piano</th>
                 <th className="text-left px-2 py-2 text-zinc-500 uppercase tracking-widest">Ultimo</th>
                 <th className="text-left px-2 py-2 text-zinc-500 uppercase tracking-widest">Stato</th>
               </tr>
@@ -517,6 +584,17 @@ function UsersTab() {
                   </td>
                   <td className="px-2 py-2 text-center text-zinc-300">{u.properties_count}</td>
                   <td className="px-2 py-2 text-center text-emerald-500">{u.checkins_count}</td>
+                  <td className="px-2 py-2">
+                    {u.unlimited ? (
+                      <span className="text-amber-400 text-[9px] uppercase tracking-widest">∞ illimitato</span>
+                    ) : u.subscription ? (
+                      <span className={u.subscription.status === "active" ? "text-emerald-400 text-[9px]" : "text-amber-400 text-[9px]"}>
+                        {u.subscription.quantity} prop · {u.subscription.status}
+                      </span>
+                    ) : (
+                      <span className="text-zinc-600 text-[9px]">trial</span>
+                    )}
+                  </td>
                   <td className="px-2 py-2 text-zinc-500">{fmtDate(u.last_checkin_at)}</td>
                   <td className="px-2 py-2">
                     {u.disabled ? (
