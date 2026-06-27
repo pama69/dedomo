@@ -2917,11 +2917,22 @@ async def _send_scheduled_remote_checkin(doc: dict):
             {"$set": {"status": "done", "done_at": datetime.now(timezone.utc).isoformat(), "checkin_id": checkin_id}},
         )
         logger.info(f"[REMOTE_CI_SCHED] {remote_id} inviato OK")
+        await _add_notification(
+            user_id, "success",
+            f"Trasmissione automatica OK — {doc.get('property_name', '')}",
+            "Il check-in remoto è stato trasmesso con successo alle autorità.",
+            checkin_id=checkin_id,
+        )
     except Exception as e:
         logger.error(f"[REMOTE_CI_SCHED] {remote_id} fallito: {e}")
         await db.remote_checkins.update_one(
             {"remote_id": remote_id},
             {"$set": {"status": "failed", "fail_reason": str(e)}}
+        )
+        await _add_notification(
+            user_id, "error",
+            f"Trasmissione automatica fallita — {doc.get('property_name', '')}",
+            f"Errore durante l'invio automatico: {str(e)[:200]}. Vai in Archivio per riprovare.",
         )
 
 
@@ -3041,11 +3052,10 @@ async def submit_remote_checkin(token: str, request: Request, _rl=Depends(_rl_pu
         }},
     )
     await _notify_host_remote_submitted(doc["user_id"], doc["property_name"], doc["guest_email"], len(guests))
-    await send_push(
-        db, doc["user_id"],
+    await _add_notification(
+        doc["user_id"], "success",
         f"Check-in remoto — {doc['property_name']}",
         f"{len(guests)} ospite/i hanno compilato il form. Vai in Archivio per autorizzare l'invio.",
-        url="/archive",
     )
     return {"ok": True}
 
@@ -4425,12 +4435,22 @@ async def _process_submit_result(
     if kind == "definitive":
         # Definitive: never retry. Save final state, notify if first time.
         if not was_pending or prev.get("last_error") != msg:
-            await _add_notification(
-                user_id, "error",
-                f"{portal_label}: invio rifiutato",
-                f"Errore non recuperabile: {msg[:200]}. Modifica i dati e ripeti l'invio manualmente.",
-                checkin_id=checkin_id, portal=portal,
-            )
+            msg_lower = msg.lower()
+            is_auth = any(p in msg_lower for p in ["autenticazione", "credenziali", "token non valido", "authentication failed"])
+            if is_auth:
+                await _add_notification(
+                    user_id, "error",
+                    f"{portal_label}: credenziali non valide",
+                    "Le credenziali del portale non sono corrette o sono scadute. Aggiornale in Impostazioni → Proprietà.",
+                    checkin_id=checkin_id, portal=portal,
+                )
+            else:
+                await _add_notification(
+                    user_id, "error",
+                    f"{portal_label}: invio rifiutato",
+                    f"Errore non recuperabile: {msg[:200]}. Modifica i dati e ripeti l'invio manualmente.",
+                    checkin_id=checkin_id, portal=portal,
+                )
         await db.checkins.update_one(
             {"checkin_id": checkin_id},
             {"$set": {f"retry_state.{portal}": {
@@ -4896,6 +4916,48 @@ async def daily_ross1000_zero_movement():
             logger.error(f"[ross1000-zero] error on property {p.get('property_id')}: {e}")
 
 
+async def _check_subscription_expiry():
+    """Daily job: notify users whose subscription expires in ~7 days (window: 6-8 days out)."""
+    now = datetime.now(timezone.utc)
+    window_start = int((now + timedelta(days=6)).timestamp())
+    window_end = int((now + timedelta(days=8)).timestamp())
+    try:
+        subs = await db.subscriptions.find(
+            {
+                "status": {"$in": ["active", "trialing"]},
+                "current_period_end": {"$gte": window_start, "$lte": window_end},
+            },
+            {"_id": 0, "user_id": 1, "current_period_end": 1},
+        ).to_list(None)
+    except Exception as e:
+        logger.error(f"[sub_expiry] query failed: {e}")
+        return
+    today_prefix = now.strftime("%Y-%m-%d")
+    for sub in subs:
+        user_id = sub["user_id"]
+        try:
+            already = await db.notifications.find_one({
+                "user_id": user_id,
+                "title": "Abbonamento in scadenza",
+                "created_at": {"$gte": today_prefix},
+            })
+            if already:
+                continue
+            period_end = sub.get("current_period_end")
+            if isinstance(period_end, (int, float)):
+                exp_date = datetime.fromtimestamp(int(period_end), tz=timezone.utc).strftime("%d/%m/%Y")
+            else:
+                exp_date = "tra 7 giorni"
+            await _add_notification(
+                user_id, "warning",
+                "Abbonamento in scadenza",
+                f"Il tuo abbonamento scade il {exp_date}. Rinnova in Impostazioni per non interrompere le trasmissioni.",
+            )
+            logger.info(f"[sub_expiry] notificato user={user_id} scadenza={exp_date}")
+        except Exception as e:
+            logger.error(f"[sub_expiry] errore user={user_id}: {e}")
+
+
 async def _gdpr_anonymize_old_data():
     """GDPR art. 5(1)(e) — anonimizza i dati personali degli ospiti dopo 3 anni."""
     cutoff = datetime.now(timezone.utc) - timedelta(days=3 * 365)
@@ -4994,6 +5056,8 @@ async def startup_scheduler():
     )
     # Every 2 minutes — send remote check-ins authorized and due
     scheduler.add_job(_process_scheduled_remote_checkins, "interval", minutes=2, id="remote_checkin_send")
+    # Daily at 10:00 — notify users whose subscription expires in 7 days
+    scheduler.add_job(_check_subscription_expiry, "cron", hour=10, minute=0, id="sub_expiry_check")
     # GDPR: monthly anonymization of guest data older than 3 years (1st of each month at 03:00)
     scheduler.add_job(_gdpr_anonymize_old_data, "cron", day=1, hour=3, minute=0, id="gdpr_anonymize")
     scheduler.start()

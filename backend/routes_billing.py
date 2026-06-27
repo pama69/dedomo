@@ -10,10 +10,13 @@ Endpoints:
 """
 from __future__ import annotations
 import logging
+import uuid
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Request, Body
 from pydantic import BaseModel
 
 from services import billing as billing_svc
+from services.push_service import send_push
 
 logger = logging.getLogger(__name__)
 
@@ -172,13 +175,28 @@ def build_billing_router(db, get_current_user, get_admin_user) -> APIRouter:
                             {"$set": {"status": "canceled", "updated_at": billing_svc._now_iso()}},
                         )
             elif etype == "invoice.payment_failed":
-                # Mark the subscription past_due
+                # Mark the subscription past_due and notify the user
                 sub_id = obj.get("subscription")
                 if sub_id:
+                    sub = await db.subscriptions.find_one({"stripe_subscription_id": sub_id})
                     await db.subscriptions.update_one(
                         {"stripe_subscription_id": sub_id},
                         {"$set": {"status": "past_due", "updated_at": billing_svc._now_iso()}},
                     )
+                    if sub:
+                        user_id = sub["user_id"]
+                        ntf_title = "Pagamento abbonamento non riuscito"
+                        ntf_body = "Il rinnovo del tuo abbonamento è fallito. Aggiorna il metodo di pagamento in Impostazioni."
+                        await db.notifications.insert_one({
+                            "notification_id": f"ntf_{uuid.uuid4().hex[:12]}",
+                            "user_id": user_id,
+                            "level": "error",
+                            "title": ntf_title,
+                            "body": ntf_body,
+                            "read": False,
+                            "created_at": datetime.now(timezone.utc).isoformat(),
+                        })
+                        await send_push(db, user_id, ntf_title, ntf_body, url="/billing/pricing")
             return {"received": True, "type": etype}
         except HTTPException:
             raise
