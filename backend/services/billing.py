@@ -377,7 +377,7 @@ async def sync_subscription_from_stripe(db, user_id: str) -> Optional[Dict[str, 
         {"user_id": user_id},
         {"$set": update},
     )
-    return await db.subscriptions.find_one({"user_id": user_id})
+    return await db.subscriptions.find_one({"user_id": user_id}, {"_id": 0})
 
 
 # ----------------------- quota helpers --------------------------
