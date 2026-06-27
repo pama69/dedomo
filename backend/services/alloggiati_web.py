@@ -74,6 +74,10 @@ _NFKD_STUBBORN = str.maketrans({
     "ą": "a", "Ą": "A",
     "ę": "e", "Ę": "E",
     "ż": "z", "Ż": "Z",
+    # Turkish dotless i
+    "ı": "i",
+    # Sami eng (Norway, Sweden, Finland)
+    "ŋ": "n", "Ŋ": "N",
     # ── Greek (ELOT 743 — standard used on Greek passports) ──────────
     "α": "a",  "Α": "A",
     "β": "v",  "Β": "V",
