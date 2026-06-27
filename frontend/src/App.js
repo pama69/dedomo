@@ -44,6 +44,7 @@ import GuestPage from "@/pages/GuestPage";
 import RemoteCheckin from "@/pages/RemoteCheckin";
 import Landing from "@/pages/Landing";
 import Privacy from "@/pages/Privacy";
+import Terms from "@/pages/Terms";
 import HouseManual from "@/pages/HouseManual";
 import NotificationBanner from "@/components/NotificationBanner";
 
@@ -57,6 +58,7 @@ function AppRouter() {
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/verify-email" element={<VerifyEmail />} />
       <Route path="/privacy" element={<Privacy />} />
+      <Route path="/terms" element={<Terms />} />
       <Route path="/dashboard" element={<Dashboard />} />
       <Route path="/checkin" element={<Checkin />} />
       <Route path="/archive" element={<Archive />} />
