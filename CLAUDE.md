@@ -6,44 +6,36 @@
 
 ## 📌 Sessione corrente — 2026-06-27
 
-**Tema:** Sicurezza, GDPR tecnico, Stripe decoupled da Emergent, UX Archive e Dashboard.
+**Tema:** Billing — gestione 3DS upgrade, fix splash conferma, raccolta P.IVA checkout, pagina Termini.
 
-**Stato:** pushato su `main` — Railway in deploy.
+**Stato:** pushato su `main` — 3 commit in questo branch.
 
 **🆕 Fatto in questa sessione:**
 
-### Stripe / Sicurezza
-- `STRIPE_API_KEY` → `STRIPE_SECRET_KEY` (fix env mismatch)
-- Rimossa proxy Emergent Stripe, usa `api.stripe.com` diretto
-- Webhook Stripe: firma obbligatoria, rimosso fallback non verificato
-- Fix cache test/live: `stripe_resources_test` vs `stripe_resources_live`
-- `static/.gitkeep` — fix build Railway (cartella vuota dopo delete PDF)
-- Rate limiting in-memory (`_RateLimiter` sliding window): auth 10/min, OCR 5/min, public 20/min
-- Security headers: HSTS, X-Frame-Options, X-Content-Type, Referrer-Policy, Permissions-Policy
-- CORS origini esplicite, no wildcard
-- MongoDB indexes idempotenti a startup (12 indici)
-- Zeep SOAP singleton (client creato una sola volta)
+### Stripe — 3D Secure upgrade in-app
+- **Backend** (`routes_billing.py`): catch `stripe.error.CardError` con `code == "authentication_required"` → HTTP 402
+- **Frontend** (`Pricing.jsx`): intercetta status 402, mostra messaggio e auto-redirect al Customer Portal dopo 1.5s; fallback con istruzioni manuali se la chiamata portal fallisce
 
-### GDPR tecnico
-- **Informativa GDPR** in `RemoteCheckin.jsx`: box espandibile con base giuridica art. 6(1)(c), 3 anni retention, link /privacy — 4 lingue (it/en/de/fr)
-- **DELETE /auth/account** completo: ora elimina anche `properties`, `checkins`, `remote_checkins`, `push_subscriptions`, `guest_tokens`, `subscriptions`; anonimizza `payment_transactions` (obbligo fiscale)
-- **Job APScheduler mensile** `_gdpr_anonymize_old_data`: anonimizza campi ospite in `checkins` >3 anni; elimina `remote_checkins` completati/falliti >3 anni (1° del mese ore 03:00)
-- **Settings — Zona pericolosa**: `DangerZoneSection` con doppia conferma prima della cancellazione account
-- **PDF GDPR_Dedomo.pdf**: schema procedurale 12 sezioni (soggetti, basi giuridiche, flusso dati, misure tecniche, checklist, retention policy…)
+### Fix splash conferma upgrade ("- proprietà")
+- Aggiunto stato `upgradedQty` in `Pricing.jsx`: calcolato come `currentPaid + num` prima dell'API call, aggiornato con il valore reale dopo il refresh quota
+- Elimina race condition tra `setUpgraded(true)` e `setQuota(r.data)` (React non batchava i due setState in catene async separate)
 
-### Archivio (`Archive.jsx`)
-- Titolo → "Archivio invii generale"
-- Pulsante recupera ricevute → verde pieno "↻ Recupero manuale ricevute Alloggiati"
-- Rimosso disclaimer sotto il pulsante
-- Sezione Check-in Remoto: parte collassata di default
+### Checkout — raccolta Partita IVA cliente
+- `billing.py`: aggiunto `tax_id_collection={"enabled": True}` alla sessione Stripe Checkout
+- Il cliente può inserire P.IVA (o CF) opzionale; compare sulla ricevuta Stripe
 
-### Dashboard (`Dashboard.jsx`)
-- Rimossi StatCard "Strutture" e "Ultimi Invii"
-- Rimossa sezione "Riepilogo Strutture"
-- Rimossa sezione "Ultimi Invii"
-- **SystemStatus**: health check reale su `GET /api/health` — verde/rosso/grigio
-- **SystemEventLog**: log cronologico ultimi 10 eventi (invii normali + remote check-in) con timestamp relativo, indicatore colorato per stato, badge modalità PROD/TEST/REMOTO
-- Backend: `GET /api/dashboard/events` aggrega `checkins` + `remote_checkins` per user, ordina per ts desc
+### Pagina Termini di utilizzo
+- Creato `frontend/src/pages/Terms.jsx` — 11 articoli in italiano (descrizione servizio, abbonamento, pagamenti, limitazione responsabilità, foro Pescara)
+- Route `/terms` aggiunta in `App.js`
+- URL Stripe: `https://www.dedomo.it/terms`
+
+**🔎 Configurazioni Stripe manuali da fare (Paolo):**
+- Settings → Billing → Subscriptions and emails → **Attiva 3D Secure** (toggle OFF → ON)
+- Settings → Billing → Subscriptions and emails → **Stato abbonamento**: abbassare da 15 giorni a 1 giorno
+- Settings → Attività → Dati dell'account → cambiare nome visualizzato da "Paolo Manni" a "Dedomo"
+- Settings → Attività → Dati fiscali → inserire Partita IVA
+- In test mode le email **non arrivano** (comportamento Stripe by design) — verificare in live mode
+- Raccolta P.IVA in checkout: già attiva dopo il push odierno
 
 **🔎 Azioni manuali pendenti (Paolo):**
 - Rigenerare password MongoDB Atlas (esposta in chat mesi fa)
@@ -211,7 +203,8 @@ frontend/src/
     ocr-client.js      — OCR client-side: fetch() → api.openai.com diretto
   pages/
     Landing.jsx        — route "/" pubblica; anonimi → /landing.html, loggati → /dashboard
-    Privacy.jsx        — pagina privacy pubblica (linkata da landing)
+    Privacy.jsx        — pagina privacy pubblica (linkata da landing) — URL: /privacy
+    Terms.jsx          — pagina termini di utilizzo pubblica — URL: /terms
     Checkin.jsx        — flusso 5 step; OCR client-side, guestWarnings() valida campi sospetti
     Settings.jsx       — strutture/credenziali; pulsante "Manuale" per ogni proprietà
     HouseManual.jsx    — pagina manuale casa per ospite (Wi-Fi, check-in/out, custom)
@@ -440,3 +433,29 @@ Dopo ogni modifica: `git commit` immediato, poi chiedere a Paolo "pusha?". Il pu
 **Verifiche residue:**
 - Test Ross 1000 al primo check-in PROD
 - Se rinomina Railway "vigilant-expression": aggiornare `PUBLIC_BACKEND_URL` in Railway Variables
+
+---
+
+### Sessione 2026-06-27
+
+**Tema:** Billing — 3DS, fix splash upgrade, P.IVA checkout, Termini di utilizzo.
+
+**Commit:**
+1. `c3864c0` Fix: gestione 3DS upgrade e quantità corretta nella splash di conferma
+2. `2dbe8e8` Checkout: abilita raccolta Partita IVA/codice fiscale cliente
+3. `18baff1` Aggiungi pagina Termini di utilizzo a /terms
+
+**Stripe SDK — Gotcha:**
+- `StripeObject` eredita da `dict` → `stripe_sub.items` restituisce `dict.items()` (builtin), NON gli items dell'abbonamento. Usare sempre `stripe_sub["items"]` (accesso dict-style)
+- `updated_sub.current_period_end` lancia `AttributeError("current_period_end")` se la chiave non esiste nella response. Usare sempre `.get()` per tutti gli attributi Stripe
+- `proration_behavior="always_invoice"` crea E addebita immediatamente la fattura pro-rata (vs `create_prorations` che la accoda al prossimo rinnovo annuale)
+- `payment_behavior="error_if_incomplete"` blocca l'upgrade se il pagamento fallisce (no upgrade gratuiti)
+- In test mode Stripe **non manda email** a nessun indirizzo — comportamento by design, verificare solo in live mode
+
+**Configurazioni Stripe da completare (Paolo):**
+- Attivare toggle 3D Secure (Settings → Billing → Subscriptions and emails)
+- Ridurre retry da 15 giorni a 1 giorno (stessa pagina → Stato abbonamento)
+- Cambiare nome visualizzato da "Paolo Manni" a "Dedomo" (Settings → Attività)
+- Inserire Partita IVA (Settings → Attività → Dati fiscali)
+- URL privacy: `https://www.dedomo.it/privacy` ✅
+- URL termini: `https://www.dedomo.it/terms` ✅
