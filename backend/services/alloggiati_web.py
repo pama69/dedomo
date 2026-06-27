@@ -15,6 +15,7 @@ Each "schedina" is a fixed-width text line (168 chars) per guest.
 from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
 import base64
+import unicodedata
 import zeep
 from zeep import Client
 from zeep.transports import Transport
@@ -54,11 +55,117 @@ TIPO_DOC_MAP = {
 }
 
 
+# Characters that NFKD cannot decompose — must be mapped manually before normalization.
+# Covers Polish, Scandinavian, Greek (ELOT 743), Cyrillic, and other common scripts.
+_NFKD_STUBBORN = str.maketrans({
+    # ── Latin Extended (Polish, Scandinavian, etc.) ──────────────────
+    "ł": "l", "Ł": "L",
+    "ø": "o", "Ø": "O",
+    "đ": "d", "Đ": "D",
+    "ħ": "h", "Ħ": "H",
+    "ŧ": "t", "Ŧ": "T",
+    "ŀ": "l", "Ŀ": "L",
+    "ß": "ss", "ẞ": "SS",
+    "æ": "ae", "Æ": "AE",
+    "œ": "oe", "Œ": "OE",
+    "ð": "d", "Ð": "D",
+    "þ": "th", "Þ": "TH",
+    "ĸ": "k",
+    "ą": "a", "Ą": "A",
+    "ę": "e", "Ę": "E",
+    "ż": "z", "Ż": "Z",
+    # ── Greek (ELOT 743 — standard used on Greek passports) ──────────
+    "α": "a",  "Α": "A",
+    "β": "v",  "Β": "V",
+    "γ": "g",  "Γ": "G",
+    "δ": "d",  "Δ": "D",
+    "ε": "e",  "Ε": "E",
+    "ζ": "z",  "Ζ": "Z",
+    "η": "i",  "Η": "I",
+    "θ": "th", "Θ": "TH",
+    "ι": "i",  "Ι": "I",
+    "κ": "k",  "Κ": "K",
+    "λ": "l",  "Λ": "L",
+    "μ": "m",  "Μ": "M",
+    "ν": "n",  "Ν": "N",
+    "ξ": "x",  "Ξ": "X",
+    "ο": "o",  "Ο": "O",
+    "π": "p",  "Π": "P",
+    "ρ": "r",  "Ρ": "R",
+    "σ": "s",  "Σ": "S",  "ς": "s",
+    "τ": "t",  "Τ": "T",
+    "υ": "u",  "Υ": "U",
+    "φ": "f",  "Φ": "F",
+    "χ": "ch", "Χ": "CH",
+    "ψ": "ps", "Ψ": "PS",
+    "ω": "o",  "Ω": "O",
+    # Greek with tonos (accented vowels)
+    "ά": "a",  "Ά": "A",
+    "έ": "e",  "Έ": "E",
+    "ή": "i",  "Ή": "I",
+    "ί": "i",  "Ί": "I",
+    "ό": "o",  "Ό": "O",
+    "ύ": "u",  "Ύ": "U",
+    "ώ": "o",  "Ώ": "O",
+    "ϊ": "i",  "Ϊ": "I",
+    "ϋ": "u",  "Ϋ": "U",
+    "ΐ": "i",  "ΰ": "u",
+    # ── Cyrillic (BGN/PCGN — covers Russian, Ukrainian, Bulgarian) ───
+    "а": "a",  "А": "A",
+    "б": "b",  "Б": "B",
+    "в": "v",  "В": "V",
+    "г": "g",  "Г": "G",
+    "д": "d",  "Д": "D",
+    "е": "e",  "Е": "E",
+    "ё": "yo", "Ё": "YO",
+    "ж": "zh", "Ж": "ZH",
+    "з": "z",  "З": "Z",
+    "и": "i",  "И": "I",
+    "й": "y",  "Й": "Y",
+    "к": "k",  "К": "K",
+    "л": "l",  "Л": "L",
+    "м": "m",  "М": "M",
+    "н": "n",  "Н": "N",
+    "о": "o",  "О": "O",
+    "п": "p",  "П": "P",
+    "р": "r",  "Р": "R",
+    "с": "s",  "С": "S",
+    "т": "t",  "Т": "T",
+    "у": "u",  "У": "U",
+    "ф": "f",  "Ф": "F",
+    "х": "kh", "Х": "KH",
+    "ц": "ts", "Ц": "TS",
+    "ч": "ch", "Ч": "CH",
+    "ш": "sh", "Ш": "SH",
+    "щ": "shch","Щ": "SHCH",
+    "ъ": "",   "Ъ": "",
+    "ы": "y",  "Ы": "Y",
+    "ь": "",   "Ь": "",
+    "э": "e",  "Э": "E",
+    "ю": "yu", "Ю": "YU",
+    "я": "ya", "Я": "YA",
+    # Ukrainian specifics
+    "і": "i",  "І": "I",
+    "ї": "yi", "Ї": "YI",
+    "є": "ye", "Є": "YE",
+    "ґ": "g",  "Ґ": "G",
+    # Bulgarian specifics
+    "щ": "sht","Щ": "SHT",
+})
+
+
+def _ascii_name(value: str) -> str:
+    """Transliterate a name to ASCII, preserving as many letters as possible."""
+    value = value.translate(_NFKD_STUBBORN)
+    value = unicodedata.normalize("NFKD", value)
+    return value.encode("ascii", "ignore").decode("ascii")
+
+
 def _pad(value: str, length: int) -> str:
-    """Pad right with spaces, truncate if too long."""
+    """Pad right with spaces, truncate if too long. Sanitises to ASCII first."""
     if value is None:
         value = ""
-    value = str(value).upper()
+    value = _ascii_name(str(value)).upper()
     return value[:length].ljust(length, " ")
 
 
