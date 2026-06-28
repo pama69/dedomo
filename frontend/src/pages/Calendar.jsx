@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Layout from "@/components/Layout";
 import api from "@/lib/api";
 
@@ -37,6 +37,21 @@ export default function Calendar() {
   const [editEvent, setEditEvent] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [refreshMsg, setRefreshMsg] = useState("");
+  const touchRef = useRef(null);
+
+  // Swipe orizzontale per cambiare mese (mobile)
+  const onTouchStart = (e) => {
+    touchRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+  };
+  const onTouchEnd = (e) => {
+    if (!touchRef.current) return;
+    const dx = e.changedTouches[0].clientX - touchRef.current.x;
+    const dy = e.changedTouches[0].clientY - touchRef.current.y;
+    touchRef.current = null;
+    if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+      setMonthStart((m) => addMonths(m, dx < 0 ? 1 : -1));
+    }
+  };
 
   const cells = useMemo(() => getCalendarGrid(monthStart), [monthStart]);
   const rangeFrom = fmtISO(cells[0]);
@@ -181,7 +196,11 @@ export default function Calendar() {
       {loading && <p className="text-zinc-500 text-[11px] font-mono">Caricamento...</p>}
 
       {/* Calendar grid */}
-      <div className="border border-border">
+      <div
+        className="border border-border rounded-xl overflow-hidden select-none"
+        onTouchStart={onTouchStart}
+        onTouchEnd={onTouchEnd}
+      >
         <div className="grid grid-cols-7 border-b border-border">
           {["Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom"].map((d) => (
             <div key={d} className="px-2 py-2 text-[9px] tracking-widest uppercase text-zinc-500 text-center font-mono border-r border-border last:border-r-0">{d}</div>
@@ -199,7 +218,7 @@ export default function Calendar() {
                 data-testid={`cal-day-${k}`}
                 className={`border-r border-b border-border last:border-r-0 p-1 flex flex-col gap-0.5 ${!inMonth ? "bg-background" : ""}`}
               >
-                <span className={`text-[10px] font-mono ${isToday ? "text-emerald-500 font-bold" : inMonth ? "text-zinc-400" : "text-zinc-700"}`}>
+                <span className={`text-[13px] font-mono leading-none mb-0.5 ${isToday ? "inline-flex items-center justify-center w-5 h-5 rounded-full bg-emerald-500 text-white font-bold" : inMonth ? "text-zinc-300 font-semibold" : "text-zinc-700"}`}>
                   {d.getDate()}
                 </span>
                 <div className="flex flex-col gap-0.5">
@@ -454,7 +473,7 @@ function DayBar({ event, variant, onEdit }) {
       onClick={() => event.editable && onEdit(event)}
       data-testid={`cal-event-${event.id}-${variant}`}
       style={{ backgroundColor: event.color }}
-      className={`text-left text-[9px] font-mono text-white truncate px-1.5 py-0.5 ${
+      className={`text-left text-[10px] font-mono text-white truncate px-2 py-1 rounded-md leading-tight shadow-sm ${
         event.editable ? "cursor-pointer hover:opacity-80" : "cursor-default"
       }`}
       title={title}
