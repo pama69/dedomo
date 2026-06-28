@@ -120,20 +120,10 @@ export default function Archive() {
     <Layout>
       <h2 className="typo-h1">Archivio invii generale</h2>
 
-      {/* Sub-nav */}
-      <div className="flex gap-2 flex-wrap">
-        <Link
-          to="/archive/owners"
-          data-testid="nav-archive-owners"
-          className="btn-secondary"
-        >
-          → Archivio per Proprietario / Codice Fiscale
-        </Link>
-      </div>
-
-      <RefreshReceiptsButton />
-
-      <RemoteCheckinSection properties={properties} />
+      {/* ── Archivio per proprietà (strutture + invii mensili) ── */}
+      <h3 className="text-lg font-bold text-primary-content tracking-tight mt-2">
+        Archivio per proprietà
+      </h3>
 
       {loading ? (
         <div className="flex flex-col gap-2">
@@ -391,6 +381,27 @@ export default function Archive() {
           </div>
         </>
       )}
+
+      {/* ── Divisore ── */}
+      <div className="border-t border-border my-4" />
+
+      {/* ── Check-in remoto ── */}
+      <RemoteCheckinSection properties={properties} />
+
+      {/* ── Divisore ── */}
+      <div className="border-t border-border my-4" />
+
+      {/* ── Azioni: invii per CF + recupero schedine (grafica coerente) ── */}
+      <div className="flex flex-col sm:flex-row gap-2">
+        <Link
+          to="/archive/owners"
+          data-testid="nav-archive-owners"
+          className="flex items-center justify-center gap-2 w-full sm:w-auto px-5 py-3 border border-border bg-surface-1 hover:border-zinc-500 text-zinc-200 hover:text-white text-[11px] uppercase tracking-widest font-bold cursor-pointer transition-colors"
+        >
+          → Vai a invii per codice fiscale
+        </Link>
+        <RefreshReceiptsButton />
+      </div>
     </Layout>
   );
 }
@@ -896,18 +907,15 @@ function RefreshReceiptsButton() {
   };
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-2 w-full sm:w-auto">
       <button
         type="button"
         onClick={refresh}
         disabled={loading}
         data-testid="refresh-receipts-btn"
-        className="self-start px-5 py-2.5 uppercase tracking-widest text-[10px] font-bold cursor-pointer disabled:opacity-50 transition-colors text-white"
-        style={{ backgroundColor: loading ? "#3a6438" : "#3c6439", border: "1px solid #5a9a58" }}
-        onMouseEnter={(e) => { if (!loading) e.currentTarget.style.backgroundColor = "#4a7a48"; }}
-        onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = loading ? "#3a6438" : "#3c6439"; }}
+        className="flex items-center justify-center gap-2 w-full sm:w-auto px-5 py-3 border border-border bg-surface-1 hover:border-zinc-500 text-zinc-200 hover:text-white text-[11px] uppercase tracking-widest font-bold cursor-pointer disabled:opacity-50 transition-colors"
       >
-        {loading ? "↻ Recupero in corso..." : "↻ Recupero manuale ricevute Alloggiati"}
+        {loading ? "↻ Recupero in corso..." : "↻ Recupera schedine Alloggiati"}
       </button>
       {msg && (
         <p className="text-zinc-400 text-[10px] font-mono">{msg}</p>

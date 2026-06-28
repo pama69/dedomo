@@ -180,7 +180,7 @@ export default function Settings() {
             >
               <div className="flex items-center gap-3 min-w-0">
                 <div
-                  className="w-9 h-9 rounded-md flex items-center justify-center flex-shrink-0"
+                  className="w-11 h-11 rounded-md flex items-center justify-center flex-shrink-0 text-lg"
                   style={{
                     backgroundColor: "hsl(var(--surface-3))",
                     color: "hsl(var(--accent))",
@@ -191,8 +191,8 @@ export default function Settings() {
                   {(p.nome || "?").charAt(0).toUpperCase()}
                 </div>
                 <div className="min-w-0">
-                  <p className="font-medium text-primary-content truncate">{p.nome}</p>
-                  <p className="typo-meta mt-0.5">
+                  <p className="text-lg font-bold text-primary-content truncate leading-tight">{p.nome}</p>
+                  <p className="typo-meta mt-1">
                     {p.comune || "—"}
                     <span className="mx-1.5 opacity-50">·</span>CIN {p.cin || "—"}
                     <span className="mx-1.5 opacity-50">·</span>
