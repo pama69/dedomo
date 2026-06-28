@@ -4,7 +4,7 @@ Backend per invio dati ospiti case vacanza ai portali Alloggiati Web,
 Ross 1000 e Imposta di Soggiorno comunale.
 """
 
-from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, Depends
+from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, Depends, Body
 from fastapi.responses import StreamingResponse, FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
