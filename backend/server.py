@@ -754,7 +754,16 @@ class HouseManual(BaseModel):
 
 
 class CalendarConfig(BaseModel):
-    """External iCal URLs to import bookings from."""
+    """External iCal feeds to import bookings from.
+
+    Nuovo modello: lista dinamica `feeds` = [{id, name, url}]. L'utente può
+    collegare un numero illimitato di calendari, ognuno con un nome a piacere
+    (mostrato sul calendario al posto della vecchia lettera B/A/V).
+    I campi legacy booking/airbnb/vrbo restano per retrocompatibilità: se `feeds`
+    è assente vengono convertiti automaticamente in voci "Booking"/"Airbnb"/"Vrbo".
+    """
+    feeds: Optional[List[Dict[str, str]]] = None
+    # Legacy (deprecati, mantenuti per migrazione automatica)
     booking_ical_url: str = ""
     airbnb_ical_url: str = ""
     vrbo_ical_url: str = ""
@@ -4118,8 +4127,10 @@ async def calendar_events(
     user=Depends(get_current_user),
 ):
     """Return all calendar events (external + manual + checkins) in [date_from, date_to].
-    Each event: {property_id, source: 'B'|'A'|'V'|'P'|'C', start, end, summary, notes,
-                 color, property_name, booking_id (if manual or external uid)}.
+    Each event: {property_id, source, start, end, summary, notes, color,
+                 property_name, booking_id (if manual or external uid)}.
+    `source` è il nome del feed scelto dall'utente (es. "Booking", "Airbnb Villa X")
+    oppure "Personale" per le prenotazioni manuali.
     """
     props = await db.properties.find(
         {"user_id": user["user_id"]}, {"_id": 0}
@@ -4137,21 +4148,43 @@ async def calendar_events(
             {"property_id": pid}, {"_id": 0}
         )
         cache = cache or {}
-        for src_letter, src_key in [("B", "booking"), ("A", "airbnb"), ("V", "vrbo")]:
-            for ev in cache.get(src_key, []) or []:
-                if ev["start"] <= date_to and ev["end"] >= date_from:
-                    events.append({
-                        "id": f"{pid}-{src_key}-{ev['uid']}",
-                        "property_id": pid,
-                        "property_name": name,
-                        "source": src_letter,
-                        "start": ev["start"],
-                        "end": ev["end"],
-                        "summary": ev.get("summary", ""),
-                        "notes": ev.get("description", ""),
-                        "color": color,
-                        "editable": False,
-                    })
+        cached_feeds = cache.get("feeds")
+        if cached_feeds is not None:
+            # Nuovo modello: ogni feed ha un nome scelto dall'utente
+            for f in cached_feeds:
+                fname = f.get("name") or "Calendario"
+                fid = f.get("id") or "feed"
+                for ev in f.get("events", []) or []:
+                    if ev["start"] <= date_to and ev["end"] >= date_from:
+                        events.append({
+                            "id": f"{pid}-{fid}-{ev['uid']}",
+                            "property_id": pid,
+                            "property_name": name,
+                            "source": fname,
+                            "start": ev["start"],
+                            "end": ev["end"],
+                            "summary": ev.get("summary", ""),
+                            "notes": ev.get("description", ""),
+                            "color": color,
+                            "editable": False,
+                        })
+        else:
+            # Cache legacy (vecchie chiavi booking/airbnb/vrbo) — finché non gira il refresh
+            for src_name, src_key in [("Booking", "booking"), ("Airbnb", "airbnb"), ("Vrbo", "vrbo")]:
+                for ev in cache.get(src_key, []) or []:
+                    if ev["start"] <= date_to and ev["end"] >= date_from:
+                        events.append({
+                            "id": f"{pid}-{src_key}-{ev['uid']}",
+                            "property_id": pid,
+                            "property_name": name,
+                            "source": src_name,
+                            "start": ev["start"],
+                            "end": ev["end"],
+                            "summary": ev.get("summary", ""),
+                            "notes": ev.get("description", ""),
+                            "color": color,
+                            "editable": False,
+                        })
 
     # Manual bookings (P) from db
     manual = await db.manual_bookings.find(
@@ -4170,7 +4203,7 @@ async def calendar_events(
             "booking_id": m["booking_id"],
             "property_id": m["property_id"],
             "property_name": p.get("nome", ""),
-            "source": "P",
+            "source": "Personale",
             "start": m["start"],
             "end": m["end"],
             "summary": "Prenotazione manuale",
@@ -4323,6 +4356,45 @@ async def calendar_export_ics(property_id: str, token: str):
     )
 
 
+def _resolve_feeds(cal: dict) -> List[Dict[str, str]]:
+    """Restituisce la lista normalizzata di feed [{id, name, url}] di una struttura.
+
+    Usa il nuovo campo `feeds` se presente (anche se vuoto → zero calendari).
+    Se assente (utente legacy), converte i 3 URL fissi in voci nominate.
+    """
+    feeds = (cal or {}).get("feeds")
+    if feeds is not None:
+        out = []
+        for f in feeds:
+            url = (f.get("url") or "").strip()
+            if not url:
+                continue
+            out.append({
+                "id": f.get("id") or f"feed_{uuid.uuid4().hex[:8]}",
+                "name": (f.get("name") or "Calendario").strip() or "Calendario",
+                "url": url,
+            })
+        return out
+    # Legacy fallback
+    out = []
+    for name, url_key in [("Booking", "booking_ical_url"), ("Airbnb", "airbnb_ical_url"), ("Vrbo", "vrbo_ical_url")]:
+        url = (cal or {}).get(url_key) or ""
+        if url:
+            out.append({"id": url_key, "name": name, "url": url})
+    return out
+
+
+def _fetch_feeds_into_cache(cal: dict) -> tuple[list, int]:
+    """Scarica gli eventi di tutti i feed di una struttura. Ritorna (cache_feeds, n_eventi)."""
+    cache_feeds = []
+    total = 0
+    for f in _resolve_feeds(cal):
+        evs = fetch_ical_events(f["url"])
+        total += len(evs)
+        cache_feeds.append({"id": f["id"], "name": f["name"], "events": evs})
+    return cache_feeds, total
+
+
 async def refresh_ical_caches():
     """Background job: refresh external iCal feeds every 4 hours."""
     props = await db.properties.find(
@@ -4333,13 +4405,14 @@ async def refresh_ical_caches():
     for p in props:
         cal = p.get("calendar") or {}
         pid = p["property_id"]
-        update = {"property_id": pid, "refreshed_at": datetime.now(timezone.utc).isoformat()}
-        for key, url_key in [("booking", "booking_ical_url"), ("airbnb", "airbnb_ical_url"), ("vrbo", "vrbo_ical_url")]:
-            url = cal.get(url_key) or ""
-            update[key] = fetch_ical_events(url) if url else []
+        cache_feeds, _ = _fetch_feeds_into_cache(cal)
         await db.ical_cache.update_one(
             {"property_id": pid},
-            {"$set": update},
+            {"$set": {
+                "property_id": pid,
+                "refreshed_at": datetime.now(timezone.utc).isoformat(),
+                "feeds": cache_feeds,
+            }},
             upsert=True,
         )
         n += 1
@@ -4359,16 +4432,14 @@ async def calendar_force_refresh(user=Depends(get_current_user)):
     for p in props:
         cal = p.get("calendar") or {}
         pid = p["property_id"]
-        update = {"property_id": pid, "refreshed_at": datetime.now(timezone.utc).isoformat()}
-        prop_events = 0
-        for key, url_key in [("booking", "booking_ical_url"), ("airbnb", "airbnb_ical_url"), ("vrbo", "vrbo_ical_url")]:
-            url = cal.get(url_key) or ""
-            events = fetch_ical_events(url) if url else []
-            update[key] = events
-            prop_events += len(events)
+        cache_feeds, prop_events = _fetch_feeds_into_cache(cal)
         await db.ical_cache.update_one(
             {"property_id": pid},
-            {"$set": update},
+            {"$set": {
+                "property_id": pid,
+                "refreshed_at": datetime.now(timezone.utc).isoformat(),
+                "feeds": cache_feeds,
+            }},
             upsert=True,
         )
         refreshed.append({"property_id": pid, "nome": p.get("nome", ""), "events": prop_events})

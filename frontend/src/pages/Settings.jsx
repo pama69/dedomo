@@ -4,6 +4,17 @@ import Layout from "@/components/Layout";
 import api from "@/lib/api";
 import { usePushNotifications } from "@/lib/usePushNotifications";
 
+const newFeedId = () => `feed_${Math.random().toString(36).slice(2, 10)}`;
+
+// Converte i vecchi 3 URL fissi in una lista di feed nominati (retrocompatibilità).
+const legacyToFeeds = (cal = {}) => {
+  const out = [];
+  if (cal.booking_ical_url) out.push({ id: "booking", name: "Booking", url: cal.booking_ical_url });
+  if (cal.airbnb_ical_url) out.push({ id: "airbnb", name: "Airbnb", url: cal.airbnb_ical_url });
+  if (cal.vrbo_ical_url) out.push({ id: "vrbo", name: "Vrbo", url: cal.vrbo_ical_url });
+  return out;
+};
+
 const emptyAlloggiati = {
   utente: "",
   password: "",
@@ -435,27 +446,67 @@ function PropertyEditor({ p, setP, save, cancel, saving, error }) {
       </Section>
 
       <Section title="Calendario / Sincronizzazione iCal">
-        <Field
-          label="Booking · URL iCal (entrata)"
-          value={p.calendar?.booking_ical_url || ""}
-          onChange={(v) => upd("calendar.booking_ical_url", v)}
-          testid="cal-booking-url"
-          placeholder="https://admin.booking.com/.../calendar.ics"
-        />
-        <Field
-          label="Airbnb · URL iCal (entrata)"
-          value={p.calendar?.airbnb_ical_url || ""}
-          onChange={(v) => upd("calendar.airbnb_ical_url", v)}
-          testid="cal-airbnb-url"
-          placeholder="https://www.airbnb.it/calendar/ical/..."
-        />
-        <Field
-          label="Vrbo · URL iCal (entrata)"
-          value={p.calendar?.vrbo_ical_url || ""}
-          onChange={(v) => upd("calendar.vrbo_ical_url", v)}
-          testid="cal-vrbo-url"
-          placeholder="https://www.vrbo.com/icalendar/..."
-        />
+        {(() => {
+          const feeds = p.calendar?.feeds ?? legacyToFeeds(p.calendar);
+          const setFeeds = (next) => upd("calendar.feeds", next);
+          return (
+            <div className="flex flex-col gap-3">
+              <p className="text-zinc-500 text-[11px] font-mono leading-relaxed">
+                Collega i calendari dei portali (Booking, Airbnb, Vrbo…). Il <strong>nome</strong> che scegli
+                verrà mostrato sul calendario accanto alle prenotazioni importate.
+              </p>
+
+              {feeds.length === 0 && (
+                <p className="text-zinc-500 text-xs font-mono italic">Nessun calendario collegato.</p>
+              )}
+
+              {feeds.map((f, i) => (
+                <div key={f.id || i} className="flex flex-col gap-2 border border-border p-3 bg-zinc-900/40">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] tracking-[0.25em] uppercase text-zinc-500">
+                      Calendario {i + 1}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setFeeds(feeds.filter((_, j) => j !== i))}
+                      data-testid={`cal-feed-remove-${i}`}
+                      className="text-red-400 hover:text-red-300 text-[10px] tracking-wider uppercase cursor-pointer"
+                    >
+                      Rimuovi
+                    </button>
+                  </div>
+                  <Field
+                    label="Nome (es. Booking, Airbnb…)"
+                    value={f.name || ""}
+                    onChange={(v) => setFeeds(feeds.map((x, j) => (j === i ? { ...x, name: v } : x)))}
+                    testid={`cal-feed-name-${i}`}
+                    placeholder="Booking.com"
+                  />
+                  <Field
+                    label="URL iCal (entrata)"
+                    value={f.url || ""}
+                    onChange={(v) => setFeeds(feeds.map((x, j) => (j === i ? { ...x, url: v } : x)))}
+                    testid={`cal-feed-url-${i}`}
+                    placeholder="https://...calendar.ics"
+                  />
+                </div>
+              ))}
+
+              <button
+                type="button"
+                onClick={() => setFeeds([...feeds, { id: newFeedId(), name: "", url: "" }])}
+                data-testid="cal-feed-add"
+                className="w-full flex items-center justify-center gap-2 py-3.5 border-2 border-emerald-500/40 bg-emerald-500/5 hover:bg-emerald-500/10 text-emerald-400 hover:text-emerald-300 transition-all cursor-pointer"
+              >
+                <svg className="w-5 h-5 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="12" y1="5" x2="12" y2="19" />
+                  <line x1="5" y1="12" x2="19" y2="12" />
+                </svg>
+                <span className="text-sm font-bold tracking-wider uppercase">Aggiungi calendario da collegare</span>
+              </button>
+            </div>
+          );
+        })()}
         <div className="flex flex-col gap-1">
           <span className="text-[10px] tracking-[0.25em] uppercase text-zinc-500">Colore Appartamento</span>
           <div className="flex items-center gap-2">

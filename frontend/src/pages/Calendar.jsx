@@ -147,7 +147,7 @@ export default function Calendar() {
           ))
         )}
         <div className="ml-auto flex gap-3 text-[9px] font-mono text-zinc-500">
-          <span>B Booking</span><span>A Airbnb</span><span>V Vrbo</span><span>P Personale</span>
+          <span>Le etichette mostrano il nome del calendario · "Personale" = prenotazione manuale</span>
         </div>
       </div>
 
@@ -435,7 +435,7 @@ function DayBar({ event, variant, onEdit }) {
       {showLabel ? (
         <>
           <span className="font-bold mr-1">{event.source}</span>
-          <span className="opacity-80">{event.property_name?.slice(0, variant === "start" ? 6 : 12)}</span>
+          <span className="opacity-80">{event.property_name?.slice(0, variant === "start" ? 4 : 8)}</span>
         </>
       ) : (
         <span className="opacity-0">·</span>
