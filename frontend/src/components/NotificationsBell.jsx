@@ -96,24 +96,32 @@ export default function NotificationsBell() {
       {open && (
         <div
           data-testid="notifications-dropdown"
-          className="absolute right-0 top-full mt-2 w-[min(360px,calc(100vw-2rem))] bg-surface-1 border border-border shadow-2xl z-50 max-h-[480px] overflow-hidden flex flex-col"
+          className="
+            fixed left-2 right-2 top-16 z-50
+            sm:absolute sm:left-auto sm:right-0 sm:top-full sm:mt-2 sm:w-80
+            bg-zinc-900 border border-zinc-700 shadow-2xl
+            max-h-[70vh] sm:max-h-[520px] overflow-hidden flex flex-col
+          "
         >
-          <div className="px-3 py-2 border-b border-border flex items-center justify-between">
-            <span className="text-[10px] tracking-[0.25em] uppercase text-zinc-400">Notifiche</span>
+          {/* Header */}
+          <div className="px-4 py-3 border-b border-zinc-700 flex items-center justify-between">
+            <span className="text-xs font-bold tracking-widest uppercase text-zinc-300">Notifiche</span>
             {unread > 0 && (
               <button
                 type="button"
                 onClick={markAll}
                 data-testid="notifications-mark-all"
-                className="text-[10px] tracking-[0.25em] uppercase text-zinc-500 hover:text-zinc-100 cursor-pointer"
+                className="text-xs text-zinc-400 hover:text-zinc-100 cursor-pointer underline underline-offset-2"
               >
                 Segna tutte lette
               </button>
             )}
           </div>
+
+          {/* List */}
           <div className="overflow-y-auto flex-1">
             {items.length === 0 ? (
-              <div className="px-3 py-8 text-center text-zinc-600 text-[11px] font-mono">
+              <div className="px-4 py-10 text-center text-zinc-500 text-sm font-mono">
                 Nessuna notifica
               </div>
             ) : (
@@ -123,27 +131,34 @@ export default function NotificationsBell() {
                   type="button"
                   onClick={() => !n.read && markRead(n.notification_id)}
                   data-testid={`notification-${n.notification_id}`}
-                  className={`w-full text-left px-3 py-3 border-b border-border hover:bg-surface-2 flex gap-3 cursor-pointer ${!n.read ? "bg-surface-1" : "bg-transparent opacity-70"}`}
+                  className={`relative w-full text-left px-4 py-4 border-b border-zinc-800 hover:bg-zinc-800 flex gap-3 cursor-pointer transition-colors ${
+                    !n.read ? "bg-zinc-800/60" : "bg-transparent"
+                  }`}
                 >
-                  <div className={`w-6 h-6 flex-shrink-0 border ${levelColor(n.level)} flex items-center justify-center font-mono text-xs`}>
+                  {/* Level icon */}
+                  <div className={`w-7 h-7 flex-shrink-0 border flex items-center justify-center font-mono font-bold text-sm ${levelColor(n.level)}`}>
                     {levelIcon(n.level)}
                   </div>
-                  <div className="flex-1 min-w-0 flex flex-col gap-1">
-                    <div className="flex items-baseline justify-between gap-2">
-                      <span className={`text-[11px] font-bold tracking-tight ${!n.read ? "text-zinc-100" : "text-zinc-400"}`}>
+
+                  {/* Content */}
+                  <div className="flex-1 min-w-0 flex flex-col gap-1.5">
+                    <div className="flex items-start justify-between gap-2">
+                      <span className={`text-sm font-bold leading-snug ${!n.read ? "text-zinc-50" : "text-zinc-400"}`}>
                         {n.title}
                       </span>
-                      <span className="text-[9px] font-mono text-zinc-600 flex-shrink-0">
+                      <span className="text-[11px] font-mono text-zinc-500 flex-shrink-0 mt-0.5">
                         {formatTime(n.created_at)}
                       </span>
                     </div>
-                    <p className={`text-[10px] font-mono leading-relaxed ${!n.read ? "text-zinc-300" : "text-zinc-500"}`}>
+                    <p className={`text-xs font-mono leading-relaxed ${!n.read ? "text-zinc-300" : "text-zinc-500"}`}>
                       {n.body}
                     </p>
-                    {!n.read && (
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 absolute right-3 top-3" />
-                    )}
                   </div>
+
+                  {/* Unread dot */}
+                  {!n.read && (
+                    <span className="absolute right-3 top-4 w-2 h-2 rounded-full bg-emerald-400" />
+                  )}
                 </button>
               ))
             )}
