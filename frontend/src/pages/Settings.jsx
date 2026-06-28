@@ -191,14 +191,6 @@ export default function Settings() {
               </div>
               <div className="flex gap-1 flex-shrink-0">
                 <button
-                  onClick={() => navigate(`/settings/properties/${p.property_id}/manual`)}
-                  data-testid={`manual-property-${p.property_id}`}
-                  className="btn-ghost"
-                  title="Compila il manuale per l'ospite"
-                >
-                  Manuale
-                </button>
-                <button
                   onClick={() => setEditing(p)}
                   data-testid={`edit-property-${p.property_id}`}
                   className="btn-ghost"
@@ -296,6 +288,7 @@ function Toggle({ label, value, onChange, testid }) {
 }
 
 function PropertyEditor({ p, setP, save, cancel, saving, error }) {
+  const navigate = useNavigate();
   const upd = (path, val) => {
     setP((prev) => {
       const copy = JSON.parse(JSON.stringify(prev));
@@ -486,6 +479,23 @@ function PropertyEditor({ p, setP, save, cancel, saving, error }) {
         >
           {error}
         </div>
+      )}
+
+      {/* Bottone Manuale & Mail — visibile solo su strutture già salvate */}
+      {p.property_id && (
+        <button
+          type="button"
+          onClick={() => navigate(`/settings/properties/${p.property_id}/manual`)}
+          className="w-full flex items-center justify-center gap-3 py-4 border-2 border-emerald-500/40 bg-emerald-500/5 hover:bg-emerald-500/10 text-emerald-400 hover:text-emerald-300 transition-all cursor-pointer"
+        >
+          <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />
+          </svg>
+          <span className="text-sm font-bold tracking-wider uppercase">Configura Manuale casa e mail personalizzata</span>
+          <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+          </svg>
+        </button>
       )}
 
       <div className="flex gap-3 mt-2">

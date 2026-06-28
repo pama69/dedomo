@@ -863,6 +863,19 @@ async def update_house_manual(
     return {"success": True, "house_manual": payload}
 
 
+@api_router.put("/properties/{property_id}/guest-sections")
+async def update_guest_sections(
+    property_id: str, body: Dict[str, Any] = Body(...), user=Depends(get_current_user)
+):
+    result = await db.properties.update_one(
+        {"property_id": property_id, "user_id": user["user_id"]},
+        {"$set": {"guest_page_sections": body}},
+    )
+    if result.matched_count == 0:
+        raise HTTPException(404, "Proprietà non trovata")
+    return {"success": True}
+
+
 @api_router.delete("/properties/{property_id}")
 async def delete_property(property_id: str, user=Depends(get_current_user)):
     result = await db.properties.delete_one(
@@ -1745,9 +1758,11 @@ async def send_guest_welcome(checkin_id: str, body: dict, user=Depends(get_curre
     prop = await db.properties.find_one({"property_id": c["property_id"]}, {"_id": 0})
     property_name = prop.get("nome", "Villa") if prop else "Villa"
     guest_email = body.get("email", "")
+    sections = (prop or {}).get("guest_page_sections") if prop else None
     ok = await send_welcome_email(
         guest_name, guest_email, token, lang,
         property_name, c["data_arrivo"], c["data_partenza"],
+        sections=sections,
     )
     base = os.environ.get("PUBLIC_BACKEND_URL", "")
     return {

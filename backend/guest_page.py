@@ -273,6 +273,86 @@ async def fetch_attractions(comune: str, provincia: str, lang: str) -> list:
     return list(await asyncio.gather(*[_enrich(a) for a in results]))
 
 
+async def fetch_restaurants(comune: str, provincia: str, lang: str, radius_km: int = 10) -> list:
+    lang_note = {"it": "in italiano", "en": "in English", "de": "auf Deutsch", "fr": "en français"}.get(lang, "in English")
+    prompt = (
+        f"Consiglia 5 ristoranti entro {radius_km} km da {comune} ({provincia}), Italia. "
+        f"Varietà di tipologie: trattoria locale, ristorante di pesce, pizzeria, osteria tipica. "
+        f"Per ognuno: nome preciso, tipo di cucina, piatto/specialità tipica, distanza approssimativa da {comune} in km. "
+        f"Risposta {lang_note} in JSON array (solo array, niente altro): "
+        f'[{{"name":"...","cuisine":"trattoria","specialty":"...","distance_km":3}}]'
+    )
+    return _extract_json_list(await _gpt_search(prompt)) or []
+
+
+async def fetch_transport(comune: str, provincia: str, lang: str) -> list:
+    lang_note = {"it": "in italiano", "en": "in English", "de": "auf Deutsch", "fr": "en français"}.get(lang, "in English")
+    prompt = (
+        f"Descrivi i principali mezzi di trasporto pubblico disponibili a {comune} ({provincia}), Italia. "
+        f"Includi autobus, treni, traghetti o funicolari se applicabili a questa zona. "
+        f"Per ognuno: tipo di mezzo, linea/numero, destinazioni principali, frequenza indicativa. "
+        f"Risposta {lang_note} in JSON array (solo array): "
+        f'[{{"type":"autobus","line":"...","destinations":["..."],"frequency":"ogni ora"}}]'
+    )
+    return _extract_json_list(await _gpt_search(prompt)) or []
+
+
+async def fetch_supermarkets(comune: str, provincia: str, lang: str) -> list:
+    lang_note = {"it": "in italiano", "en": "in English", "de": "auf Deutsch", "fr": "en français"}.get(lang, "in English")
+    prompt = (
+        f"Elenca i principali supermercati e negozi alimentari a {comune} ({provincia}), Italia. "
+        f"Per ognuno: nome della catena, orario tipico di apertura, eventuale chiusura domenicale o festiva. "
+        f"Risposta {lang_note} in JSON array (solo array): "
+        f'[{{"name":"...","hours":"8:00-20:00","notes":"chiuso domenica"}}]'
+    )
+    return _extract_json_list(await _gpt_search(prompt)) or []
+
+
+async def fetch_pharmacy(comune: str, provincia: str, lang: str) -> list:
+    lang_note = {"it": "in italiano", "en": "in English", "de": "auf Deutsch", "fr": "en français"}.get(lang, "in English")
+    prompt = (
+        f"Elenca le farmacie principali e il pronto soccorso più vicino a {comune} ({provincia}), Italia. "
+        f"Per le farmacie: nome, indirizzo indicativo, orario. "
+        f"Per il pronto soccorso: ospedale più vicino e distanza in km da {comune}. "
+        f"Risposta {lang_note} in JSON array (solo array): "
+        f'[{{"name":"...","type":"farmacia","address":"...","hours":"..."}}]'
+    )
+    return _extract_json_list(await _gpt_search(prompt)) or []
+
+
+async def fetch_beaches_parks(comune: str, provincia: str, lang: str) -> list:
+    lang_note = {"it": "in italiano", "en": "in English", "de": "auf Deutsch", "fr": "en français"}.get(lang, "in English")
+    prompt = (
+        f"Suggerisci le migliori spiagge e parchi naturali entro 30 km da {comune} ({provincia}), Italia. "
+        f"Per ognuno: nome, tipo (spiaggia libera/attrezzata/parco naturale/lago), caratteristiche principali, distanza da {comune} in km. "
+        f"Risposta {lang_note} in JSON array (solo array): "
+        f'[{{"name":"...","type":"spiaggia libera","features":"...","distance_km":5}}]'
+    )
+    return _extract_json_list(await _gpt_search(prompt)) or []
+
+
+async def fetch_airport_station(comune: str, provincia: str, lang: str) -> list:
+    lang_note = {"it": "in italiano", "en": "in English", "de": "auf Deutsch", "fr": "en français"}.get(lang, "in English")
+    prompt = (
+        f"Indica i principali aeroporti e stazioni ferroviarie vicino a {comune} ({provincia}), Italia. "
+        f"Per ognuno: nome completo, tipo (aeroporto/stazione), distanza da {comune} in km, principali destinazioni o compagnie servite. "
+        f"Risposta {lang_note} in JSON array (solo array): "
+        f'[{{"name":"...","type":"aeroporto","distance_km":45,"connections":"Ryanair, easyJet — Roma, Milano, Londra"}}]'
+    )
+    return _extract_json_list(await _gpt_search(prompt)) or []
+
+
+async def fetch_taxi(comune: str, provincia: str, lang: str) -> list:
+    lang_note = {"it": "in italiano", "en": "in English", "de": "auf Deutsch", "fr": "en français"}.get(lang, "in English")
+    prompt = (
+        f"Fornisci informazioni pratiche su taxi, NCC e transfer disponibili a {comune} ({provincia}), Italia. "
+        f"Per ogni servizio: nome o tipo, recapito telefonico se noto, note utili (es. prenotazione consigliata, orari). "
+        f"Risposta {lang_note} in JSON array (solo array): "
+        f'[{{"service":"Taxi Radio {comune}","contact":"+39 ...","notes":"disponibile 24h"}}]'
+    )
+    return _extract_json_list(await _gpt_search(prompt)) or []
+
+
 # ──────────────────────────────────────────────────────────────
 # HOUSE MANUAL
 # ──────────────────────────────────────────────────────────────
@@ -456,6 +536,16 @@ async def get_guest_page_data(token: str, db) -> dict:
     provincia = prop.get("provincia", "") if prop else ""
     property_name = prop.get("nome", "Villa") if prop else "Villa"
 
+    # Sections config — defaults match frontend DEFAULT_SECTIONS
+    _DEFAULT_SECTIONS = {
+        "meteo": True, "eventi": True, "mercati": True, "attrazioni": True,
+        "ristoranti": False, "ristoranti_raggio_km": 10,
+        "trasporti": False, "supermercati": False, "farmacie": False,
+        "spiagge_parchi": False, "aeroporto_stazione": False, "taxi": False,
+    }
+    raw_sections = (prop or {}).get("guest_page_sections") or {}
+    sec = {**_DEFAULT_SECTIONS, **raw_sections}
+
     now = datetime.now(timezone.utc)
     cache = await db.guest_page_cache.find_one({"checkin_id": checkin_id}, {"_id": 0}) or {}
 
@@ -478,7 +568,7 @@ async def get_guest_page_data(token: str, db) -> dict:
         except Exception as e:
             logger.warning(f"Geocoding fallito per {comune}: {e}")
 
-    if lat and lon and _stale("weather", 3):
+    if sec.get("meteo", True) and lat and lon and _stale("weather", 3):
         try:
             updates["weather"] = await fetch_weather(lat, lon, lang)
             updates["weather_at"] = now.isoformat()
@@ -491,14 +581,14 @@ async def get_guest_page_data(token: str, db) -> dict:
     all_past = cached_events and all(
         ev.get("date", "9999") < today_iso for ev in cached_events if ev.get("date")
     )
-    if _stale("events", 24) or all_past:
+    if sec.get("eventi", True) and (_stale("events", 24) or all_past):
         try:
             updates["events"] = await fetch_events(comune, provincia, lang)
             updates["events_at"] = now.isoformat()
         except Exception as e:
             logger.error(f"Events error: {e}")
 
-    if _stale("markets", 168):
+    if sec.get("mercati", True) and _stale("markets", 168):
         try:
             updates["markets"] = await fetch_markets(comune, provincia, lang)
             updates["markets_at"] = now.isoformat()
@@ -517,12 +607,64 @@ async def get_guest_page_data(token: str, db) -> dict:
         for a in cached_attractions
     )
     # TTL 48h: i suggerimenti ruotano ~ogni 2 giorni durante il soggiorno
-    if _stale("attractions", 48) or has_legacy_image:
+    if sec.get("attrazioni", True) and (_stale("attractions", 48) or has_legacy_image):
         try:
             updates["attractions"] = await fetch_attractions(comune, provincia, lang)
             updates["attractions_at"] = now.isoformat()
         except Exception as e:
             logger.error(f"Attractions error: {e}")
+
+    # Sezioni opzionali (TTL 72h — info stabili)
+    if sec.get("ristoranti") and _stale("restaurants", 72):
+        try:
+            updates["restaurants"] = await fetch_restaurants(
+                comune, provincia, lang, int(sec.get("ristoranti_raggio_km", 10))
+            )
+            updates["restaurants_at"] = now.isoformat()
+        except Exception as e:
+            logger.error(f"Restaurants error: {e}")
+
+    if sec.get("trasporti") and _stale("transport", 168):
+        try:
+            updates["transport"] = await fetch_transport(comune, provincia, lang)
+            updates["transport_at"] = now.isoformat()
+        except Exception as e:
+            logger.error(f"Transport error: {e}")
+
+    if sec.get("supermercati") and _stale("supermarkets", 168):
+        try:
+            updates["supermarkets"] = await fetch_supermarkets(comune, provincia, lang)
+            updates["supermarkets_at"] = now.isoformat()
+        except Exception as e:
+            logger.error(f"Supermarkets error: {e}")
+
+    if sec.get("farmacie") and _stale("pharmacy", 168):
+        try:
+            updates["pharmacy"] = await fetch_pharmacy(comune, provincia, lang)
+            updates["pharmacy_at"] = now.isoformat()
+        except Exception as e:
+            logger.error(f"Pharmacy error: {e}")
+
+    if sec.get("spiagge_parchi") and _stale("beaches_parks", 168):
+        try:
+            updates["beaches_parks"] = await fetch_beaches_parks(comune, provincia, lang)
+            updates["beaches_parks_at"] = now.isoformat()
+        except Exception as e:
+            logger.error(f"Beaches/parks error: {e}")
+
+    if sec.get("aeroporto_stazione") and _stale("airport_station", 720):
+        try:
+            updates["airport_station"] = await fetch_airport_station(comune, provincia, lang)
+            updates["airport_station_at"] = now.isoformat()
+        except Exception as e:
+            logger.error(f"Airport/station error: {e}")
+
+    if sec.get("taxi") and _stale("taxi", 720):
+        try:
+            updates["taxi"] = await fetch_taxi(comune, provincia, lang)
+            updates["taxi_at"] = now.isoformat()
+        except Exception as e:
+            logger.error(f"Taxi error: {e}")
 
     if updates:
         merged = {**cache, **updates, "checkin_id": checkin_id}
@@ -549,10 +691,18 @@ async def get_guest_page_data(token: str, db) -> dict:
         "checkin_date": checkin.get("data_arrivo") if checkin else None,
         "checkout_date": checkin.get("data_partenza") if checkin else None,
         "house_manual": house_manual,
-        "weather": cache.get("weather"),
-        "events": cache.get("events") or [],
-        "markets": cache.get("markets") or [],
-        "attractions": cache.get("attractions") or [],
+        "sections_config": sec,
+        "weather": cache.get("weather") if sec.get("meteo", True) else None,
+        "events": cache.get("events") or [] if sec.get("eventi", True) else [],
+        "markets": cache.get("markets") or [] if sec.get("mercati", True) else [],
+        "attractions": cache.get("attractions") or [] if sec.get("attrazioni", True) else [],
+        "restaurants": cache.get("restaurants") or [] if sec.get("ristoranti") else [],
+        "transport": cache.get("transport") or [] if sec.get("trasporti") else [],
+        "supermarkets": cache.get("supermarkets") or [] if sec.get("supermercati") else [],
+        "pharmacy": cache.get("pharmacy") or [] if sec.get("farmacie") else [],
+        "beaches_parks": cache.get("beaches_parks") or [] if sec.get("spiagge_parchi") else [],
+        "airport_station": cache.get("airport_station") or [] if sec.get("aeroporto_stazione") else [],
+        "taxi": cache.get("taxi") or [] if sec.get("taxi") else [],
     }
 
 
@@ -560,9 +710,79 @@ async def get_guest_page_data(token: str, db) -> dict:
 # EMAIL
 # ──────────────────────────────────────────────────────────────
 
+def _build_email_bullets(sec: dict, lang: str) -> str:
+    """Builds the <ul> HTML bullet list for the welcome email based on sections config."""
+    labels = {
+        "it": {
+            "meteo": "Meteo del giorno",
+            "eventi": "Sagre ed eventi locali",
+            "mercati": "Mercati nei dintorni",
+            "attrazioni": "Gite e luoghi da non perdere",
+            "ristoranti": "Ristoranti consigliati nelle vicinanze",
+            "trasporti": "Mappa dei trasporti pubblici",
+            "supermercati": "Supermercati e negozi alimentari",
+            "farmacie": "Farmacia e pronto soccorso",
+            "spiagge_parchi": "Spiagge e parchi naturali",
+            "aeroporto_stazione": "Aeroporto e stazione più vicini",
+            "taxi": "Taxi e transfer",
+        },
+        "en": {
+            "meteo": "Today's weather",
+            "eventi": "Local events and festivals",
+            "mercati": "Nearby markets",
+            "attrazioni": "Day trips and must-see places",
+            "ristoranti": "Recommended restaurants nearby",
+            "trasporti": "Public transport guide",
+            "supermercati": "Supermarkets and grocery stores",
+            "farmacie": "Pharmacy and emergency care",
+            "spiagge_parchi": "Beaches and natural parks",
+            "aeroporto_stazione": "Nearest airport and train station",
+            "taxi": "Taxi and transfer services",
+        },
+        "de": {
+            "meteo": "Tageswetter",
+            "eventi": "Lokale Veranstaltungen und Feste",
+            "mercati": "Märkte in der Umgebung",
+            "attrazioni": "Ausflüge und Sehenswürdigkeiten",
+            "ristoranti": "Empfohlene Restaurants in der Nähe",
+            "trasporti": "Öffentliche Verkehrsmittel",
+            "supermercati": "Supermärkte und Lebensmittelgeschäfte",
+            "farmacie": "Apotheke und Notaufnahme",
+            "spiagge_parchi": "Strände und Naturparks",
+            "aeroporto_stazione": "Nächster Flughafen und Bahnhof",
+            "taxi": "Taxi und Transfer",
+        },
+        "fr": {
+            "meteo": "Météo du jour",
+            "eventi": "Fêtes et événements locaux",
+            "mercati": "Marchés aux alentours",
+            "attrazioni": "Excursions et lieux à ne pas manquer",
+            "ristoranti": "Restaurants recommandés à proximité",
+            "trasporti": "Transports en commun",
+            "supermercati": "Supermarchés et épiceries",
+            "farmacie": "Pharmacie et urgences",
+            "spiagge_parchi": "Plages et parcs naturels",
+            "aeroporto_stazione": "Aéroport et gare les plus proches",
+            "taxi": "Taxi et transferts",
+        },
+    }
+    t = labels.get(lang, labels["en"])
+    _DEFAULTS = {"meteo", "eventi", "mercati", "attrazioni"}
+    order = ["meteo", "eventi", "mercati", "attrazioni",
+             "ristoranti", "trasporti", "supermercati", "farmacie",
+             "spiagge_parchi", "aeroporto_stazione", "taxi"]
+    items = []
+    for key in order:
+        enabled = sec.get(key, key in _DEFAULTS)
+        if enabled and key in t:
+            items.append(f"<li>{t[key]}</li>")
+    return f"<ul>{''.join(items)}</ul>" if items else ""
+
+
 async def send_welcome_email(
     guest_name: str, guest_email: str, token: str, lang: str,
     property_name: str, checkin_date: str, checkout_date: str,
+    sections: dict = None,
 ) -> bool:
     if not RESEND_API_KEY:
         logger.warning("[RESEND] RESEND_API_KEY non impostata — email non inviata")
@@ -573,6 +793,7 @@ async def send_welcome_email(
 
     base_url = os.environ.get("PUBLIC_BACKEND_URL", "https://dedomo.app")
     url = f"{base_url}/guest/{token}"
+    bullets = _build_email_bullets(sections or {}, lang)
 
     subjects = {
         "it": f"Benvenuto/a a {property_name}, {guest_name}!",
@@ -581,47 +802,37 @@ async def send_welcome_email(
         "fr": f"Bienvenue à {property_name}, {guest_name}!",
     }
 
-    bodies = {
-        "it": f"""<div style="font-family:sans-serif;max-width:520px;margin:0 auto">
-<h2 style="color:#5A7A59">Benvenuto/a, {guest_name}!</h2>
-<p>Siamo felici di ospitarti a <strong>{property_name}</strong>.</p>
-<p>Abbiamo preparato una pagina personale con informazioni utili per il tuo soggiorno:</p>
-<ul><li>Meteo del giorno</li><li>Sagre ed eventi locali</li><li>Mercati nei dintorni</li><li>Gite e luoghi da non perdere</li></ul>
-<p style="text-align:center;margin:2rem 0">
-  <a href="{url}" style="background:#7B9E7A;color:white;padding:14px 28px;border-radius:10px;text-decoration:none;font-weight:600;display:inline-block">Apri la tua pagina personale →</a>
-</p>
-<p style="color:#7A6E5E;font-size:13px">Soggiorno: {checkin_date} → {checkout_date}. Il link scade al checkout.</p>
-<p>Buona vacanza!<br><strong>Paolo · {property_name}</strong></p></div>""",
-
-        "en": f"""<div style="font-family:sans-serif;max-width:520px;margin:0 auto">
-<h2 style="color:#5A7A59">Welcome, {guest_name}!</h2>
-<p>We're thrilled to have you at <strong>{property_name}</strong>.</p>
-<p>We've prepared a personal page with useful information for your stay:</p>
-<ul><li>Today's weather</li><li>Local events and festivals</li><li>Nearby markets</li><li>Day trips and places to visit</li></ul>
-<p style="text-align:center;margin:2rem 0">
-  <a href="{url}" style="background:#7B9E7A;color:white;padding:14px 28px;border-radius:10px;text-decoration:none;font-weight:600;display:inline-block">Open your personal page →</a>
-</p>
-<p style="color:#7A6E5E;font-size:13px">Stay: {checkin_date} → {checkout_date}. Link expires at checkout.</p>
-<p>Enjoy your holiday!<br><strong>Paolo · {property_name}</strong></p></div>""",
-
-        "de": f"""<div style="font-family:sans-serif;max-width:520px;margin:0 auto">
-<h2 style="color:#5A7A59">Willkommen, {guest_name}!</h2>
-<p>Wir freuen uns, Sie in <strong>{property_name}</strong> begrüßen zu dürfen.</p>
-<p style="text-align:center;margin:2rem 0">
-  <a href="{url}" style="background:#7B9E7A;color:white;padding:14px 28px;border-radius:10px;text-decoration:none;font-weight:600;display:inline-block">Ihre persönliche Seite öffnen →</a>
-</p>
-<p style="color:#7A6E5E;font-size:13px">Aufenthalt: {checkin_date} → {checkout_date}.</p>
-<p>Schönen Urlaub!<br><strong>Paolo · {property_name}</strong></p></div>""",
-
-        "fr": f"""<div style="font-family:sans-serif;max-width:520px;margin:0 auto">
-<h2 style="color:#5A7A59">Bienvenue, {guest_name}!</h2>
-<p>Nous sommes ravis de vous accueillir à <strong>{property_name}</strong>.</p>
-<p style="text-align:center;margin:2rem 0">
-  <a href="{url}" style="background:#7B9E7A;color:white;padding:14px 28px;border-radius:10px;text-decoration:none;font-weight:600;display:inline-block">Ouvrir votre page personnelle →</a>
-</p>
-<p style="color:#7A6E5E;font-size:13px">Séjour: {checkin_date} → {checkout_date}.</p>
-<p>Bon séjour!<br><strong>Paolo · {property_name}</strong></p></div>""",
+    _intro = {
+        "it": (f"Siamo felici di ospitarti a <strong>{property_name}</strong>.",
+               "Abbiamo preparato una pagina personale con informazioni utili per il tuo soggiorno:"),
+        "en": (f"We're thrilled to have you at <strong>{property_name}</strong>.",
+               "We've prepared a personal page with useful information for your stay:"),
+        "de": (f"Wir freuen uns, Sie in <strong>{property_name}</strong> begrüßen zu dürfen.",
+               "Wir haben eine persönliche Seite mit nützlichen Informationen für Ihren Aufenthalt vorbereitet:"),
+        "fr": (f"Nous sommes ravis de vous accueillir à <strong>{property_name}</strong>.",
+               "Nous avons préparé une page personnelle avec des informations utiles pour votre séjour :"),
     }
+    _cta = {
+        "it": ("Apri la tua pagina personale →", f"Soggiorno: {checkin_date} → {checkout_date}. Il link scade al checkout.", "Buona vacanza!"),
+        "en": ("Open your personal page →", f"Stay: {checkin_date} → {checkout_date}. Link expires at checkout.", "Enjoy your holiday!"),
+        "de": ("Ihre persönliche Seite öffnen →", f"Aufenthalt: {checkin_date} → {checkout_date}.", "Schönen Urlaub!"),
+        "fr": ("Ouvrir votre page personnelle →", f"Séjour: {checkin_date} → {checkout_date}.", "Bon séjour!"),
+    }
+    _greet = {"it": "Benvenuto/a", "en": "Welcome", "de": "Willkommen", "fr": "Bienvenue"}
+
+    intro = _intro.get(lang, _intro["en"])
+    cta = _cta.get(lang, _cta["en"])
+    greet = _greet.get(lang, _greet["en"])
+
+    html_body = f"""<div style="font-family:sans-serif;max-width:520px;margin:0 auto">
+<h2 style="color:#5A7A59">{greet}, {guest_name}!</h2>
+<p>{intro[0]}</p>
+{f'<p>{intro[1]}</p>{bullets}' if bullets else ''}
+<p style="text-align:center;margin:2rem 0">
+  <a href="{url}" style="background:#7B9E7A;color:white;padding:14px 28px;border-radius:10px;text-decoration:none;font-weight:600;display:inline-block">{cta[0]}</a>
+</p>
+<p style="color:#7A6E5E;font-size:13px">{cta[1]}</p>
+<p>{cta[2]}<br><strong>Paolo · {property_name}</strong></p></div>"""
 
     logger.info(f"[RESEND] Invio a {guest_email} da {GUEST_EMAIL_FROM} (lang={lang})")
     try:
@@ -633,7 +844,7 @@ async def send_welcome_email(
                     "from": GUEST_EMAIL_FROM,
                     "to": [guest_email],
                     "subject": subjects.get(lang, subjects["en"]),
-                    "html": bodies.get(lang, bodies["en"]),
+                    "html": html_body,
                 },
             )
             if r.status_code not in (200, 201):

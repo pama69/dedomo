@@ -3,6 +3,35 @@ import { useParams, useNavigate } from "react-router-dom";
 import Layout from "@/components/Layout";
 import api from "@/lib/api";
 
+const DEFAULT_SECTIONS = {
+  meteo: true,
+  eventi: true,
+  mercati: true,
+  attrazioni: true,
+  ristoranti: false,
+  ristoranti_raggio_km: 10,
+  trasporti: false,
+  supermercati: false,
+  farmacie: false,
+  spiagge_parchi: false,
+  aeroporto_stazione: false,
+  taxi: false,
+};
+
+const SECTIONS_META = [
+  { key: "meteo",             label: "Meteo del giorno",              desc: "Temperatura e condizioni meteo in tempo reale",           default: true  },
+  { key: "eventi",            label: "Sagre ed eventi locali",        desc: "Feste, sagre e manifestazioni nei 7 giorni successivi",   default: true  },
+  { key: "mercati",           label: "Mercati settimanali",           desc: "Mercati rionali entro 15 km dalla struttura",             default: true  },
+  { key: "attrazioni",        label: "Gite e luoghi da visitare",     desc: "Borghi, parchi, spiagge e città d'arte entro 100 km",     default: true  },
+  { key: "ristoranti",        label: "Ristoranti consigliati",        desc: "Ristoranti e trattorie nelle vicinanze (raggio km configurabile)", default: false },
+  { key: "trasporti",         label: "Trasporti pubblici",            desc: "Bus, treno e navette locali con orari e fermate",         default: false },
+  { key: "supermercati",      label: "Supermercati e negozi",         desc: "I supermercati più vicini con orari",                     default: false },
+  { key: "farmacie",          label: "Farmacia e ospedale",           desc: "Farmacie di turno e pronto soccorso più vicino",          default: false },
+  { key: "spiagge_parchi",    label: "Spiagge e parchi",              desc: "Le spiagge e aree verdi raggiungibili dalla struttura",   default: false },
+  { key: "aeroporto_stazione",label: "Aeroporto e stazione",          desc: "Aeroporti e stazioni ferroviarie più vicini con distanza",default: false },
+  { key: "taxi",              label: "Taxi e transfer",               desc: "Numeri taxi locali e servizi di transfer",                default: false },
+];
+
 const EMPTY_MANUAL = {
   wifi: { ssid: "", password: "" },
   checkin: { from: "", to: "", note: "" },
@@ -34,6 +63,7 @@ export default function HouseManual() {
   const navigate = useNavigate();
   const [property, setProperty] = useState(null);
   const [manual, setManual] = useState(EMPTY_MANUAL);
+  const [sections, setSections] = useState(DEFAULT_SECTIONS);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState(null);
@@ -55,6 +85,9 @@ export default function HouseManual() {
           emergency: { ...EMPTY_MANUAL.emergency, ...(m.emergency || {}) },
           custom: m.custom || [],
         });
+        // Load sections config (with defaults for backward compatibility)
+        const s = r.data.guest_page_sections || {};
+        setSections({ ...DEFAULT_SECTIONS, ...s });
       })
       .catch(() => setError("Impossibile caricare la proprietà."))
       .finally(() => setLoading(false));
@@ -102,12 +135,14 @@ export default function HouseManual() {
     setSaving(true);
     setError("");
     try {
-      // Re-key custom 'order' progressivo prima del salvataggio
       const payload = {
         ...manual,
         custom: manual.custom.map((c, i) => ({ ...c, order: i })),
       };
-      await api.put(`/properties/${propertyId}/manual`, payload);
+      await Promise.all([
+        api.put(`/properties/${propertyId}/manual`, payload),
+        api.put(`/properties/${propertyId}/guest-sections`, sections),
+      ]);
       setSavedAt(new Date());
     } catch (e) {
       setError(e.response?.data?.detail || "Errore di salvataggio");
@@ -158,6 +193,55 @@ export default function HouseManual() {
           meteo e suggerimenti. <strong>I campi vuoti vengono nascosti.</strong> Per ospiti
           stranieri il testo verrà tradotto automaticamente in inglese, tedesco o francese.
         </p>
+
+        {/* ── SEZIONI PAGINA OSPITE & MAIL ── */}
+        <div className="border border-emerald-500/30 bg-emerald-500/5 flex flex-col gap-0">
+          <div className="px-4 py-3 border-b border-emerald-500/20">
+            <p className="text-xs font-bold tracking-widest uppercase text-emerald-400">
+              Sezioni pagina ospite &amp; mail di benvenuto
+            </p>
+            <p className="text-[11px] text-zinc-500 mt-1">
+              Seleziona cosa mostrare nella pagina personale dell'ospite e nella mail. L'AI genera ogni sezione automaticamente in base alla posizione della struttura.
+            </p>
+          </div>
+          <div className="divide-y divide-emerald-500/10">
+            {SECTIONS_META.map((s) => (
+              <div key={s.key} className="px-4 py-3 flex items-start gap-3">
+                <input
+                  type="checkbox"
+                  id={`sec-${s.key}`}
+                  checked={!!sections[s.key]}
+                  onChange={(e) => setSections((prev) => ({ ...prev, [s.key]: e.target.checked }))}
+                  className="mt-0.5 accent-emerald-500 w-4 h-4 flex-shrink-0 cursor-pointer"
+                />
+                <label htmlFor={`sec-${s.key}`} className="flex-1 cursor-pointer">
+                  <span className={`text-sm font-medium ${sections[s.key] ? "text-zinc-100" : "text-zinc-500"}`}>
+                    {s.label}
+                  </span>
+                  <span className="block text-[11px] text-zinc-600 mt-0.5">{s.desc}</span>
+                  {/* km slider for ristoranti */}
+                  {s.key === "ristoranti" && sections.ristoranti && (
+                    <div className="mt-2 flex items-center gap-3">
+                      <span className="text-[11px] text-zinc-400 flex-shrink-0">Raggio:</span>
+                      <input
+                        type="range"
+                        min="3"
+                        max="30"
+                        step="1"
+                        value={sections.ristoranti_raggio_km}
+                        onChange={(e) => setSections((prev) => ({ ...prev, ristoranti_raggio_km: Number(e.target.value) }))}
+                        className="flex-1 accent-emerald-500 cursor-pointer"
+                      />
+                      <span className="text-[11px] font-mono text-emerald-400 w-12 flex-shrink-0">
+                        {sections.ristoranti_raggio_km} km
+                      </span>
+                    </div>
+                  )}
+                </label>
+              </div>
+            ))}
+          </div>
+        </div>
 
         {/* SEZIONI STRUTTURATE */}
         <Section meta={SECTION_META.wifi}>
