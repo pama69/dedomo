@@ -4,43 +4,46 @@
 
 ---
 
-## 📌 Sessione corrente — 2026-06-27
+## 📌 Sessione corrente — 2026-06-28
 
-**Tema:** Billing — gestione 3DS upgrade, fix splash conferma, raccolta P.IVA checkout, pagina Termini.
+**Tema:** Pagina ospite sezioni configurabili + mail dinamica; calendari iCal dinamici con nome; notifiche push reminder arrivi/partenze; bulk OCR; estetica Impostazioni/Archivio.
 
-**Stato:** pushato su `main` — 3 commit in questo branch.
+**Stato:** tutto pushato su `main`.
 
 **🆕 Fatto in questa sessione:**
 
-### Stripe — 3D Secure upgrade in-app
-- **Backend** (`routes_billing.py`): catch `stripe.error.CardError` con `code == "authentication_required"` → HTTP 402
-- **Frontend** (`Pricing.jsx`): intercetta status 402, mostra messaggio e auto-redirect al Customer Portal dopo 1.5s; fallback con istruzioni manuali se la chiamata portal fallisce
+### Sezioni pagina ospite & mail configurabili (per struttura)
+- Nuovo campo `properties.guest_page_sections` = oggetto con on/off per sezione + `ristoranti_raggio_km`
+- Default: meteo/eventi/mercati/attrazioni ON; ristoranti/trasporti/supermercati/farmacie/spiagge/aeroporto/taxi OFF
+- **HouseManual.jsx**: pannello checkbox "Sezioni pagina ospite & mail" (slider km per ristoranti); salva via `PUT /properties/{id}/guest-sections` in parallelo al manuale
+- **guest_page.py**: 7 nuove funzioni AI (`fetch_restaurants/transport/supermarkets/pharmacy/beaches_parks/airport_station/taxi`); `get_guest_page_data` rispetta la config (non fetcha/non restituisce sezioni OFF); `send_welcome_email` con bullet list HTML dinamica multilingua via `_build_email_bullets`
+- **GuestPage.jsx**: rendering delle 7 nuove sezioni (i18n it/en/de/fr) + link Google Maps su ristoranti/supermercati/farmacie/spiagge/aeroporto (componente `MapsLink`)
+- ⚠️ Bug risolto: `Body` mancante negli import FastAPI (crash startup) → commit `ae2fee2`
 
-### Fix splash conferma upgrade ("- proprietà")
-- Aggiunto stato `upgradedQty` in `Pricing.jsx`: calcolato come `currentPaid + num` prima dell'API call, aggiornato con il valore reale dopo il refresh quota
-- Elimina race condition tra `setUpgraded(true)` e `setQuota(r.data)` (React non batchava i due setState in catene async separate)
+### Calendari iCal dinamici con nome personalizzato
+- `CalendarConfig.feeds` = lista `[{id, name, url}]` (illimitata) — sostituisce i 3 URL fissi Booking/Airbnb/Vrbo (mantenuti come fallback legacy via `_resolve_feeds`)
+- **Settings.jsx**: lista dinamica "Aggiungi calendario da collegare"; nuove strutture partono da zero; calendari esistenti migrati in voci nominate
+- **Calendar.jsx**: sugli eventi importati appare il **nome del feed** invece della lettera B/A/V; "Personale" per le manuali; legenda aggiornata
+- Cache `ical_cache.feeds = [{id, name, events}]`; `calendar/events` usa il nome come `source`
 
-### Checkout — raccolta Partita IVA cliente
-- `billing.py`: aggiunto `tax_id_collection={"enabled": True}` alla sessione Stripe Checkout
-- Il cliente può inserire P.IVA (o CF) opzionale; compare sulla ricevuta Stripe
+### Notifiche push reminder calendario (job 08:00 Europe/Rome)
+- `_calendar_reminders` (APScheduler cron 08:00): **arrivo** 3gg e 1gg prima ("Hai un arrivo previsto in data X a <appartamento>"); **partenza** 1gg prima (con nome ospite se c'è check-in registrato, altrimenti senza)
+- Arrivi da calendario (manuali + feed); partenze da calendario arricchite dai check-in
+- `_add_notification` esteso: `dedup_key` (anti-doppioni), `push` forzabile, `url` personalizzata (apre `/calendar`)
 
-### Pagina Termini di utilizzo
-- Creato `frontend/src/pages/Terms.jsx` — 11 articoli in italiano (descrizione servizio, abbonamento, pagamenti, limitazione responsabilità, foro Pescara)
-- Route `/terms` aggiunta in `App.js`
-- URL Stripe: `https://www.dedomo.it/terms`
+### Bulk OCR check-in & fix campanella mobile
+- **Checkin.jsx**: upload multiplo documenti → OCR sequenziale → schedine pre-compilate con progress; tasto "Scansione documenti" prominente
+- **NotificationsBell.jsx**: dropdown mobile non più tagliato, testi più grandi/contrastati
 
-**🔎 Configurazioni Stripe manuali da fare (Paolo):**
-- Settings → Billing → Subscriptions and emails → **Attiva 3D Secure** (toggle OFF → ON)
-- Settings → Billing → Subscriptions and emails → **Stato abbonamento**: abbassare da 15 giorni a 1 giorno
-- Settings → Attività → Dati dell'account → cambiare nome visualizzato da "Paolo Manni" a "Dedomo"
-- Settings → Attività → Dati fiscali → inserire Partita IVA
-- In test mode le email **non arrivano** (comportamento Stripe by design) — verificare in live mode
-- Raccolta P.IVA in checkout: già attiva dopo il push odierno
+### Estetica
+- **Settings.jsx**: nome struttura nel box più grande (text-lg bold) + iniziale ingrandita
+- **Archive.jsx**: riordino — titolo → "Archivio per proprietà" (strutture + invii) → divisore → check-in remoto → divisore → pulsanti "Vai a invii per codice fiscale" + "Recupera schedine Alloggiati" (grafica coerente)
 
-**🔎 Azioni manuali pendenti (Paolo):**
+**🔎 Azioni manuali pendenti (Paolo) — vedi anche memory `dedomo-golive-checklist`:**
 - Rigenerare password MongoDB Atlas (esposta in chat mesi fa)
 - Spostare DNS `dedomo.it` → Railway (ora su IONOS→Emergent)
-- Dopo test: sostituire chiavi Stripe test con live in Railway
+- Verifica dominio Resend (SPF/DKIM/DMARC) + chiavi Stripe TEST→LIVE
+- Configurazioni Stripe pendenti (3DS, retry 1 giorno, nome "Dedomo", P.IVA) — vedi sessione 2026-06-27 in archivio
 
 **Cronologia dettagliata:** vedi `## Archivio sessioni` in fondo.
 
@@ -121,8 +124,11 @@
 - Notifica push all'host al submit ospite (`send_push()`)
 
 ### Calendario iCal
-- Sync da Booking/Airbnb/VRBO tramite iCal URL
-- URL iCal personale per ogni struttura
+- **Feed dinamici**: `properties.calendar.feeds = [{id, name, url}]` — numero illimitato di calendari, ognuno con nome scelto dall'utente (fallback legacy ai 3 URL fissi via `_resolve_feeds`)
+- Sync da Booking/Airbnb/VRBO/altro tramite iCal URL; refresh ogni 4h + on-demand
+- Cache `ical_cache.feeds = [{id, name, events}]`; gli eventi mostrano il **nome del feed** (non più B/A/V)
+- URL iCal personale (export) per ogni struttura per le prenotazioni manuali
+- **Reminder push** (job 08:00 Europe/Rome, `_calendar_reminders`): arrivi 3gg+1gg prima, partenze 1gg prima (nome ospite dai check-in se disponibile)
 
 ### Flusso Check-in (5 step)
 - Step 3: campo email ospite (capofamiglia) opzionale
@@ -132,12 +138,17 @@
 ### Pagina Ospite (`/guest/:token`)
 - Route pubblica, no auth
 - Token generato automaticamente dopo ogni check-in (save in `guest_tokens` collection)
+- **Sezioni configurabili per struttura** (`properties.guest_page_sections`): ogni sezione si attiva/disattiva dal pannello in HouseManual; la stessa config governa pagina ospite E bullet della mail di benvenuto
+  - Default ON: meteo, eventi, mercati, attrazioni
+  - Default OFF: ristoranti (con raggio km), trasporti, supermercati, farmacie, spiagge/parchi, aeroporto/stazione, taxi
+  - Sezioni OFF non vengono né fetchate né restituite (risparmio chiamate AI). Le nuove sezioni hanno link Google Maps (`MapsLink`)
 - **Dati mostrati (nell'ordine):**
   - **🏡 La tua casa** — manuale della struttura (vedi sezione dedicata sotto)
   - Meteo locale (OpenWeatherMap) — cache 3h
   - "Cosa succede nei dintorni" — eventi/sagre 50km, solo futuri — cache 24h (refresh se tutti passati)
   - "Prodotti freschi dai contadini" — mercati 15km, posizione precisa (piazza/via specifica) — cache 7d
   - "I nostri suggerimenti per voi" — attrazioni 100km — cache **48h** (rotazione durante il soggiorno)
+  - Sezioni opzionali (se attivate): ristoranti, trasporti, supermercati, farmacie, spiagge/parchi, aeroporto/stazione, taxi — generate via AI, cache 72h–720h
 - **Attrazioni — immagini:** Wikipedia REST API + search fallback (tollera titoli imprecisi GPT) + User-Agent `Dedomo/1.0` (Railway veniva bloccato con 403 senza UA descrittivo). **Fallback Unsplash** (`UNSPLASH_ACCESS_KEY`) per luoghi senza pagina Wiki. Cache rigenerata se URL non sono né `wikimedia.org` né `images.unsplash.com`. Link Google Maps (no Wikipedia link)
 
 ### Manuale Casa (`/settings/properties/:id/manual`)
@@ -308,7 +319,8 @@ Dopo ogni modifica: `git commit` immediato, poi chiedere a Paolo "pusha?". Il pu
 **Idee feature future:**
 - Check soddisfazione ospite 24h dopo check-out
 - ~~Manuale casa digitale con QR code~~ ✅ implementato 2026-06-25
-- Coordinamento pulizie
+- **Collaboratori esterni** (pulizie/manutentore/giardiniere) — accesso limitato alle info di competenza + notifiche push. Riusa l'infrastruttura token (pagina ospite) + push + calendario già presenti. NON serve app nativa: Dedomo è già PWA installabile. MVP consigliato: Livello 1 (link mirato senza login) per le pulizie (notifica check-out/prossimo arrivo per struttura); poi eventuale Livello 2 (ruolo collaboratore con login a permessi ridotti). Discusso 2026-06-28. → da fare DOPO go-live
+- Coordinamento pulizie (vedi "Collaboratori esterni")
 - AI risposta recensioni
 - Generatore contratto locazione breve
 - Anteprima live del manuale casa (modal con rendering uguale a guest page + selettore lingua per testare traduzioni GPT prima che le veda un ospite)
