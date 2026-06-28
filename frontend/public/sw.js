@@ -1,5 +1,5 @@
 // Dedomo Service Worker — Web Push handler
-// Versione: 1.0
+// Versione: 1.1
 
 self.addEventListener("install", () => self.skipWaiting());
 
@@ -31,7 +31,9 @@ self.addEventListener("push", (event) => {
   const options = {
     body: data.body || "",
     icon: data.icon || "/icon-192.png",
-    badge: data.badge || "/icon-192.png",
+    // badge = icona piccola nella barra di stato (Android usa solo l'alpha):
+    // deve essere monocromatica su sfondo trasparente, altrimenti appare bianca/piena.
+    badge: data.badge || "/badge-96.png",
     data: { url: data.url || "/dashboard" },
     vibrate: [100, 50, 100],
     requireInteraction: false,
