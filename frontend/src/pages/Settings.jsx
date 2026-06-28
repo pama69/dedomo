@@ -1401,6 +1401,31 @@ function PushNotificationSection() {
   const [testStatus, setTestStatus] = useState("");
   const [testLoading, setTestLoading] = useState(false);
   const [subError, setSubError] = useState("");
+  const [channels, setChannels] = useState({ push: true, email: false });
+  const [email, setEmail] = useState("");
+  const [savingCh, setSavingCh] = useState(false);
+
+  useEffect(() => {
+    api.get("/auth/me")
+      .then((r) => {
+        setEmail(r.data?.email || "");
+        if (r.data?.notification_channels) setChannels(r.data.notification_channels);
+      })
+      .catch(() => {});
+  }, []);
+
+  const saveChannels = async (next) => {
+    setChannels(next); // ottimistico
+    setSavingCh(true);
+    try {
+      await api.put("/me/notification-channels", next);
+    } catch {
+      // ripristina in caso di errore
+      try { const r = await api.get("/auth/me"); if (r.data?.notification_channels) setChannels(r.data.notification_channels); } catch {/* noop */}
+    } finally {
+      setSavingCh(false);
+    }
+  };
 
   const sendTest = async () => {
     setTestLoading(true);
@@ -1416,8 +1441,39 @@ function PushNotificationSection() {
   };
 
   return (
-    <div className="border border-border rounded-lg p-4 flex flex-col gap-3 bg-surface-1">
-      <span className="text-[10px] tracking-[0.25em] uppercase text-zinc-400">Notifiche Push</span>
+    <div className="surface-card p-5 flex flex-col gap-4">
+      <div className="flex flex-col gap-1">
+        <span className="text-[10px] tracking-[0.25em] uppercase text-zinc-400">Notifiche</span>
+        <p className="text-[11px] text-zinc-500 font-mono leading-relaxed">
+          Scegli come ricevere gli avvisi (arrivi e partenze, esiti degli invii).
+        </p>
+      </div>
+
+      {/* Scelta canali */}
+      <div className="flex flex-col gap-2">
+        <Toggle
+          label={`Email${channels.email && email ? " · " + email : ""}`}
+          value={channels.email}
+          onChange={(v) => saveChannels({ ...channels, email: v })}
+          testid="notif-email-toggle"
+        />
+        <Toggle
+          label="Notifiche push (app / cellulare)"
+          value={channels.push}
+          onChange={(v) => saveChannels({ ...channels, push: v })}
+          testid="notif-push-toggle"
+        />
+        {!channels.push && !channels.email && (
+          <p className="text-[10px] font-mono text-amber-400">
+            ⚠ Nessun canale attivo: riceverai gli avvisi solo nella campanella in alto.
+          </p>
+        )}
+      </div>
+
+      {/* Controlli dispositivo push — solo se il canale push è attivo */}
+      {channels.push && (
+      <div className="border-t border-border pt-4 flex flex-col gap-3">
+      <span className="text-[10px] tracking-[0.25em] uppercase text-zinc-500">Push su questo dispositivo</span>
 
       {!isSupported && (
         <p className="text-[11px] text-zinc-500 font-mono">
@@ -1482,6 +1538,8 @@ function PushNotificationSection() {
             </div>
           )}
         </div>
+      )}
+      </div>
       )}
     </div>
   );

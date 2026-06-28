@@ -628,6 +628,7 @@ async def auth_reset_password(req: ResetPasswordRequest):
 
 @api_router.get("/auth/me")
 async def auth_me(user: Dict[str, Any] = Depends(get_current_user)):
+    ch = user.get("notification_channels") or {}
     return {
         "user_id": user["user_id"],
         "email": user["email"],
@@ -635,7 +636,27 @@ async def auth_me(user: Dict[str, Any] = Depends(get_current_user)):
         "picture": user.get("picture"),
         "is_admin": (user.get("email") or "").lower() in ADMIN_EMAILS,
         "unlimited": bool(user.get("unlimited", False)),
+        "notification_channels": {
+            "push": ch.get("push", True),
+            "email": ch.get("email", False),
+        },
     }
+
+
+@api_router.put("/me/notification-channels")
+async def update_notification_channels(
+    body: Dict[str, Any] = Body(...), user: Dict[str, Any] = Depends(get_current_user)
+):
+    """Salva i canali con cui l'utente vuole ricevere le notifiche (push/email)."""
+    channels = {
+        "push": bool(body.get("push", True)),
+        "email": bool(body.get("email", False)),
+    }
+    await db.users.update_one(
+        {"user_id": user["user_id"]},
+        {"$set": {"notification_channels": channels}},
+    )
+    return {"success": True, "notification_channels": channels}
 
 
 @api_router.post("/auth/logout")
@@ -4489,9 +4510,18 @@ async def _add_notification(
         "read": False,
         "created_at": datetime.now(timezone.utc).isoformat(),
     })
-    do_push = push if push is not None else (level in ("success", "error"))
-    if do_push:
-        await send_push(db, user_id, title, body, url=url)
+    # Evento "importante" → da inoltrare sui canali scelti (push/email)
+    do_send = push if push is not None else (level in ("success", "error"))
+    if do_send:
+        u = await db.users.find_one({"user_id": user_id}, {"_id": 0, "email": 1, "notification_channels": 1})
+        ch = (u or {}).get("notification_channels") or {}
+        want_push = ch.get("push", True)   # default storico: push attivo
+        want_email = ch.get("email", False)
+        if want_push:
+            await send_push(db, user_id, title, body, url=url)
+        if want_email and (u or {}).get("email"):
+            from guest_page import send_notification_email
+            await send_notification_email(u["email"], title, body, url=url)
     return True
 
 
@@ -4909,13 +4939,15 @@ async def fetch_alloggiati_receipts(force_all: bool = False) -> dict:
                 )
                 downloaded += 1
                 logger.info(f"[receipts-job] saved receipt for {c['checkin_id']} (date={send_date})")
-                # Notifica push all'utente
+                # Notifica all'utente (campanella + canali scelti: push/email)
                 arrival = c.get("data_arrivo", "")
-                await send_push(
-                    db, c["user_id"],
+                await _add_notification(
+                    c["user_id"], "success",
                     "✓ Ricevuta Alloggiati Web pronta",
                     f"La ricevuta per il check-in del {arrival} è disponibile in Archivio.",
-                    url="/archive",
+                    checkin_id=c["checkin_id"],
+                    dedup_key=f"receipt:{c['checkin_id']}",
+                    push=True, url="/archive",
                 )
             else:
                 raw = ric.get("raw") or {}

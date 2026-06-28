@@ -855,3 +855,43 @@ async def send_welcome_email(
     except Exception as e:
         logger.error(f"[RESEND] Eccezione: {e}")
         return False
+
+
+async def send_notification_email(to_email: str, title: str, body: str, url: str = "") -> bool:
+    """Invia una notifica host via email (Resend). Usata quando l'utente sceglie
+    il canale 'email' nelle preferenze notifiche."""
+    if not RESEND_API_KEY:
+        logger.warning("[RESEND] RESEND_API_KEY non impostata — notifica email non inviata")
+        return False
+    if not to_email:
+        return False
+    base_url = os.environ.get("PUBLIC_BACKEND_URL", "https://dedomo.app")
+    link = f"{base_url}{url}" if url.startswith("/") else (url or base_url)
+    cta = (
+        f'<p style="text-align:center;margin:1.5rem 0">'
+        f'<a href="{link}" style="background:#10b981;color:white;padding:12px 24px;'
+        f'border-radius:10px;text-decoration:none;font-weight:600;display:inline-block">Apri Dedomo →</a></p>'
+    )
+    html_body = (
+        f'<div style="font-family:sans-serif;max-width:520px;margin:0 auto;color:#1c1c1c">'
+        f'<h2 style="color:#0f766e;margin-bottom:0.5rem">{title}</h2>'
+        f'<p style="font-size:15px;line-height:1.5">{body}</p>'
+        f'{cta}'
+        f'<p style="color:#888;font-size:12px;margin-top:1.5rem">Ricevi questa email perché hai scelto le '
+        f'notifiche via email in Dedomo. Puoi cambiare il canale in Impostazioni.</p></div>'
+    )
+    try:
+        async with httpx.AsyncClient(timeout=15) as c:
+            r = await c.post(
+                "https://api.resend.com/emails",
+                headers={"Authorization": f"Bearer {RESEND_API_KEY}", "Content-Type": "application/json"},
+                json={"from": GUEST_EMAIL_FROM, "to": [to_email], "subject": f"Dedomo · {title}", "html": html_body},
+            )
+            if r.status_code not in (200, 201):
+                logger.error(f"[RESEND] notifica email ERRORE {r.status_code}: {r.text}")
+                return False
+            logger.info(f"[RESEND] notifica email OK id={r.json().get('id','?')}")
+            return True
+    except Exception as e:
+        logger.error(f"[RESEND] notifica email eccezione: {e}")
+        return False
