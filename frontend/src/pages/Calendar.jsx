@@ -94,37 +94,64 @@ export default function Calendar() {
 
   return (
     <Layout>
-      <div className="flex items-baseline justify-between flex-wrap gap-2">
-        <h2 className="typo-h1" style={{ fontFamily: "'Cabinet Grotesk', sans-serif" }}>
-          Calendario
-        </h2>
-        <div className="flex items-center gap-2 flex-wrap">
-          <button
-            onClick={forceRefresh}
-            disabled={refreshing}
-            data-testid="cal-force-refresh"
-            className="border border-blue-500/60 hover:bg-blue-500/10 text-blue-400 px-3 py-2 text-[10px] uppercase tracking-widest cursor-pointer disabled:opacity-50"
-          >
-            {refreshing ? "Aggiornamento..." : "↻ Forza Aggiornamento"}
-          </button>
+      <div className="flex flex-col gap-3">
+        {/* Titolo + azioni */}
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <h2 className="typo-h1" style={{ fontFamily: "'Cabinet Grotesk', sans-serif" }}>
+            Calendario
+          </h2>
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <button
+              onClick={forceRefresh}
+              disabled={refreshing}
+              data-testid="cal-force-refresh"
+              className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 h-11 px-4 rounded-lg border border-blue-500/50 hover:bg-blue-500/10 text-blue-400 text-[10px] uppercase tracking-widest font-bold cursor-pointer disabled:opacity-50 transition-colors"
+            >
+              <svg className="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <polyline points="23 4 23 10 17 10" />
+                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+              </svg>
+              {refreshing ? "Aggiornamento..." : "Forza aggiornamento"}
+            </button>
+            <button
+              onClick={() => setAddOpen(true)}
+              data-testid="cal-add"
+              className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 h-11 px-4 rounded-lg border border-emerald-500/50 bg-emerald-500/5 hover:bg-emerald-500/10 text-emerald-400 text-[10px] uppercase tracking-widest font-bold cursor-pointer transition-colors"
+            >
+              <svg className="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <line x1="12" y1="5" x2="12" y2="19" />
+                <line x1="5" y1="12" x2="19" y2="12" />
+              </svg>
+              Nuovo evento
+            </button>
+          </div>
+        </div>
+
+        {/* Navigazione mese */}
+        <div className="flex items-center justify-center sm:justify-start gap-3">
           <button
             onClick={() => setMonthStart(addMonths(monthStart, -1))}
             data-testid="cal-prev-month"
-            className="border border-border hover:border-zinc-500 text-zinc-300 px-3 py-2 text-[10px] uppercase tracking-widest cursor-pointer"
-          >←</button>
-          <span className="text-zinc-100 text-sm uppercase tracking-widest min-w-[140px] text-center font-mono">
+            aria-label="Mese precedente"
+            className="w-11 h-11 rounded-lg border border-border hover:border-zinc-500 text-zinc-300 flex items-center justify-center cursor-pointer transition-colors flex-shrink-0"
+          >
+            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <polyline points="15 18 9 12 15 6" />
+            </svg>
+          </button>
+          <span className="text-zinc-100 text-sm uppercase tracking-widest min-w-[150px] text-center font-mono">
             {fmtMonthName(monthStart)}
           </span>
           <button
             onClick={() => setMonthStart(addMonths(monthStart, 1))}
             data-testid="cal-next-month"
-            className="border border-border hover:border-zinc-500 text-zinc-300 px-3 py-2 text-[10px] uppercase tracking-widest cursor-pointer"
-          >→</button>
-          <button
-            onClick={() => setAddOpen(true)}
-            data-testid="cal-add"
-            className="ml-2 border border-emerald-500/60 hover:bg-emerald-500/10 text-emerald-400 px-3 py-2 text-base uppercase tracking-widest cursor-pointer leading-none"
-          >+</button>
+            aria-label="Mese successivo"
+            className="w-11 h-11 rounded-lg border border-border hover:border-zinc-500 text-zinc-300 flex items-center justify-center cursor-pointer transition-colors flex-shrink-0"
+          >
+            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <polyline points="9 18 15 12 9 6" />
+            </svg>
+          </button>
         </div>
       </div>
 
