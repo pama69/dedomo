@@ -607,6 +607,7 @@ export default function GuestPage() {
                           {r.cuisine && <MetaChip icon="🍝">{r.cuisine}</MetaChip>}
                           {r.specialty && <MetaChip icon="⭐">{r.specialty}</MetaChip>}
                         </div>
+                        <MapsLink query={`${r.name}, ${data.comune || ""} ${data.provincia || ""}`} label={txt.viewOnMaps} />
                       </Card>
                     ))}
                   </div>
@@ -649,6 +650,7 @@ export default function GuestPage() {
                           {s.hours && <MetaChip icon="🕐">{s.hours}</MetaChip>}
                           {s.notes && <MetaChip icon="ℹ️">{s.notes}</MetaChip>}
                         </div>
+                        <MapsLink query={`${s.name}, ${data.comune || ""} ${data.provincia || ""}`} label={txt.viewOnMaps} />
                       </Card>
                     ))}
                   </div>
@@ -668,6 +670,7 @@ export default function GuestPage() {
                           {p.address && <MetaChip icon="📍">{p.address}</MetaChip>}
                           {p.hours && <MetaChip icon="🕐">{p.hours}</MetaChip>}
                         </div>
+                        <MapsLink query={`${p.name}, ${p.address || data.comune || ""} ${data.provincia || ""}`} label={txt.viewOnMaps} />
                       </Card>
                     ))}
                   </div>
@@ -691,6 +694,7 @@ export default function GuestPage() {
                           {b.type && <MetaChip icon="🌊">{b.type}</MetaChip>}
                           {b.features && <MetaChip icon="✨">{b.features}</MetaChip>}
                         </div>
+                        <MapsLink query={`${b.name}, ${data.provincia || data.comune || ""}`} label={txt.viewOnMaps} />
                       </Card>
                     ))}
                   </div>
@@ -714,6 +718,7 @@ export default function GuestPage() {
                           {a.type && <MetaChip icon="🚉">{a.type}</MetaChip>}
                           {a.connections && <MetaChip icon="🔗">{a.connections}</MetaChip>}
                         </div>
+                        <MapsLink query={a.name} label={txt.viewOnMaps} />
                       </Card>
                     ))}
                   </div>
@@ -792,6 +797,23 @@ function EmptyNote({ children }) {
       padding: "1rem 1.25rem",
       color: C.textSm, fontSize: 13, fontStyle: "italic",
     }}>{children}</div>
+  );
+}
+
+// Link "Vedi su Google Maps" costruito da nome + località
+function MapsLink({ query, label }) {
+  if (!query || !query.trim()) return null;
+  const href = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query.trim())}`;
+  return (
+    <a href={href} target="_blank" rel="noreferrer" style={{
+      display: "inline-flex", alignItems: "center", gap: 4,
+      marginTop: 8, fontSize: 12, fontWeight: 600,
+      color: C.sageDk, textDecoration: "none",
+      background: C.sageLt, borderRadius: 20,
+      padding: "4px 12px", alignSelf: "flex-start",
+    }}>
+      {label}
+    </a>
   );
 }
 
