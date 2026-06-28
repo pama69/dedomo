@@ -58,6 +58,20 @@ const T = {
     trashT:      "Raccolta rifiuti",
     parkingT:    "Parcheggio",
     emergencyT:  "Emergenze",
+    restaurants:    "Dove mangiare bene",
+    restaurantsDesc:"Ristoranti e trattorie consigliati nelle vicinanze",
+    transport:      "Muoversi nei dintorni",
+    transportDesc:  "Trasporti pubblici, linee e fermate",
+    supermarkets:   "Fare la spesa",
+    supermarketsDesc:"Supermercati e negozi alimentari più vicini",
+    pharmacy:       "Salute e farmacie",
+    pharmacyDesc:   "Farmacie e pronto soccorso più vicino",
+    beaches:        "Spiagge e natura",
+    beachesDesc:    "Spiagge e parchi raggiungibili dalla struttura",
+    airport:        "Aeroporto e stazione",
+    airportDesc:    "Come arrivare e ripartire",
+    taxi:           "Taxi e transfer",
+    taxiDesc:       "Servizi di taxi, NCC e navette",
   },
   en: {
     loading:     "Preparing your page…",
@@ -93,6 +107,20 @@ const T = {
     trashT:      "Trash collection",
     parkingT:    "Parking",
     emergencyT:  "Emergency contacts",
+    restaurants:    "Where to eat well",
+    restaurantsDesc:"Recommended restaurants and trattorias nearby",
+    transport:      "Getting around",
+    transportDesc:  "Public transport, lines and stops",
+    supermarkets:   "Groceries",
+    supermarketsDesc:"Nearest supermarkets and food shops",
+    pharmacy:       "Health & pharmacies",
+    pharmacyDesc:   "Pharmacies and nearest emergency room",
+    beaches:        "Beaches & nature",
+    beachesDesc:    "Beaches and parks reachable from the property",
+    airport:        "Airport & station",
+    airportDesc:    "How to arrive and depart",
+    taxi:           "Taxi & transfers",
+    taxiDesc:       "Taxi, private hire and shuttle services",
   },
   de: {
     loading:     "Ihre Seite wird vorbereitet…",
@@ -128,6 +156,20 @@ const T = {
     trashT:      "Müllabfuhr",
     parkingT:    "Parken",
     emergencyT:  "Notfallkontakte",
+    restaurants:    "Gut essen gehen",
+    restaurantsDesc:"Empfohlene Restaurants und Trattorien in der Nähe",
+    transport:      "Unterwegs sein",
+    transportDesc:  "Öffentliche Verkehrsmittel, Linien und Haltestellen",
+    supermarkets:   "Einkaufen",
+    supermarketsDesc:"Nächste Supermärkte und Lebensmittelgeschäfte",
+    pharmacy:       "Gesundheit & Apotheken",
+    pharmacyDesc:   "Apotheken und nächste Notaufnahme",
+    beaches:        "Strände & Natur",
+    beachesDesc:    "Strände und Parks in der Nähe der Unterkunft",
+    airport:        "Flughafen & Bahnhof",
+    airportDesc:    "An- und Abreise",
+    taxi:           "Taxi & Transfer",
+    taxiDesc:       "Taxi-, Mietwagen- und Shuttle-Dienste",
   },
   fr: {
     loading:     "Préparation de votre page…",
@@ -163,6 +205,20 @@ const T = {
     trashT:      "Collecte des déchets",
     parkingT:    "Stationnement",
     emergencyT:  "Numéros d'urgence",
+    restaurants:    "Où bien manger",
+    restaurantsDesc:"Restaurants et trattorias recommandés à proximité",
+    transport:      "Se déplacer",
+    transportDesc:  "Transports en commun, lignes et arrêts",
+    supermarkets:   "Faire les courses",
+    supermarketsDesc:"Supermarchés et épiceries les plus proches",
+    pharmacy:       "Santé et pharmacies",
+    pharmacyDesc:   "Pharmacies et urgences les plus proches",
+    beaches:        "Plages et nature",
+    beachesDesc:    "Plages et parcs accessibles depuis le logement",
+    airport:        "Aéroport et gare",
+    airportDesc:    "Comment arriver et repartir",
+    taxi:           "Taxi et transferts",
+    taxiDesc:       "Services de taxi, VTC et navettes",
   },
 };
 
@@ -532,6 +588,154 @@ export default function GuestPage() {
                 </div>
               ) : (
                 <EmptyNote>{txt.noAttr}</EmptyNote>
+              )}
+
+              {/* ── RISTORANTI ───────────────────────────────── */}
+              {data.restaurants?.length > 0 && (
+                <>
+                  <SectionTitle icon="🍽️" title={txt.restaurants} subtitle={txt.restaurantsDesc} />
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
+                    {data.restaurants.map((r, i) => (
+                      <Card key={i} className="gp-card-hover" style={{ padding: "1rem 1.25rem" }}>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                          <div style={{ fontWeight: 700, color: C.text, fontSize: 15 }}>{r.name}</div>
+                          {r.distance_km != null && (
+                            <span style={{ fontSize: 11, color: C.textSm, whiteSpace: "nowrap" }}>{r.distance_km} {txt.kmAway}</span>
+                          )}
+                        </div>
+                        <div style={{ display: "flex", gap: "0.75rem", marginTop: 6, flexWrap: "wrap" }}>
+                          {r.cuisine && <MetaChip icon="🍝">{r.cuisine}</MetaChip>}
+                          {r.specialty && <MetaChip icon="⭐">{r.specialty}</MetaChip>}
+                        </div>
+                      </Card>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              {/* ── TRASPORTI ────────────────────────────────── */}
+              {data.transport?.length > 0 && (
+                <>
+                  <SectionTitle icon="🚌" title={txt.transport} subtitle={txt.transportDesc} />
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
+                    {data.transport.map((t, i) => (
+                      <Card key={i} className="gp-card-hover" style={{ padding: "1rem 1.25rem" }}>
+                        <div style={{ fontWeight: 700, color: C.text, fontSize: 15 }}>
+                          {t.type}{t.line ? ` · ${t.line}` : ""}
+                        </div>
+                        {Array.isArray(t.destinations) && t.destinations.length > 0 && (
+                          <div style={{ fontSize: 13, color: C.textSm, marginTop: 4 }}>
+                            {t.destinations.join(" · ")}
+                          </div>
+                        )}
+                        {t.frequency && (
+                          <div style={{ marginTop: 6 }}><MetaChip icon="🕐">{t.frequency}</MetaChip></div>
+                        )}
+                      </Card>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              {/* ── SUPERMERCATI ─────────────────────────────── */}
+              {data.supermarkets?.length > 0 && (
+                <>
+                  <SectionTitle icon="🛒" title={txt.supermarkets} subtitle={txt.supermarketsDesc} />
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
+                    {data.supermarkets.map((s, i) => (
+                      <Card key={i} className="gp-card-hover" style={{ padding: "1rem 1.25rem" }}>
+                        <div style={{ fontWeight: 700, color: C.text, fontSize: 15 }}>{s.name}</div>
+                        <div style={{ display: "flex", gap: "0.75rem", marginTop: 6, flexWrap: "wrap" }}>
+                          {s.hours && <MetaChip icon="🕐">{s.hours}</MetaChip>}
+                          {s.notes && <MetaChip icon="ℹ️">{s.notes}</MetaChip>}
+                        </div>
+                      </Card>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              {/* ── FARMACIE ─────────────────────────────────── */}
+              {data.pharmacy?.length > 0 && (
+                <>
+                  <SectionTitle icon="💊" title={txt.pharmacy} subtitle={txt.pharmacyDesc} />
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
+                    {data.pharmacy.map((p, i) => (
+                      <Card key={i} className="gp-card-hover" style={{ padding: "1rem 1.25rem" }}>
+                        <div style={{ fontWeight: 700, color: C.text, fontSize: 15 }}>{p.name}</div>
+                        <div style={{ display: "flex", gap: "0.75rem", marginTop: 6, flexWrap: "wrap" }}>
+                          {p.type && <MetaChip icon="🏥">{p.type}</MetaChip>}
+                          {p.address && <MetaChip icon="📍">{p.address}</MetaChip>}
+                          {p.hours && <MetaChip icon="🕐">{p.hours}</MetaChip>}
+                        </div>
+                      </Card>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              {/* ── SPIAGGE E PARCHI ─────────────────────────── */}
+              {data.beaches_parks?.length > 0 && (
+                <>
+                  <SectionTitle icon="🏖️" title={txt.beaches} subtitle={txt.beachesDesc} />
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
+                    {data.beaches_parks.map((b, i) => (
+                      <Card key={i} className="gp-card-hover" style={{ padding: "1rem 1.25rem" }}>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                          <div style={{ fontWeight: 700, color: C.text, fontSize: 15 }}>{b.name}</div>
+                          {b.distance_km != null && (
+                            <span style={{ fontSize: 11, color: C.textSm, whiteSpace: "nowrap" }}>{b.distance_km} {txt.kmAway}</span>
+                          )}
+                        </div>
+                        <div style={{ display: "flex", gap: "0.75rem", marginTop: 6, flexWrap: "wrap" }}>
+                          {b.type && <MetaChip icon="🌊">{b.type}</MetaChip>}
+                          {b.features && <MetaChip icon="✨">{b.features}</MetaChip>}
+                        </div>
+                      </Card>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              {/* ── AEROPORTO E STAZIONE ─────────────────────── */}
+              {data.airport_station?.length > 0 && (
+                <>
+                  <SectionTitle icon="✈️" title={txt.airport} subtitle={txt.airportDesc} />
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
+                    {data.airport_station.map((a, i) => (
+                      <Card key={i} className="gp-card-hover" style={{ padding: "1rem 1.25rem" }}>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                          <div style={{ fontWeight: 700, color: C.text, fontSize: 15 }}>{a.name}</div>
+                          {a.distance_km != null && (
+                            <span style={{ fontSize: 11, color: C.textSm, whiteSpace: "nowrap" }}>{a.distance_km} {txt.kmAway}</span>
+                          )}
+                        </div>
+                        <div style={{ display: "flex", gap: "0.75rem", marginTop: 6, flexWrap: "wrap" }}>
+                          {a.type && <MetaChip icon="🚉">{a.type}</MetaChip>}
+                          {a.connections && <MetaChip icon="🔗">{a.connections}</MetaChip>}
+                        </div>
+                      </Card>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              {/* ── TAXI ─────────────────────────────────────── */}
+              {data.taxi?.length > 0 && (
+                <>
+                  <SectionTitle icon="🚕" title={txt.taxi} subtitle={txt.taxiDesc} />
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
+                    {data.taxi.map((t, i) => (
+                      <Card key={i} className="gp-card-hover" style={{ padding: "1rem 1.25rem" }}>
+                        <div style={{ fontWeight: 700, color: C.text, fontSize: 15 }}>{t.service}</div>
+                        <div style={{ display: "flex", gap: "0.75rem", marginTop: 6, flexWrap: "wrap" }}>
+                          {t.contact && <MetaChip icon="📞">{t.contact}</MetaChip>}
+                          {t.notes && <MetaChip icon="ℹ️">{t.notes}</MetaChip>}
+                        </div>
+                      </Card>
+                    ))}
+                  </div>
+                </>
               )}
 
               {/* ── FOOTER ───────────────────────────────────── */}
