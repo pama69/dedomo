@@ -176,7 +176,12 @@ export default function Settings() {
             <div
               key={p.property_id}
               data-testid={`property-row-${p.property_id}`}
-              className="surface-card p-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+              onClick={() => setEditing(p)}
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setEditing(p); } }}
+              role="button"
+              tabIndex={0}
+              aria-label={`Apri scheda ${p.nome}`}
+              className="surface-card p-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between cursor-pointer transition-all hover:brightness-125 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/50"
             >
               <div className="flex items-center gap-3 min-w-0">
                 <div
@@ -200,22 +205,18 @@ export default function Settings() {
                   </p>
                 </div>
               </div>
-              <div className="flex gap-1 flex-shrink-0">
+              <div className="flex items-center gap-1 flex-shrink-0">
                 <button
-                  onClick={() => setEditing(p)}
-                  data-testid={`edit-property-${p.property_id}`}
-                  className="btn-ghost"
-                >
-                  Modifica
-                </button>
-                <button
-                  onClick={() => remove(p.property_id)}
+                  onClick={(e) => { e.stopPropagation(); remove(p.property_id); }}
                   data-testid={`delete-property-${p.property_id}`}
                   className="btn-ghost"
                   style={{ color: "hsl(var(--destructive))" }}
                 >
                   Elimina
                 </button>
+                <svg className="w-5 h-5 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <polyline points="9 18 15 12 9 6" />
+                </svg>
               </div>
             </div>
           ))}
