@@ -37,7 +37,18 @@ export default function Calendar() {
   const [editEvent, setEditEvent] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [refreshMsg, setRefreshMsg] = useState("");
+  const [filter, setFilter] = useState(() => new Set()); // vuoto = tutte le strutture
+  const [dayDetail, setDayDetail] = useState(null); // chiave giorno per la schedina "tutti gli eventi"
   const touchRef = useRef(null);
+
+  const toggleFilter = (pid) => {
+    setFilter((prev) => {
+      const next = new Set(prev);
+      if (next.has(pid)) next.delete(pid);
+      else next.add(pid);
+      return next;
+    });
+  };
 
   // Swipe orizzontale per cambiare mese (mobile)
   const onTouchStart = (e) => {
@@ -87,6 +98,8 @@ export default function Calendar() {
   const eventsByDay = useMemo(() => {
     const map = {};
     for (const ev of events) {
+      // Filtro strutture: se attivo, mostra solo quelle selezionate
+      if (filter.size > 0 && !filter.has(ev.property_id)) continue;
       // Backend uses iCal-style exclusive end → for display we want inclusive,
       // so the bar covers the departure day too. Iterate [start..end] inclusive.
       const s = new Date(ev.start);
@@ -103,7 +116,7 @@ export default function Calendar() {
       }
     }
     return map;
-  }, [events]);
+  }, [events, filter]);
 
   // Corsie stabili PER SETTIMANA: dentro una riga del calendario ogni struttura
   // occupa sempre la stessa corsia, così un evento non "salta" di riga quando un
@@ -199,21 +212,48 @@ export default function Calendar() {
         </div>
       )}
 
-      {/* Legend */}
-      <div className="flex flex-wrap gap-3 border border-border p-3" data-testid="cal-legend">
+      {/* Legenda / filtro strutture */}
+      <div className="flex flex-col gap-2 border border-border rounded-xl p-3" data-testid="cal-legend">
         {properties.length === 0 ? (
           <span className="text-zinc-500 text-[11px] font-mono">Nessuna struttura configurata.</span>
         ) : (
-          properties.map((p) => (
-            <div key={p.property_id} className="flex items-center gap-2 text-[10px] font-mono text-zinc-300">
-              <span className="inline-block w-4 h-4" style={{ backgroundColor: p.color }} />
-              <span>{p.nome}</span>
+          <>
+            <div className="flex flex-wrap gap-2 items-center">
+              <button
+                type="button"
+                onClick={() => setFilter(new Set())}
+                data-testid="cal-filter-all"
+                className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[10px] font-mono border cursor-pointer transition-colors ${
+                  filter.size === 0
+                    ? "border-zinc-400 bg-zinc-100/10 text-zinc-100"
+                    : "border-border text-zinc-500 hover:text-zinc-300"
+                }`}
+              >
+                Tutte
+              </button>
+              {properties.map((p) => {
+                const active = filter.size === 0 || filter.has(p.property_id);
+                return (
+                  <button
+                    key={p.property_id}
+                    type="button"
+                    onClick={() => toggleFilter(p.property_id)}
+                    data-testid={`cal-filter-${p.property_id}`}
+                    className={`flex items-center gap-2 rounded-full px-3 py-1.5 text-[10px] font-mono border cursor-pointer transition-all ${
+                      active ? "border-zinc-500 text-zinc-200" : "border-border text-zinc-600 opacity-50"
+                    }`}
+                  >
+                    <span className="inline-block w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: p.color }} />
+                    {p.nome}
+                  </button>
+                );
+              })}
             </div>
-          ))
+            <p className="text-[9px] font-mono text-zinc-600">
+              Tocca una struttura per mostrarla/nasconderla · "Personale" = prenotazione manuale
+            </p>
+          </>
         )}
-        <div className="ml-auto flex gap-3 text-[9px] font-mono text-zinc-500">
-          <span>Le etichette mostrano il nome del calendario · "Personale" = prenotazione manuale</span>
-        </div>
       </div>
 
       {loading && <p className="text-zinc-500 text-[11px] font-mono">Caricamento...</p>}
@@ -253,7 +293,7 @@ export default function Calendar() {
                       if (!byProp.has(pid)) byProp.set(pid, []);
                       byProp.get(pid).push(en);
                     }
-                    const MAX_LANES = 5;
+                    const MAX_LANES = 3;
                     const cellLanes = weekLanes[Math.floor(i / 7)] || [];
                     const shown = cellLanes.slice(0, MAX_LANES);
                     const hidden = cellLanes.slice(MAX_LANES).filter((pid) => byProp.has(pid)).length;
@@ -301,7 +341,14 @@ export default function Calendar() {
                           return <div key={pid} className="h-[22px]" />;
                         })}
                         {hidden > 0 && (
-                          <span className="text-[9px] font-mono text-zinc-500 px-1.5">+{hidden}</span>
+                          <button
+                            type="button"
+                            onClick={() => setDayDetail(k)}
+                            data-testid={`cal-more-${k}`}
+                            className="text-[9px] font-mono text-zinc-400 hover:text-zinc-100 px-1.5 text-left cursor-pointer underline underline-offset-2"
+                          >
+                            +{hidden} altre
+                          </button>
                         )}
                       </>
                     );
@@ -329,7 +376,76 @@ export default function Calendar() {
           onDeleted={() => { setEditEvent(null); reload(); }}
         />
       )}
+      {dayDetail && (
+        <DayDetailModal
+          dayKey={dayDetail}
+          entries={eventsByDay[dayDetail] || []}
+          onClose={() => setDayDetail(null)}
+          onPick={(ev) => { setDayDetail(null); if (ev.editable) setEditEvent(ev); }}
+        />
+      )}
     </Layout>
+  );
+}
+
+function DayDetailModal({ dayKey, entries, onClose, onPick }) {
+  // Un evento può comparire più volte (start/middle/end): dedup per id
+  const seen = new Set();
+  const events = [];
+  for (const en of entries) {
+    if (seen.has(en.event.id)) continue;
+    seen.add(en.event.id);
+    events.push(en.event);
+  }
+  const dateLabel = (() => {
+    try {
+      return new Date(dayKey).toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+    } catch { return dayKey; }
+  })();
+  return (
+    <div
+      className="fixed inset-0 z-50 bg-black/60 flex items-end sm:items-center justify-center p-0 sm:p-4"
+      onClick={onClose}
+      data-testid="cal-day-detail"
+    >
+      <div
+        className="bg-zinc-900 border border-zinc-700 rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md max-h-[75vh] overflow-hidden flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="px-4 py-3 border-b border-zinc-700 flex items-center justify-between gap-2">
+          <span className="text-sm font-bold text-zinc-100 capitalize">{dateLabel}</span>
+          <button type="button" onClick={onClose} className="text-zinc-400 hover:text-zinc-100 cursor-pointer text-lg leading-none px-1">✕</button>
+        </div>
+        <div className="overflow-y-auto flex-1 p-3 flex flex-col gap-2">
+          {events.length === 0 ? (
+            <p className="text-zinc-500 text-xs font-mono px-1 py-4 text-center">Nessuna prenotazione.</p>
+          ) : (
+            events.map((ev) => (
+              <button
+                key={ev.id}
+                type="button"
+                onClick={() => onPick(ev)}
+                className={`flex items-center gap-3 rounded-lg border border-zinc-700 hover:border-zinc-500 p-3 text-left transition-colors ${ev.editable ? "cursor-pointer" : "cursor-default"}`}
+              >
+                <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: ev.color }} />
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-medium text-zinc-100 truncate">
+                    {ev.property_name} <span className="text-zinc-500">· {ev.source}</span>
+                  </div>
+                  <div className="text-[11px] font-mono text-zinc-500">
+                    {new Date(ev.start).toLocaleDateString("it-IT")} → {new Date(ev.end).toLocaleDateString("it-IT")}
+                    {ev.notes ? ` · ${ev.notes}` : ""}
+                  </div>
+                </div>
+                {ev.editable && (
+                  <span className="text-[9px] uppercase tracking-widest text-emerald-400 flex-shrink-0">Modifica</span>
+                )}
+              </button>
+            ))
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
 
