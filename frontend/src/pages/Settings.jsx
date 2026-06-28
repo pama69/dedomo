@@ -136,13 +136,13 @@ export default function Settings() {
     }
   };
 
-  const remove = async (id) => {
-    if (!window.confirm("Eliminare definitivamente questa struttura?")) return;
+  const removeAndExit = async (id) => {
     await api.delete(`/properties/${id}`);
+    setEditing(null);
     await load();
   };
 
-  if (editing) return <PropertyEditor p={editing} setP={setEditing} save={save} cancel={() => setEditing(null)} saving={saving} error={error} />;
+  if (editing) return <PropertyEditor p={editing} setP={setEditing} save={save} cancel={() => setEditing(null)} onDelete={removeAndExit} saving={saving} error={error} />;
 
   return (
     <Layout>
@@ -206,14 +206,6 @@ export default function Settings() {
                 </div>
               </div>
               <div className="flex items-center gap-1 flex-shrink-0">
-                <button
-                  onClick={(e) => { e.stopPropagation(); remove(p.property_id); }}
-                  data-testid={`delete-property-${p.property_id}`}
-                  className="btn-ghost"
-                  style={{ color: "hsl(var(--destructive))" }}
-                >
-                  Elimina
-                </button>
                 <svg className="w-5 h-5 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <polyline points="9 18 15 12 9 6" />
                 </svg>
@@ -299,8 +291,10 @@ function Toggle({ label, value, onChange, testid }) {
   );
 }
 
-function PropertyEditor({ p, setP, save, cancel, saving, error }) {
+function PropertyEditor({ p, setP, save, cancel, onDelete, saving, error }) {
   const navigate = useNavigate();
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const upd = (path, val) => {
     setP((prev) => {
       const copy = JSON.parse(JSON.stringify(prev));
@@ -563,6 +557,66 @@ function PropertyEditor({ p, setP, save, cancel, saving, error }) {
           {saving ? "Salvataggio..." : "Salva struttura"}
         </button>
       </div>
+
+      {/* ── Zona pericolosa: elimina struttura ── */}
+      {p.property_id && (
+        <div className="mt-8 pt-6 border-t border-red-500/20 flex flex-col gap-3">
+          <div className="flex flex-col gap-1">
+            <span className="text-[10px] tracking-[0.25em] uppercase text-red-400/80 font-bold">Zona pericolosa</span>
+            <p className="text-zinc-500 text-[11px] font-mono">
+              L'eliminazione è definitiva: rimuove la struttura e la sua configurazione. Gli invii già archiviati non vengono toccati.
+            </p>
+          </div>
+          {!confirmDelete ? (
+            <button
+              type="button"
+              onClick={() => setConfirmDelete(true)}
+              data-testid="delete-property-btn"
+              className="w-full flex items-center justify-center gap-2 py-3.5 border border-red-500/40 bg-red-500/5 hover:bg-red-500/10 text-red-400 hover:text-red-300 text-sm font-bold uppercase tracking-wider cursor-pointer transition-colors"
+            >
+              <svg className="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <polyline points="3 6 5 6 21 6" />
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+              </svg>
+              Elimina questa struttura
+            </button>
+          ) : (
+            <div className="flex flex-col gap-2 border border-red-500/50 bg-red-500/10 p-4">
+              <p className="text-red-300 text-sm font-medium">
+                Sei sicuro? Questa azione non può essere annullata.
+              </p>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setConfirmDelete(false)}
+                  disabled={deleting}
+                  className="btn-secondary flex-1 py-3 disabled:opacity-50"
+                >
+                  Annulla
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setDeleting(true);
+                    try {
+                      await onDelete(p.property_id);
+                    } catch (e) {
+                      setDeleting(false);
+                      setConfirmDelete(false);
+                      alert(e.response?.data?.detail || "Errore durante l'eliminazione");
+                    }
+                  }}
+                  disabled={deleting}
+                  data-testid="confirm-delete-property-btn"
+                  className="flex-1 py-3 bg-red-500 hover:bg-red-400 text-white text-sm font-bold uppercase tracking-wider cursor-pointer transition-colors disabled:opacity-50"
+                >
+                  {deleting ? "Eliminazione..." : "Sì, elimina"}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </Layout>
   );
 }
