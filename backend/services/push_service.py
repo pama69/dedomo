@@ -75,6 +75,12 @@ async def send_push(db, user_id: str, title: str, body: str, url: str = "/archiv
             data=json.dumps({"title": title, "body": body, "url": url}),
             vapid_private_key=vapid,
             vapid_claims={"sub": f"mailto:{VAPID_CLAIMS_EMAIL}"},
+            # TTL 24h: se il telefono è in standby/Doze (es. invii notturni alle 23:59)
+            # il push service tiene la notifica e la consegna al risveglio invece di scartarla.
+            ttl=86400,
+            # Urgency high: chiede al push service di svegliare il dispositivo anche in
+            # risparmio energetico (notifiche importanti, non differibili).
+            headers={"Urgency": "high"},
         )
         logger.info(f"[PUSH] Notifica inviata a user {user_id}: {title}")
         return True, None
