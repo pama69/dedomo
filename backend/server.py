@@ -4463,8 +4463,20 @@ async def _add_notification(
     body: str,
     checkin_id: Optional[str] = None,
     portal: Optional[str] = None,
-) -> None:
-    """Append a user-facing notification and send Web Push if subscribed."""
+    dedup_key: Optional[str] = None,
+    push: Optional[bool] = None,
+    url: str = "/archive",
+) -> bool:
+    """Append a user-facing notification and send Web Push if subscribed.
+
+    Se `dedup_key` è valorizzato e esiste già una notifica con la stessa chiave,
+    non fa nulla (evita doppioni su job ricorrenti). Ritorna True se ha creato la notifica.
+    `push`: None = push solo per success/error (comportamento storico); True/False = forza.
+    """
+    if dedup_key:
+        existing = await db.notifications.find_one({"user_id": user_id, "dedup_key": dedup_key})
+        if existing:
+            return False
     await db.notifications.insert_one({
         "notification_id": f"ntf_{uuid.uuid4().hex[:12]}",
         "user_id": user_id,
@@ -4473,12 +4485,14 @@ async def _add_notification(
         "body": body,
         "checkin_id": checkin_id,
         "portal": portal,
+        "dedup_key": dedup_key,
         "read": False,
         "created_at": datetime.now(timezone.utc).isoformat(),
     })
-    # Push per eventi importanti (non per warning transitori già gestiti da retry)
-    if level in ("success", "error"):
-        await send_push(db, user_id, title, body, url="/archive")
+    do_push = push if push is not None else (level in ("success", "error"))
+    if do_push:
+        await send_push(db, user_id, title, body, url=url)
+    return True
 
 
 async def _process_submit_result(
@@ -5044,6 +5058,143 @@ async def _check_subscription_expiry():
             logger.error(f"[sub_expiry] errore user={user_id}: {e}")
 
 
+async def _calendar_reminders():
+    """Job giornaliero (08:00 Europe/Rome): reminder arrivi e partenze.
+
+    - Arrivo: notifica 3 giorni prima e 1 giorno prima dell'inizio.
+      Fonte: calendario completo = prenotazioni manuali + calendari importati (feed iCal).
+    - Partenza: notifica 1 giorno prima (domani). Fonte: stesso calendario; se per quel
+      soggiorno esiste un check-in registrato, includo il nome dell'ospite.
+    Dedup tramite `dedup_key` su notifications → ogni reminder parte una volta sola.
+    """
+    try:
+        from zoneinfo import ZoneInfo
+        today = datetime.now(ZoneInfo("Europe/Rome")).date()
+    except Exception:
+        today = datetime.now(timezone.utc).date()
+
+    def _d(s):
+        try:
+            return date.fromisoformat(str(s)[:10])
+        except Exception:
+            return None
+
+    def _fmt(d):
+        return d.strftime("%d/%m/%Y") if d else ""
+
+    arr_3 = today + timedelta(days=3)
+    arr_1 = today + timedelta(days=1)
+    dep_1 = today + timedelta(days=1)
+
+    # Mappa proprietà → (user_id, nome)
+    props = await db.properties.find(
+        {}, {"_id": 0, "property_id": 1, "user_id": 1, "nome": 1}
+    ).to_list(5000)
+    pmap = {p["property_id"]: p for p in props}
+
+    # Dedup per giorno/struttura: (property_id, data) → info
+    arrivals: Dict[Any, Dict[str, Any]] = {}
+    departures: Dict[Any, Dict[str, Any]] = {}
+
+    # 1) Prenotazioni manuali
+    try:
+        manual = await db.manual_bookings.find({}, {"_id": 0}).to_list(20000)
+    except Exception:
+        manual = []
+    for m in manual:
+        p = pmap.get(m.get("property_id"))
+        if not p:
+            continue
+        s, e = _d(m.get("start")), _d(m.get("end"))
+        if s:
+            arrivals.setdefault((p["property_id"], s), {"user_id": p["user_id"], "prop": p.get("nome", "")})
+        if e:
+            departures.setdefault((p["property_id"], e), {"user_id": p["user_id"], "prop": p.get("nome", ""), "name": None, "arrival": s})
+
+    # 2) Feed esterni (cache iCal)
+    try:
+        caches = await db.ical_cache.find({}, {"_id": 0}).to_list(5000)
+    except Exception:
+        caches = []
+    for c in caches:
+        p = pmap.get(c.get("property_id"))
+        if not p:
+            continue
+        evlists = []
+        feeds = c.get("feeds")
+        if feeds is not None:
+            for f in feeds:
+                evlists.extend(f.get("events", []) or [])
+        else:  # cache legacy
+            for k in ("booking", "airbnb", "vrbo"):
+                evlists.extend(c.get(k, []) or [])
+        for ev in evlists:
+            s, e = _d(ev.get("start")), _d(ev.get("end"))
+            if s:
+                arrivals.setdefault((p["property_id"], s), {"user_id": p["user_id"], "prop": p.get("nome", "")})
+            if e:
+                departures.setdefault((p["property_id"], e), {"user_id": p["user_id"], "prop": p.get("nome", ""), "name": None, "arrival": s})
+
+    # 3) Check-in registrati → arricchiscono la partenza con il nome ospite
+    try:
+        checkins = await db.checkins.find(
+            {}, {"_id": 0, "property_id": 1, "user_id": 1, "data_arrivo": 1, "data_partenza": 1, "guests": 1}
+        ).to_list(20000)
+    except Exception:
+        checkins = []
+    for ck in checkins:
+        p = pmap.get(ck.get("property_id"))
+        uid = ck.get("user_id") or (p.get("user_id") if p else None)
+        if not uid:
+            continue
+        prop_name = (p.get("nome", "") if p else "") or ck.get("property_name", "")
+        s, e = _d(ck.get("data_arrivo")), _d(ck.get("data_partenza"))
+        guests = ck.get("guests") or []
+        name = None
+        if guests:
+            g = guests[0]
+            name = f"{g.get('nome', '')} {g.get('cognome', '')}".strip() or None
+        if e:
+            # Il check-in (con nome) ha priorità sul calendario per quella partenza
+            departures[(ck.get("property_id"), e)] = {"user_id": uid, "prop": prop_name, "name": name, "arrival": s}
+
+    sent = 0
+
+    # --- ARRIVI (3gg e 1gg prima) ---
+    for (pid, sdate), info in arrivals.items():
+        offset = 3 if sdate == arr_3 else (1 if sdate == arr_1 else None)
+        if offset is None:
+            continue
+        body = f"Hai un arrivo previsto in data {_fmt(sdate)} a {info['prop']}"
+        ok = await _add_notification(
+            info["user_id"], "info", "Arrivo previsto", body,
+            dedup_key=f"arrival:{pid}:{sdate.isoformat()}:{offset}", push=True, url="/calendar",
+        )
+        if ok:
+            sent += 1
+
+    # --- PARTENZE (1gg prima) ---
+    for (pid, edate), info in departures.items():
+        if edate != dep_1:
+            continue
+        arr = info.get("arrival")
+        if info.get("name"):
+            arr_txt = f" arrivato il {_fmt(arr)}" if arr else ""
+            body = f"Domani partenza sig. {info['name']}{arr_txt} nell'appartamento {info['prop']}"
+        else:
+            arr_txt = f" (arrivo del {_fmt(arr)})" if arr else ""
+            body = f"Domani partenza nell'appartamento {info['prop']}{arr_txt}"
+        ok = await _add_notification(
+            info["user_id"], "info", "Partenza domani", body,
+            dedup_key=f"departure:{pid}:{edate.isoformat()}", push=True, url="/calendar",
+        )
+        if ok:
+            sent += 1
+
+    if sent:
+        logger.info(f"[cal_reminders] inviate {sent} notifiche (arrivi+partenze)")
+
+
 async def _gdpr_anonymize_old_data():
     """GDPR art. 5(1)(e) — anonimizza i dati personali degli ospiti dopo 3 anni."""
     cutoff = datetime.now(timezone.utc) - timedelta(days=3 * 365)
@@ -5144,6 +5295,7 @@ async def startup_scheduler():
     scheduler.add_job(_process_scheduled_remote_checkins, "interval", minutes=2, id="remote_checkin_send")
     # Daily at 10:00 — notify users whose subscription expires in 7 days
     scheduler.add_job(_check_subscription_expiry, "cron", hour=10, minute=0, id="sub_expiry_check")
+    scheduler.add_job(_calendar_reminders, "cron", hour=8, minute=0, id="calendar_reminders")
     # GDPR: monthly anonymization of guest data older than 3 years (1st of each month at 03:00)
     scheduler.add_job(_gdpr_anonymize_old_data, "cron", day=1, hour=3, minute=0, id="gdpr_anonymize")
     scheduler.start()
