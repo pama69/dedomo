@@ -456,7 +456,7 @@ function PropertyEditor({ p, setP, save, cancel, onDelete, saving, error }) {
               )}
 
               {feeds.map((f, i) => (
-                <div key={f.id || i} className="flex flex-col gap-2 border border-border p-3 bg-zinc-900/40">
+                <div key={f.id || i} className="flex flex-col gap-2 border border-border rounded-lg p-3 bg-zinc-900/40">
                   <div className="flex items-center justify-between">
                     <span className="text-[10px] tracking-[0.25em] uppercase text-zinc-500">
                       Calendario {i + 1}
@@ -491,7 +491,7 @@ function PropertyEditor({ p, setP, save, cancel, onDelete, saving, error }) {
                 type="button"
                 onClick={() => setFeeds([...feeds, { id: newFeedId(), name: "", url: "" }])}
                 data-testid="cal-feed-add"
-                className="w-full flex items-center justify-center gap-2 py-3.5 border-2 border-emerald-500/40 bg-emerald-500/5 hover:bg-emerald-500/10 text-emerald-400 hover:text-emerald-300 transition-all cursor-pointer"
+                className="w-full flex items-center justify-center gap-2 py-3.5 border-2 border-emerald-500/40 rounded-lg bg-emerald-500/5 hover:bg-emerald-500/10 text-emerald-400 hover:text-emerald-300 transition-all cursor-pointer"
               >
                 <svg className="w-5 h-5 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <line x1="12" y1="5" x2="12" y2="19" />
@@ -510,7 +510,7 @@ function PropertyEditor({ p, setP, save, cancel, onDelete, saving, error }) {
               value={p.calendar?.color || "#10b981"}
               onChange={(e) => upd("calendar.color", e.target.value)}
               data-testid="cal-color"
-              className="w-12 h-10 bg-transparent border border-border cursor-pointer"
+              className="w-12 h-10 bg-transparent border border-border rounded-lg cursor-pointer"
             />
             <span className="text-zinc-400 text-[11px] font-mono">{p.calendar?.color || "#10b981"}</span>
           </div>
@@ -532,7 +532,7 @@ function PropertyEditor({ p, setP, save, cancel, onDelete, saving, error }) {
         <button
           type="button"
           onClick={() => navigate(`/settings/properties/${p.property_id}/manual`)}
-          className="w-full flex items-center justify-center gap-3 py-4 border-2 border-emerald-500/40 bg-emerald-500/5 hover:bg-emerald-500/10 text-emerald-400 hover:text-emerald-300 transition-all cursor-pointer"
+          className="w-full flex items-center justify-center gap-3 py-4 border-2 border-emerald-500/40 rounded-lg bg-emerald-500/5 hover:bg-emerald-500/10 text-emerald-400 hover:text-emerald-300 transition-all cursor-pointer"
         >
           <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />
@@ -572,7 +572,7 @@ function PropertyEditor({ p, setP, save, cancel, onDelete, saving, error }) {
               type="button"
               onClick={() => setConfirmDelete(true)}
               data-testid="delete-property-btn"
-              className="w-full flex items-center justify-center gap-2 py-3.5 border border-red-500/40 bg-red-500/5 hover:bg-red-500/10 text-red-400 hover:text-red-300 text-sm font-bold uppercase tracking-wider cursor-pointer transition-colors"
+              className="w-full flex items-center justify-center gap-2 py-3.5 border border-red-500/40 rounded-lg bg-red-500/5 hover:bg-red-500/10 text-red-400 hover:text-red-300 text-sm font-bold uppercase tracking-wider cursor-pointer transition-colors"
             >
               <svg className="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <polyline points="3 6 5 6 21 6" />
@@ -581,7 +581,7 @@ function PropertyEditor({ p, setP, save, cancel, onDelete, saving, error }) {
               Elimina questa struttura
             </button>
           ) : (
-            <div className="flex flex-col gap-2 border border-red-500/50 bg-red-500/10 p-4">
+            <div className="flex flex-col gap-2 border border-red-500/50 rounded-lg bg-red-500/10 p-4">
               <p className="text-red-300 text-sm font-medium">
                 Sei sicuro? Questa azione non può essere annullata.
               </p>
@@ -608,7 +608,7 @@ function PropertyEditor({ p, setP, save, cancel, onDelete, saving, error }) {
                   }}
                   disabled={deleting}
                   data-testid="confirm-delete-property-btn"
-                  className="flex-1 py-3 bg-red-500 hover:bg-red-400 text-white text-sm font-bold uppercase tracking-wider cursor-pointer transition-colors disabled:opacity-50"
+                  className="flex-1 py-3 rounded-lg bg-red-500 hover:bg-red-400 text-white text-sm font-bold uppercase tracking-wider cursor-pointer transition-colors disabled:opacity-50"
                 >
                   {deleting ? "Eliminazione..." : "Sì, elimina"}
                 </button>
@@ -826,7 +826,7 @@ function ApartmentSelector({ propertyId, value, onChange, disabled }) {
           {loading ? "Caricamento..." : "Carica miei appartamenti da Alloggiati Web"}
         </button>
       ) : error && items.length === 0 ? (
-        <div className="border border-red-500/40 bg-red-500/5 p-3 font-mono text-[10px] text-red-400 flex flex-col gap-2">
+        <div className="border border-red-500/40 rounded-lg bg-red-500/5 p-3 font-mono text-[10px] text-red-400 flex flex-col gap-2">
           <span className="font-bold">[ ERR ] Impossibile caricare appartamenti</span>
           <span className="text-zinc-400 break-words">{error}</span>
           <span className="text-zinc-500">Verifica che le credenziali siano corrette e salvate, poi riprova.</span>
@@ -867,7 +867,7 @@ function ApartmentSelector({ propertyId, value, onChange, disabled }) {
           </div>
         </>
       ) : (
-        <div className="border border-amber-500/40 p-3 font-mono text-[10px] text-amber-400 flex flex-col gap-3">
+        <div className="border border-amber-500/40 rounded-lg p-3 font-mono text-[10px] text-amber-400 flex flex-col gap-3">
           <div>
             [ ATTENZIONE ] La lista è vuota. Possibili cause:
             <ul className="mt-2 text-zinc-400 list-disc list-inside space-y-1">
@@ -891,12 +891,12 @@ function ApartmentSelector({ propertyId, value, onChange, disabled }) {
                 value={value || ""}
                 onChange={(e) => onChange(parseInt(e.target.value) || 0)}
                 placeholder="es. 1"
-                className="flex-1 bg-transparent border border-border px-3 py-2 text-zinc-100 placeholder:text-zinc-600 focus:border-zinc-300 outline-none font-mono text-sm"
+                className="flex-1 bg-transparent border border-border rounded-lg px-3 py-2 text-zinc-100 placeholder:text-zinc-600 focus:border-zinc-300 outline-none font-mono text-sm"
               />
               <button
                 type="button"
                 onClick={() => onChange(1)}
-                className="border border-border hover:border-zinc-500 px-3 py-2 text-zinc-300 uppercase tracking-widest text-[10px] cursor-pointer"
+                className="border border-border rounded-lg hover:border-zinc-500 px-3 py-2 text-zinc-300 uppercase tracking-widest text-[10px] cursor-pointer"
               >
                 Usa 1
               </button>
@@ -999,7 +999,7 @@ function AddApartmentForm({ propertyId, onAdded, onCancel }) {
   };
 
   return (
-    <div className="border border-border p-4 flex flex-col gap-3 bg-surface-1">
+    <div className="border border-border rounded-lg p-4 flex flex-col gap-3 bg-surface-1">
       <p className="text-xs tracking-[0.25em] uppercase text-zinc-300">
         Nuovo Appartamento
       </p>
@@ -1011,7 +1011,7 @@ function AddApartmentForm({ propertyId, onAdded, onCancel }) {
           value={form.descrizione}
           onChange={(e) => setForm({ ...form, descrizione: e.target.value })}
           placeholder="Es. Villa Mare Appartamento 2"
-          className="bg-transparent border border-border px-3 py-2 text-zinc-100 placeholder:text-zinc-600 focus:border-zinc-300 outline-none text-sm"
+          className="bg-transparent border border-border rounded-lg px-3 py-2 text-zinc-100 placeholder:text-zinc-600 focus:border-zinc-300 outline-none text-sm"
         />
       </label>
       <label className="flex flex-col gap-1">
@@ -1024,13 +1024,13 @@ function AddApartmentForm({ propertyId, onAdded, onCancel }) {
             onChange={(e) => setComuneQuery(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), searchComuni())}
             placeholder="Es. Pescara"
-            className="flex-1 bg-transparent border border-border px-3 py-2 text-zinc-100 placeholder:text-zinc-600 focus:border-zinc-300 outline-none text-sm"
+            className="flex-1 bg-transparent border border-border rounded-lg px-3 py-2 text-zinc-100 placeholder:text-zinc-600 focus:border-zinc-300 outline-none text-sm"
           />
           <button
             type="button"
             onClick={searchComuni}
             disabled={searchingComuni}
-            className="border border-border hover:border-zinc-500 px-4 text-zinc-300 uppercase tracking-widest text-[10px] cursor-pointer disabled:opacity-50"
+            className="border border-border rounded-lg hover:border-zinc-500 px-4 text-zinc-300 uppercase tracking-widest text-[10px] cursor-pointer disabled:opacity-50"
           >
             {searchingComuni ? "..." : "Cerca"}
           </button>
@@ -1047,7 +1047,7 @@ function AddApartmentForm({ propertyId, onAdded, onCancel }) {
                 comune_nome: c ? c.nome : "",
               });
             }}
-            className="bg-transparent border border-border px-3 py-2 text-zinc-100 focus:border-zinc-300 outline-none font-mono text-sm mt-1"
+            className="bg-transparent border border-border rounded-lg px-3 py-2 text-zinc-100 focus:border-zinc-300 outline-none font-mono text-sm mt-1"
           >
             <option value="" className="bg-surface-1">— Seleziona comune —</option>
             {comuneResults.map((c) => (
@@ -1066,7 +1066,7 @@ function AddApartmentForm({ propertyId, onAdded, onCancel }) {
           value={form.indirizzo}
           onChange={(e) => setForm({ ...form, indirizzo: e.target.value })}
           placeholder="Es. Via Roma, 25"
-          className="bg-transparent border border-border px-3 py-2 text-zinc-100 placeholder:text-zinc-600 focus:border-zinc-300 outline-none text-sm"
+          className="bg-transparent border border-border rounded-lg px-3 py-2 text-zinc-100 placeholder:text-zinc-600 focus:border-zinc-300 outline-none text-sm"
         />
       </label>
       <label className="flex flex-col gap-1">
@@ -1077,7 +1077,7 @@ function AddApartmentForm({ propertyId, onAdded, onCancel }) {
           value={form.proprietario}
           onChange={(e) => setForm({ ...form, proprietario: e.target.value })}
           placeholder="Nome Cognome del proprietario"
-          className="bg-transparent border border-border px-3 py-2 text-zinc-100 placeholder:text-zinc-600 focus:border-zinc-300 outline-none text-sm"
+          className="bg-transparent border border-border rounded-lg px-3 py-2 text-zinc-100 placeholder:text-zinc-600 focus:border-zinc-300 outline-none text-sm"
         />
       </label>
       {error && (
@@ -1089,7 +1089,7 @@ function AddApartmentForm({ propertyId, onAdded, onCancel }) {
         <button
           type="button"
           onClick={onCancel}
-          className="flex-1 border border-border hover:border-zinc-500 text-zinc-400 px-4 py-3 uppercase tracking-widest text-[10px] cursor-pointer"
+          className="flex-1 border border-border rounded-lg hover:border-zinc-500 text-zinc-400 px-4 py-3 uppercase tracking-widest text-[10px] cursor-pointer"
         >
           Annulla
         </button>
@@ -1242,7 +1242,7 @@ function OwnerBankInfoSection({ properties }) {
               <div
                 key={c.codice_fiscale}
                 data-testid={`owner-bank-row-${c.codice_fiscale}`}
-                className="bg-surface-1 border border-border p-4 flex items-center justify-between gap-4"
+                className="bg-surface-1 border border-border rounded-lg p-4 flex items-center justify-between gap-4"
               >
                 <div className="min-w-0 flex-1">
                   <p className="font-medium text-zinc-100">{c.intestatario || "—"}</p>
@@ -1336,7 +1336,7 @@ function OwnerBankInfoModal({ cf, intestatario, onClose, onSaved }) {
       onClick={onClose}
     >
       <div
-        className="bg-background border border-border max-w-md w-full p-6 flex flex-col gap-4"
+        className="bg-background border border-border rounded-lg max-w-md w-full p-6 flex flex-col gap-4"
         onClick={(e) => e.stopPropagation()}
       >
         <div>
@@ -1379,7 +1379,7 @@ function OwnerBankInfoModal({ cf, intestatario, onClose, onSaved }) {
               <button
                 onClick={onClose}
                 data-testid="bank-cancel"
-                className="text-[10px] tracking-[0.25em] uppercase text-zinc-400 border border-border hover:border-zinc-500 px-5 py-3 transition-colors cursor-pointer"
+                className="text-[10px] tracking-[0.25em] uppercase text-zinc-400 border border-border rounded-lg hover:border-zinc-500 px-5 py-3 transition-colors cursor-pointer"
               >
                 Annulla
               </button>
@@ -1416,7 +1416,7 @@ function PushNotificationSection() {
   };
 
   return (
-    <div className="border border-border p-4 flex flex-col gap-3 bg-surface-1">
+    <div className="border border-border rounded-lg p-4 flex flex-col gap-3 bg-surface-1">
       <span className="text-[10px] tracking-[0.25em] uppercase text-zinc-400">Notifiche Push</span>
 
       {!isSupported && (
@@ -1426,7 +1426,7 @@ function PushNotificationSection() {
       )}
 
       {isSupported && isIOS && !isStandalone && (
-        <div className="border border-amber-500/30 bg-amber-500/5 p-3 flex flex-col gap-1">
+        <div className="border border-amber-500/30 rounded-lg bg-amber-500/5 p-3 flex flex-col gap-1">
           <p className="text-[11px] text-amber-300">Su iPhone le notifiche richiedono un passaggio:</p>
           <p className="text-[11px] text-zinc-400">
             Tocca <span className="text-zinc-200">Condividi ↑</span> in Safari →{" "}
@@ -1451,7 +1451,7 @@ function PushNotificationSection() {
               <button
                 onClick={unsubscribe}
                 disabled={loading}
-                className="border border-zinc-700 hover:border-zinc-500 text-zinc-500 hover:text-zinc-300 px-3 py-1 uppercase tracking-widest text-[9px] cursor-pointer disabled:opacity-50"
+                className="border border-zinc-700 rounded-lg hover:border-zinc-500 text-zinc-500 hover:text-zinc-300 px-3 py-1 uppercase tracking-widest text-[9px] cursor-pointer disabled:opacity-50"
               >
                 {loading ? "..." : "Disattiva"}
               </button>
@@ -1459,7 +1459,7 @@ function PushNotificationSection() {
               <button
                 onClick={async () => { setSubError(""); const r = await subscribe(); if (!r.ok) setSubError(r.error || "Errore sconosciuto"); }}
                 disabled={loading || (isIOS && !isStandalone)}
-                className="border border-emerald-500/60 hover:bg-emerald-500/10 text-emerald-400 px-3 py-1 uppercase tracking-widest text-[9px] cursor-pointer disabled:opacity-50"
+                className="border border-emerald-500/60 rounded-lg hover:bg-emerald-500/10 text-emerald-400 px-3 py-1 uppercase tracking-widest text-[9px] cursor-pointer disabled:opacity-50"
               >
                 {loading ? "..." : "Attiva"}
               </button>
@@ -1472,7 +1472,7 @@ function PushNotificationSection() {
               <button
                 onClick={sendTest}
                 disabled={testLoading}
-                className="border border-zinc-600 hover:border-zinc-400 text-zinc-400 px-3 py-1 uppercase tracking-widest text-[9px] cursor-pointer disabled:opacity-50"
+                className="border border-zinc-600 rounded-lg hover:border-zinc-400 text-zinc-400 px-3 py-1 uppercase tracking-widest text-[9px] cursor-pointer disabled:opacity-50"
               >
                 {testLoading ? "Invio..." : "Prova notifiche"}
               </button>
@@ -1515,26 +1515,26 @@ function DangerZoneSection() {
       {!confirm ? (
         <button
           onClick={() => setConfirm(true)}
-          className="self-start border border-red-700 hover:border-red-500 text-red-500 hover:text-red-300 px-4 py-2 uppercase tracking-widest text-[10px] cursor-pointer transition-colors"
+          className="self-start border border-red-700 rounded-lg hover:border-red-500 text-red-500 hover:text-red-300 px-4 py-2 uppercase tracking-widest text-[10px] cursor-pointer transition-colors"
         >
           Cancella account
         </button>
       ) : (
-        <div className="flex flex-col gap-3 border border-red-800 p-4 bg-red-950/20">
+        <div className="flex flex-col gap-3 border border-red-800 rounded-lg p-4 bg-red-950/20">
           <p className="text-red-300 text-[12px] font-semibold">Sei sicuro? Questa operazione non può essere annullata.</p>
           {err && <p className="text-red-400 text-[11px] font-mono">{err}</p>}
           <div className="flex gap-2">
             <button
               onClick={handleDelete}
               disabled={deleting}
-              className="border border-red-600 bg-red-900/40 hover:bg-red-800/60 text-red-200 px-4 py-2 uppercase tracking-widest text-[10px] cursor-pointer disabled:opacity-50 transition-colors"
+              className="border border-red-600 rounded-lg bg-red-900/40 hover:bg-red-800/60 text-red-200 px-4 py-2 uppercase tracking-widest text-[10px] cursor-pointer disabled:opacity-50 transition-colors"
             >
               {deleting ? "Cancellazione…" : "Sì, cancella tutto"}
             </button>
             <button
               onClick={() => { setConfirm(false); setErr(""); }}
               disabled={deleting}
-              className="border border-zinc-700 hover:border-zinc-500 text-zinc-400 hover:text-zinc-200 px-4 py-2 uppercase tracking-widest text-[10px] cursor-pointer disabled:opacity-50 transition-colors"
+              className="border border-zinc-700 rounded-lg hover:border-zinc-500 text-zinc-400 hover:text-zinc-200 px-4 py-2 uppercase tracking-widest text-[10px] cursor-pointer disabled:opacity-50 transition-colors"
             >
               Annulla
             </button>
