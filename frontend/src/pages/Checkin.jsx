@@ -38,6 +38,8 @@ export default function Checkin() {
   const [activeGuestIdx, setActiveGuestIdx] = useState(0);
   const [ocrLoading, setOcrLoading] = useState(false);
   const [ocrError, setOcrError] = useState("");
+  const [bulkProgress, setBulkProgress] = useState(null); // {done:N, total:N} | null
+  const bulkInputRef = useRef(null);
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
@@ -351,6 +353,107 @@ export default function Checkin() {
     }
   };
 
+  // Bulk OCR: process multiple document photos at once
+  const handleBulkOcr = async (files) => {
+    if (!files || files.length === 0) return;
+    const fileList = Array.from(files);
+    setOcrError("");
+
+    const mapDoc = (v) => {
+      const m = { CARTA_IDENTITA: "IDENT", CARTA_IDENTITA_ELETTRONICA: "IDELE", PASSAPORTO: "PASOR", PATENTE: "PATEN" };
+      return m[v] || v || "IDENT";
+    };
+
+    // Determine start index: if first guest is empty, fill it
+    const firstIsEmpty = guests.length === 1 && !guests[0].cognome && !guests[0].nome;
+    const startIdx = firstIsEmpty ? 0 : guests.length;
+
+    // Pre-create all guest slots so tabs appear immediately
+    setGuests((prev) => {
+      if (firstIsEmpty) return fileList.map(() => emptyGuest());
+      return [...prev, ...fileList.map(() => emptyGuest())];
+    });
+    setActiveGuestIdx(startIdx);
+    setBulkProgress({ done: 0, total: fileList.length });
+
+    for (let i = 0; i < fileList.length; i++) {
+      const file = fileList[i];
+      const guestIdx = startIdx + i;
+      setBulkProgress({ done: i, total: fileList.length });
+      setActiveGuestIdx(guestIdx);
+
+      try {
+        const previewUrl = URL.createObjectURL(file);
+        setGuests((prev) => {
+          const copy = [...prev];
+          if (copy[guestIdx]) copy[guestIdx] = { ...copy[guestIdx], _doc_preview: previewUrl };
+          return copy;
+        });
+
+        const { base64: b64, mime } = await compressImage(file);
+        const res = await extractDocumentClient(b64, mime);
+
+        if (!res.success) {
+          setGuests((prev) => {
+            const copy = [...prev];
+            if (copy[guestIdx]) copy[guestIdx] = { ...copy[guestIdx], _ocr_error: res.error || "Errore OCR" };
+            return copy;
+          });
+          continue;
+        }
+
+        const data = res.data;
+        const isForeign = !!data.is_foreign ||
+          (data.cittadinanza_iso3 && data.cittadinanza_iso3.toUpperCase() !== "ITA" && data.cittadinanza_iso3 !== "");
+
+        let comuneCode = "", provSigla = "", statoCode = "100000100", cittadinanzaCode = "100000100", paeseNome = "";
+
+        if (isForeign) {
+          const paeseQuery = data.stato_nascita_nome || data.cittadinanza_nome || data.stato_nascita_iso3 || data.cittadinanza_iso3 || "";
+          const cittadinanzaQuery = data.cittadinanza_nome || data.cittadinanza_iso3 || paeseQuery;
+          if (paeseQuery) {
+            const guess = await lookupStato(paeseQuery, cittadinanzaQuery);
+            if (guess?.stato_match?.codice) { statoCode = guess.stato_match.codice; paeseNome = guess.stato_match.nome; }
+            cittadinanzaCode = guess?.cittadinanza_match?.codice || statoCode;
+          }
+        } else if (data.luogo_nascita) {
+          const guess = await lookupComune(data.luogo_nascita);
+          if (guess?.comune_match) { comuneCode = guess.comune_match.codice || ""; provSigla = guess.comune_match.provincia || ""; }
+        }
+
+        setGuests((prev) => {
+          const copy = [...prev];
+          if (!copy[guestIdx]) return copy;
+          const g = copy[guestIdx];
+          copy[guestIdx] = {
+            ...g,
+            cognome: data.cognome || g.cognome,
+            nome: data.nome || g.nome,
+            sesso: data.sesso || g.sesso,
+            data_nascita: data.data_nascita || g.data_nascita,
+            luogo_nascita: data.luogo_nascita || g.luogo_nascita,
+            stato_nascita: statoCode,
+            cittadinanza: cittadinanzaCode,
+            tipo_documento: mapDoc(data.tipo_documento),
+            numero_documento: data.numero_documento || g.numero_documento,
+            stato_rilascio_documento: isForeign ? statoCode : "100000100",
+            codice_comune_nascita: isForeign ? "" : (comuneCode || g.codice_comune_nascita),
+            sigla_provincia_nascita: isForeign ? "" : (provSigla || g.sigla_provincia_nascita),
+            is_foreign: isForeign,
+            paese_nome: paeseNome || data.stato_nascita_nome || "",
+          };
+          return copy;
+        });
+      } catch (e) {
+        console.error(`[bulk OCR] errore file ${i}:`, e);
+      }
+    }
+
+    setBulkProgress({ done: fileList.length, total: fileList.length });
+    setTimeout(() => setBulkProgress(null), 2500);
+    setActiveGuestIdx(startIdx);
+  };
+
   // Resolve comune ISTAT code manually (when user edits luogo_nascita)
   const handleLuogoBlur = async (luogoNascita) => {
     if (!luogoNascita || !propertyId) return;
@@ -378,43 +481,69 @@ export default function Checkin() {
       <>
         <StepHeader n="03" label={`Ospite ${activeGuestIdx + 1} / ${guests.length}`} />
 
-        <div className="flex gap-2 flex-wrap">
-          {guests.map((gx, i) => {
-            const lbl = gx.cognome
-              ? `${gx.cognome}${gx.nome ? " " + gx.nome[0] + "." : ""}`
-              : `Ospite ${i + 1}`;
-            return (
-              <button
-                key={i}
-                onClick={() => setActiveGuestIdx(i)}
-                data-testid={`guest-tab-${i}`}
-                className={`text-[10px] tracking-[0.25em] uppercase border px-4 py-2 cursor-pointer transition-colors ${
-                  i === activeGuestIdx
-                    ? "border-zinc-100 text-zinc-100"
-                    : "border-border text-zinc-500 hover:text-zinc-300"
-                }`}
-              >
-                {i === 0 ? "★ " : ""}{lbl}
-              </button>
-            );
-          })}
+        {/* ── Azione principale: scansione multipla + aggiungi ── */}
+        <div className="grid grid-cols-2 gap-3">
+          {/* SCANSIONE MULTIPLA — bottone primario */}
+          <label
+            className={`relative flex flex-col items-center justify-center gap-2 py-5 px-3 cursor-pointer transition-all select-none
+              ${bulkProgress ? "bg-zinc-700 border-2 border-zinc-500" : "bg-zinc-100 hover:bg-white border-2 border-zinc-100"}`}
+          >
+            <input
+              ref={bulkInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              multiple
+              className="hidden"
+              onChange={(e) => e.target.files?.length && handleBulkOcr(e.target.files)}
+            />
+            {bulkProgress ? (
+              <>
+                <svg className="w-6 h-6 text-zinc-300 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                </svg>
+                <span className="text-zinc-200 text-[10px] font-mono uppercase tracking-widest text-center">
+                  {bulkProgress.done === bulkProgress.total
+                    ? "✓ Completato"
+                    : `Scansione ${bulkProgress.done + 1} di ${bulkProgress.total}…`}
+                </span>
+              </>
+            ) : (
+              <>
+                <svg className="w-7 h-7 text-zinc-900" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 7h3l2-3h8l2 3h3a1 1 0 011 1v11a1 1 0 01-1 1H3a1 1 0 01-1-1V8a1 1 0 011-1z"/>
+                  <circle cx="12" cy="13" r="3" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+                <span className="text-zinc-900 font-bold text-[11px] tracking-[0.2em] uppercase text-center leading-tight">
+                  Scansione<br/>documenti
+                </span>
+                <span className="text-zinc-500 text-[9px] tracking-widest uppercase">Anche più file insieme</span>
+              </>
+            )}
+          </label>
+
+          {/* AGGIUNGI OSPITE — bottone secondario prominente */}
           <button
             data-testid="add-guest-btn"
             onClick={() => {
               setGuests([...guests, emptyGuest()]);
               setActiveGuestIdx(guests.length);
             }}
-            className="text-[10px] tracking-[0.25em] uppercase border border-dashed border-border text-zinc-500 hover:text-zinc-100 px-4 py-2 cursor-pointer"
+            className="flex flex-col items-center justify-center gap-2 py-5 px-3 border-2 border-zinc-400 hover:border-zinc-100 hover:bg-zinc-800 transition-all cursor-pointer"
           >
-            + Aggiungi
+            <svg className="w-7 h-7 text-zinc-300" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-6-3a4 4 0 110 8 4 4 0 010-8zm-8 8c0-3 2-5 8-5"/>
+            </svg>
+            <span className="text-zinc-200 font-bold text-[11px] tracking-[0.2em] uppercase text-center leading-tight">
+              Aggiungi<br/>ospite
+            </span>
+            <span className="text-zinc-600 text-[9px] tracking-widest uppercase">Manuale o 1 foto</span>
           </button>
         </div>
-        <p className="text-zinc-600 text-[10px] tracking-widest uppercase font-mono">
-          ★ Capofamiglia · gli altri verranno collegati
-        </p>
 
+        {/* Scansione singola per ospite corrente (camera o file) */}
         <div className="grid grid-cols-2 gap-2">
-          <label className="border-2 border-dashed border-border bg-surface-1 py-6 flex flex-col items-center justify-center hover:border-zinc-500 transition-colors cursor-pointer text-zinc-400 uppercase tracking-widest text-[10px] text-center">
+          <label className="border border-dashed border-border bg-surface-1 py-4 flex flex-col items-center justify-center hover:border-zinc-500 transition-colors cursor-pointer text-zinc-400 uppercase tracking-widest text-[10px] text-center">
             <input
               type="file"
               accept="image/jpeg,image/png,image/webp"
@@ -427,12 +556,12 @@ export default function Checkin() {
               <span className="font-mono animate-ocr-blink">…</span>
             ) : (
               <>
-                <span className="text-zinc-300">Scatta foto</span>
-                <span className="text-[9px] text-zinc-600 mt-1">CAMERA</span>
+                <span className="text-zinc-400">Scatta foto</span>
+                <span className="text-[9px] text-zinc-600 mt-0.5">ospite corrente · camera</span>
               </>
             )}
           </label>
-          <label className="border-2 border-dashed border-border bg-surface-1 py-6 flex flex-col items-center justify-center hover:border-zinc-500 transition-colors cursor-pointer text-zinc-400 uppercase tracking-widest text-[10px] text-center">
+          <label className="border border-dashed border-border bg-surface-1 py-4 flex flex-col items-center justify-center hover:border-zinc-500 transition-colors cursor-pointer text-zinc-400 uppercase tracking-widest text-[10px] text-center">
             <input
               type="file"
               accept="image/jpeg,image/png,image/webp"
@@ -444,13 +573,13 @@ export default function Checkin() {
               <span className="font-mono animate-ocr-blink">SCANSIONE…</span>
             ) : (
               <>
-                <span className="text-zinc-300">Carica file</span>
-                <span className="text-[9px] text-zinc-600 mt-1">JPG · PNG</span>
+                <span className="text-zinc-400">Carica file</span>
+                <span className="text-[9px] text-zinc-600 mt-0.5">ospite corrente · jpg/png</span>
               </>
             )}
           </label>
         </div>
-        {ocrLoading && (
+        {(ocrLoading || bulkProgress) && !bulkProgress && (
           <p className="text-center text-[10px] font-mono uppercase tracking-widest animate-ocr-blink">
             ANALISI DOCUMENTO IN CORSO...
           </p>
@@ -460,6 +589,34 @@ export default function Checkin() {
             [ ERR ] {ocrError}
           </p>
         )}
+
+        {/* Tab ospiti */}
+        <div className="flex gap-2 flex-wrap mt-1">
+          {guests.map((gx, i) => {
+            const hasError = !!gx._ocr_error;
+            const lbl = gx.cognome
+              ? `${gx.cognome}${gx.nome ? " " + gx.nome[0] + "." : ""}`
+              : `Ospite ${i + 1}`;
+            return (
+              <button
+                key={i}
+                onClick={() => setActiveGuestIdx(i)}
+                data-testid={`guest-tab-${i}`}
+                className={`text-[10px] tracking-[0.25em] uppercase border px-4 py-2 cursor-pointer transition-colors ${
+                  hasError ? "border-red-500 text-red-400" :
+                  i === activeGuestIdx
+                    ? "border-zinc-100 text-zinc-100"
+                    : "border-border text-zinc-500 hover:text-zinc-300"
+                }`}
+              >
+                {i === 0 ? "★ " : ""}{lbl}{hasError ? " !" : ""}
+              </button>
+            );
+          })}
+        </div>
+        <p className="text-zinc-600 text-[10px] tracking-widest uppercase font-mono">
+          ★ Capofamiglia · gli altri verranno collegati
+        </p>
 
         {g._doc_preview && (
           <div className="border border-border p-3 flex flex-col gap-2">
