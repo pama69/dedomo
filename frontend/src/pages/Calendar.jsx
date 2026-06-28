@@ -105,6 +105,29 @@ export default function Calendar() {
     return map;
   }, [events]);
 
+  // Corsie stabili PER SETTIMANA: dentro una riga del calendario ogni struttura
+  // occupa sempre la stessa corsia, così un evento non "salta" di riga quando un
+  // altro inizia/finisce lo stesso giorno. Calcolate per settimana per non lasciare
+  // righe vuote nelle settimane in cui una struttura è assente.
+  const weekLanes = useMemo(() => {
+    const order = new Map(properties.map((p, idx) => [p.property_id, idx]));
+    const weeks = [];
+    for (let w = 0; w < 6; w++) {
+      const present = new Set();
+      for (let day = 0; day < 7; day++) {
+        const cell = cells[w * 7 + day];
+        if (!cell) continue;
+        for (const en of eventsByDay[fmtISO(cell)] || []) {
+          present.add(en.event.property_id || en.event.id);
+        }
+      }
+      weeks.push(
+        Array.from(present).sort((a, b) => (order.get(a) ?? 999) - (order.get(b) ?? 999))
+      );
+    }
+    return weeks;
+  }, [cells, eventsByDay, properties]);
+
   const today = fmtISO(new Date());
 
   return (
@@ -223,27 +246,37 @@ export default function Calendar() {
                 </span>
                 <div className="flex flex-col gap-0.5">
                   {(() => {
-                    // Group day entries by property_id (or event id as fallback)
-                    const groups = new Map();
+                    // Raggruppa gli eventi del giorno per struttura
+                    const byProp = new Map();
                     for (const en of dayEvents) {
-                      const k = en.event.property_id || en.event.id;
-                      if (!groups.has(k)) groups.set(k, []);
-                      groups.get(k).push(en);
+                      const pid = en.event.property_id || en.event.id;
+                      if (!byProp.has(pid)) byProp.set(pid, []);
+                      byProp.get(pid).push(en);
                     }
-                    const groupArr = Array.from(groups.values());
+                    const MAX_LANES = 5;
+                    const cellLanes = weekLanes[Math.floor(i / 7)] || [];
+                    const shown = cellLanes.slice(0, MAX_LANES);
+                    const hidden = cellLanes.slice(MAX_LANES).filter((pid) => byProp.has(pid)).length;
                     return (
                       <>
-                        {groupArr.slice(0, 3).map((group, gi) => {
+                        {shown.map((pid) => {
+                          const group = byProp.get(pid);
+                          // Corsia vuota → spaziatore, mantiene l'allineamento verticale
+                          if (!group) return <div key={pid} className="h-[22px]" />;
                           const startEntry = group.find((x) => x.type === "start");
                           const endEntry = group.find((x) => x.type === "end");
                           const middleEntry = group.find((x) => x.type === "middle" || x.type === "full");
-                          // Priority: full/middle > split(start+end) > start > end
+                          // Priorità: full/middle > split(start+end) > start > end
                           if (middleEntry) {
-                            return <DayBar key={gi} event={middleEntry.event} variant="full" onEdit={setEditEvent} />;
+                            return (
+                              <div key={pid} className="h-[22px]">
+                                <DayBar event={middleEntry.event} variant="full" onEdit={setEditEvent} />
+                              </div>
+                            );
                           }
                           if (startEntry && endEntry) {
                             return (
-                              <div key={gi} className="grid grid-cols-2 gap-[2px]">
+                              <div key={pid} className="h-[22px] grid grid-cols-2 gap-[2px]">
                                 <DayBar event={endEntry.event} variant="end" onEdit={setEditEvent} />
                                 <DayBar event={startEntry.event} variant="start" onEdit={setEditEvent} />
                               </div>
@@ -251,7 +284,7 @@ export default function Calendar() {
                           }
                           if (startEntry) {
                             return (
-                              <div key={gi} className="grid grid-cols-2 gap-[2px]">
+                              <div key={pid} className="h-[22px] grid grid-cols-2 gap-[2px]">
                                 <div />
                                 <DayBar event={startEntry.event} variant="start" onEdit={setEditEvent} />
                               </div>
@@ -259,16 +292,16 @@ export default function Calendar() {
                           }
                           if (endEntry) {
                             return (
-                              <div key={gi} className="grid grid-cols-2 gap-[2px]">
+                              <div key={pid} className="h-[22px] grid grid-cols-2 gap-[2px]">
                                 <DayBar event={endEntry.event} variant="end" onEdit={setEditEvent} />
                                 <div />
                               </div>
                             );
                           }
-                          return null;
+                          return <div key={pid} className="h-[22px]" />;
                         })}
-                        {groupArr.length > 3 && (
-                          <span className="text-[9px] font-mono text-zinc-500 px-1.5">+{groupArr.length - 3}</span>
+                        {hidden > 0 && (
+                          <span className="text-[9px] font-mono text-zinc-500 px-1.5">+{hidden}</span>
                         )}
                       </>
                     );
@@ -473,16 +506,16 @@ function DayBar({ event, variant, onEdit }) {
       onClick={() => event.editable && onEdit(event)}
       data-testid={`cal-event-${event.id}-${variant}`}
       style={{ backgroundColor: event.color }}
-      className={`text-left text-[10px] font-mono text-white truncate px-2 py-1 rounded-md leading-tight shadow-sm ${
+      className={`h-full w-full flex items-center text-left text-[10px] font-mono text-white px-2 rounded-md leading-tight shadow-sm overflow-hidden ${
         event.editable ? "cursor-pointer hover:opacity-80" : "cursor-default"
       }`}
       title={title}
     >
       {showLabel ? (
-        <>
+        <span className="truncate min-w-0">
           <span className="font-bold mr-1">{event.source}</span>
           <span className="opacity-80">{event.property_name?.slice(0, variant === "start" ? 4 : 8)}</span>
-        </>
+        </span>
       ) : (
         <span className="opacity-0">·</span>
       )}
