@@ -175,23 +175,33 @@ def send_movimentazione(
             timeout=30,
         )
         body_lower = r.text.lower()
-        # Detect auth failures explicitly
+        # Real auth failures — definitive, no retry
         auth_failure = (
             r.status_code in (401, 403)
             or "unauthorized" in body_lower
             or "non autorizzato" in body_lower
             or "authentication failed" in body_lower
-            or "autenticazione" in body_lower and "fall" in body_lower
-            or "credenziali" in body_lower and ("error" in body_lower or "errat" in body_lower)
-            or "<faultcode>" in body_lower
-            or "soap:fault" in body_lower
-            or "soap-env:fault" in body_lower
+            or ("autenticazione" in body_lower and "fall" in body_lower)
+            or ("credenziali" in body_lower and ("error" in body_lower or "errat" in body_lower))
         )
-        ok = r.status_code == 200 and not auth_failure
-        # Try to extract a useful message
+        # Generic SOAP faults (HTTP 500 etc.) without explicit auth keywords —
+        # may be a transient server-side error; classify separately so the retry
+        # system can attempt again rather than marking the send as definitive.
+        soap_fault = (
+            not auth_failure
+            and (
+                "<faultcode>" in body_lower
+                or "soap:fault" in body_lower
+                or "soap-env:fault" in body_lower
+            )
+        )
+        ok = r.status_code == 200 and not auth_failure and not soap_fault
+        # Build a human-readable message
         msg = "Invio completato"
         if auth_failure:
-            msg = f"Autenticazione fallita o errore SOAP (HTTP {r.status_code})"
+            msg = f"Autenticazione fallita (HTTP {r.status_code})"
+        elif soap_fault:
+            msg = f"Errore SOAP dal portale (HTTP {r.status_code}) — riprovare"
         elif not ok:
             msg = f"HTTP {r.status_code} - {r.text[:300]}"
         return {
